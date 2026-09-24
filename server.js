@@ -13,6 +13,41 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
 
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const IA_LIGADA = !!(API_KEY || GEMINI_KEY);
+
+// Chama a IA disponível: Claude (se tiver ANTHROPIC_API_KEY) ou Gemini gratuito (GEMINI_API_KEY).
+// messages: [{role:'user'|'assistant', content: string | [{type:'text'|'image',...}]}]
+async function chamarModelo({ system, messages, maxTokens }) {
+  if (API_KEY) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, ...(system ? { system } : {}), messages }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body?.error?.message || ('erro ' + r.status));
+    return { texto: (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n'), cortado: body.stop_reason === 'max_tokens' };
+  }
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content).map(c =>
+      c.type === 'image' ? { inline_data: { mime_type: c.source.media_type, data: c.source.data } } : { text: c.text }),
+  }));
+  const pedir = async (modelo) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
+    body: JSON.stringify({ contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens: Math.max(maxTokens, 8192) } }),
+  });
+  let r = await pedir(GEMINI_MODEL);
+  if (r.status === 404) r = await pedir('gemini-flash-latest');
+  const body = await r.json().catch(() => ({}));
+  if (r.status === 429) throw new Error('limite gratuito do Gemini atingido por agora. Espere um minuto e tente de novo.');
+  if (!r.ok) throw new Error(body?.error?.message || ('erro ' + r.status));
+  const cand = (body.candidates || [])[0] || {};
+  return { texto: (cand.content?.parts || []).map(p => p.text || '').join('\n'), cortado: cand.finishReason === 'MAX_TOKENS' };
+}
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
 
@@ -247,18 +282,9 @@ async function assistente(res, dados) {
   while (historico.length && historico[0].role !== 'user') historico.shift();
   if (!historico.length || historico[historico.length - 1].role !== 'user') return enviarJSON(res, 400, { erro: 'Mensagem vazia.' });
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: MODEL, max_tokens: 3000,
-        system: REGRAS_ASSISTENTE + '\n\nDADOS DA EMPRESA (agora):\n' + contexto,
-        messages: historico,
-      }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + (body?.error?.message || ('erro ' + r.status)) });
-    const texto = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+    let texto;
+    try { texto = (await chamarModelo({ system: REGRAS_ASSISTENTE + '\n\nDADOS DA EMPRESA (agora):\n' + contexto, messages: historico, maxTokens: 3000 })).texto.trim(); }
+    catch (e) { return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + e.message }); }
     enviarJSON(res, 200, { ok: true, resultado: { texto } });
   } catch {
     enviarJSON(res, 502, { erro: 'Sem conexão com a IA agora. Tente de novo em instantes.' });
@@ -268,7 +294,7 @@ async function assistente(res, dados) {
 async function rotaIA(req, res) {
   const u = await checkUser(req);
   if (!u.ok) return enviarJSON(res, 401, { erro: u.msg });
-  if (!API_KEY) return enviarJSON(res, 503, { erro: 'A chave da IA ainda não foi colocada no servidor (ANTHROPIC_API_KEY).' });
+  if (!IA_LIGADA) return enviarJSON(res, 503, { erro: 'A chave da IA ainda não foi colocada no servidor (GEMINI_API_KEY).' });
   if (!rateOk(u.uid)) return enviarJSON(res, 429, { erro: 'Muitos pedidos seguidos. Espere um minuto.' });
 
   let corpo;
@@ -286,17 +312,12 @@ async function rotaIA(req, res) {
   content.push({ type: 'text', text: prompt });
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: tarefa === 'ata' ? 6000 : 16000, messages: [{ role: 'user', content }] }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + (body?.error?.message || ('erro ' + r.status)) });
-    const texto = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+    let texto, cortado;
+    try { ({ texto, cortado } = await chamarModelo({ messages: [{ role: 'user', content }], maxTokens: tarefa === 'ata' ? 6000 : 16000 })); }
+    catch (e) { return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + e.message }); }
     const json = extrairJSON(texto);
     if (!json) return enviarJSON(res, 502, { erro: 'A IA respondeu num formato inesperado. Tente de novo.' });
-    enviarJSON(res, 200, { ok: true, resultado: json, cortado: body.stop_reason === 'max_tokens' });
+    enviarJSON(res, 200, { ok: true, resultado: json, cortado });
   } catch {
     enviarJSON(res, 502, { erro: 'Sem conexão com a IA agora. Tente de novo em instantes.' });
   }
@@ -322,7 +343,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/api/ia' && req.method === 'POST') return await rotaIA(req, res);
-    if (url.pathname === '/api/status') return enviarJSON(res, 200, { ok: true, ia: !!API_KEY, firebase: !!FIREBASE_PROJECT_ID, modelo: MODEL });
+    if (url.pathname === '/api/status') return enviarJSON(res, 200, { ok: true, ia: IA_LIGADA, firebase: !!FIREBASE_PROJECT_ID, modelo: API_KEY ? MODEL : GEMINI_MODEL });
     if (req.method === 'GET' || req.method === 'HEAD') return await arquivo(req, res);
     res.writeHead(405); res.end();
   } catch (e) {
