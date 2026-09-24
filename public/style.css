@@ -230,3 +230,38 @@ table.tbl th { font-size: 11.5px; letter-spacing: .06em; text-transform: upperca
 .pr th, .pr td { border: 1px solid #999; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 9.5pt; }
 .pr th { background: #eee; }
 .pr .amb-t { font-size: 13pt; font-weight: 800; margin-top: 14px; border-bottom: 2px solid #000; }
+
+/* Acesso do desenvolvedor: discreto no canto */
+.dev-corner {
+  position: fixed; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  width: 28px; height: 28px; border-radius: 50%; border: none; background: transparent;
+  color: var(--text-dim); opacity: .22; font-size: 14px; cursor: pointer; transition: opacity .2s;
+}
+.dev-corner:hover, .dev-corner:focus-visible { opacity: .8; }
+
+/* Assistente de IA */
+.assist-fab {
+  position: fixed; z-index: 50; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 999px; border: none; cursor: pointer;
+  font-weight: 700; font-size: 14.5px; color: var(--on-accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 10px 26px -8px var(--accent-2), 0 3px 0 rgba(0,0,0,.25);
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1);
+}
+.assist-fab:hover { transform: translateY(-2px); }
+.assist-fab.on { padding: 12px 15px; }
+.assist-fab span { font-size: 17px; }
+.assist-panel {
+  position: fixed; z-index: 49; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  width: min(420px, calc(100vw - 32px)); height: min(620px, calc(100vh - 120px));
+  border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow);
+  background: var(--surface-solid);
+}
+.assist-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.assist-body { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.assist-foot { padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.assist-foot textarea { min-height: 52px; resize: none; }
+.bolha { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14px; white-space: pre-wrap; line-height: 1.45; }
+.bolha.eu { align-self: flex-end; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--on-accent); border-bottom-right-radius: 4px; }
+.bolha.ia { align-self: flex-start; background: var(--surface2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+@media print { .assist-fab, .assist-panel { display: none !important; } }

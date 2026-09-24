@@ -511,6 +511,7 @@ function TelaLogin() {
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [esqueci, setEsqueci] = useState(false);
+  const [devAberto, setDevAberto] = useState(false);
 
   const [empresaId, setEmpresaId] = useState(() => { try { return localStorage.getItem('osm_empresa') || ''; } catch { return ''; } });
   const [filtroEmp, setFiltroEmp] = useState('');
@@ -610,6 +611,158 @@ function TelaLogin() {
             </form>
           `}
         </div>
+      </div>
+      <button class="dev-corner" title="Acesso do desenvolvedor" aria-label="Acesso do desenvolvedor" onClick=${() => setDevAberto(true)}>⚙</button>
+      ${devAberto && html`<${LoginDev} fechar=${() => setDevAberto(false)} />`}
+    </div>`;
+}
+
+/* =========================================================
+   Desenvolvedor: login discreto e painel
+   ========================================================= */
+const EMAIL_DEV = 'desenvolvedor@painel.gestaopro.app';
+
+function LoginDev({ fechar }) {
+  const [existe, setExiste] = useState(null);
+  const [senha, setSenha] = useState('');
+  const [senha2, setSenha2] = useState('');
+  const [erro, setErro] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    F().fsMod.getDoc(docRef('config', 'dev')).then(s => setExiste(s.exists())).catch(() => setExiste(true));
+  }, []);
+
+  const entrar = async (e) => {
+    e.preventDefault(); setErro('');
+    if (!senha) return setErro('Digite a senha.');
+    setOcupado(true);
+    try {
+      const { authMod, auth } = F();
+      await authMod.setPersistence(auth, authMod.browserLocalPersistence);
+      await authMod.signInWithEmailAndPassword(auth, EMAIL_DEV, senha);
+    } catch (e2) { setErro(traduzErroAuth(e2)); setOcupado(false); }
+  };
+
+  const criar = async (e) => {
+    e.preventDefault(); setErro('');
+    if (senha.length < 8) return setErro('Use uma senha com pelo menos 8 caracteres.');
+    if (senha !== senha2) return setErro('As duas senhas estão diferentes.');
+    setOcupado(true);
+    try {
+      const { authMod, auth, fsMod } = F();
+      await authMod.setPersistence(auth, authMod.browserLocalPersistence);
+      const cred = await authMod.createUserWithEmailAndPassword(auth, EMAIL_DEV, senha);
+      await fsMod.setDoc(docRef('config', 'dev'), { uid: cred.user.uid, criadoEm: nowIso() });
+    } catch (e2) { setErro(traduzErroAuth(e2)); setOcupado(false); }
+  };
+
+  return html`
+    <div class="modal-bg" onClick=${e => e.target === e.currentTarget && fechar()}>
+      <form class="modal" onSubmit=${existe === false ? criar : entrar}>
+        <h3>Desenvolvedor</h3>
+        ${erro && html`<div class="error-box">${erro}</div>`}
+        ${existe === null ? html`<div class="dim">Carregando…</div>`
+          : existe === false ? html`
+            <div class="dim">Primeiro acesso: crie a senha do painel do desenvolvedor. Só existe um acesso desse tipo.</div>
+            <${Senha} id="dev-s1" value=${senha} onInput=${e => setSenha(e.target.value)} placeholder="Nova senha (mínimo 8)" />
+            <${Senha} id="dev-s2" value=${senha2} onInput=${e => setSenha2(e.target.value)} placeholder="Repita a senha" />
+            <button class="btn btn-primary" disabled=${ocupado}>${ocupado ? 'Criando…' : 'Criar acesso'}</button>`
+          : html`
+            <${Senha} id="dev-s" value=${senha} onInput=${e => setSenha(e.target.value)} placeholder="Senha do desenvolvedor" />
+            <button class="btn btn-primary" disabled=${ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>`}
+        <button type="button" class="btn btn-ghost btn-sm" onClick=${fechar}>Cancelar</button>
+      </form>
+    </div>`;
+}
+
+function PainelDev({ toast }) {
+  const [empresas, setEmpresas] = useState(null);
+  const [contagens, setContagens] = useState({});
+  const [statusIA, setStatusIA] = useState(null);
+  const [confirmar, setConfirmar] = useState(null);
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    const { onSnapshot } = F().fsMod;
+    return onSnapshot(col('empresas'), s => setEmpresas(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''))),
+      () => setEmpresas([]));
+  }, []);
+  useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!empresas) return;
+    const { getCountFromServer } = F().fsMod;
+    empresas.forEach(async (e) => {
+      if (contagens[e.id]) return;
+      try {
+        const [u, p, o] = await Promise.all(['usuarios', 'projetos', 'os'].map(c => getCountFromServer(col('empresas', e.id, c)).then(r => r.data().count)));
+        setContagens(v => ({ ...v, [e.id]: { u, p, o } }));
+      } catch {}
+    });
+  }, [empresas]);
+
+  const pausar = async (e, pausada) => {
+    await F().fsMod.updateDoc(docRef('empresas', e.id), { pausada, pausadaEm: pausada ? nowIso() : null });
+    toast(pausada ? `${e.nome} pausada.` : `${e.nome} reativada.`, 'ok');
+    setConfirmar(null);
+  };
+  const ocultar = async (e, oculta) => {
+    const { deleteDoc, setDoc, updateDoc } = F().fsMod;
+    if (oculta) await deleteDoc(docRef('empresas_publico', e.id));
+    else await setDoc(docRef('empresas_publico', e.id), { nome: e.nome, cidade: e.cidade || '' });
+    await updateDoc(docRef('empresas', e.id), { ocultaNoLogin: oculta });
+    toast(oculta ? `${e.nome} não aparece mais no login.` : `${e.nome} voltou a aparecer no login.`, 'ok');
+    setConfirmar(null);
+  };
+
+  const lista = (empresas || []).filter(e => !busca || norm(e.nome + ' ' + e.cidade + ' ' + e.cnpj).includes(norm(busca)));
+  const tot = Object.values(contagens).reduce((a, c) => ({ u: a.u + c.u, p: a.p + c.p, o: a.o + c.o }), { u: 0, p: 0, o: 0 });
+
+  return html`
+    <div class="shell">
+      <div class="topbar glass">
+        <${Marca} />
+        <span class="chip chip-accent">Painel do desenvolvedor</span>
+        <button class="btn btn-sm btn-ghost" onClick=${() => F().authMod.signOut(F().auth)}>Sair</button>
+      </div>
+      <div class="page-head">
+        <div><h2>Empresas cadastradas</h2>
+          <div class="dim">${(empresas || []).length} empresas · ${tot.u} usuários · ${tot.p} projetos · ${tot.o} OS</div></div>
+        <div class="row">
+          <span class=${'chip ' + (statusIA?.ia ? 'chip-ok' : 'chip-warn')}>IA ${statusIA?.ia ? 'ligada' : 'sem chave'}</span>
+          <span class=${'chip ' + (statusIA?.firebase ? 'chip-ok' : 'chip-danger')}>Servidor ${statusIA ? 'ok' : '…'}</span>
+        </div>
+      </div>
+      <input id="dev-busca" class="inp" placeholder="Buscar empresa, cidade ou CNPJ…" value=${busca} onInput=${e => setBusca(e.target.value)} style=${{ marginBottom: '12px' }} />
+      <div class="list">
+        ${empresas === null && html`<div class="card muted">Carregando…</div>`}
+        ${empresas && lista.length === 0 && html`<div class="card muted">Nenhuma empresa ainda.</div>`}
+        ${lista.map(e => {
+          const c = contagens[e.id];
+          const conf = confirmar?.id === e.id ? confirmar.acao : null;
+          return html`
+            <div key=${e.id} class="list-item" style=${{ cursor: 'default', flexWrap: 'wrap' }}>
+              <div class="grow" style=${{ minWidth: '200px' }}>
+                <div class="title">${e.nome}</div>
+                <div class="dim">${[e.cidade, e.cnpj].filter(Boolean).join(' · ') || '—'} · desde ${fmtData(e.criadoEm)}</div>
+                <div class="dim">${c ? `${c.u} usuários · ${c.p} projetos · ${c.o} OS (último nº ${padNum(e.osSeq || 0)})` : 'contando…'}</div>
+              </div>
+              ${e.pausada && html`<span class="chip chip-danger">Pausada</span>`}
+              ${e.ocultaNoLogin && html`<span class="chip">Oculta no login</span>`}
+              ${conf ? html`
+                <span class="dim">${conf === 'pausar' ? 'Pausar o acesso?' : conf === 'ocultar' ? 'Tirar da lista do login?' : ''}</span>
+                <button class="btn btn-sm btn-danger" onClick=${() => conf === 'pausar' ? pausar(e, true) : ocultar(e, true)}>Confirmar</button>
+                <button class="btn btn-sm" onClick=${() => setConfirmar(null)}>Não</button>
+              ` : html`
+                ${e.pausada
+                  ? html`<button class="btn btn-sm btn-teal" onClick=${() => pausar(e, false)}>Reativar</button>`
+                  : html`<button class="btn btn-sm" onClick=${() => setConfirmar({ id: e.id, acao: 'pausar' })}>Pausar</button>`}
+                ${e.ocultaNoLogin
+                  ? html`<button class="btn btn-sm" onClick=${() => ocultar(e, false)}>Mostrar no login</button>`
+                  : html`<button class="btn btn-sm btn-ghost" onClick=${() => setConfirmar({ id: e.id, acao: 'ocultar' })}>Ocultar do login</button>`}
+              `}
+            </div>`;
+        })}
       </div>
     </div>`;
 }
@@ -1606,6 +1759,101 @@ function MinhaConta({ sessao, fechar, toast }) {
 }
 
 /* =========================================================
+   Assistente de IA (chat flutuante)
+   ========================================================= */
+async function montarContexto(sessao, osAbertaId) {
+  const { getDocs, getDoc, query, orderBy, limit } = F().fsMod;
+  const linhas = [`Empresa: ${sessao.empresaNome}. Usuário: ${sessao.nome} (${(PAPEIS.find(p => p.v === sessao.papel) || {}).t || sessao.papel}). Hoje: ${new Date().toLocaleDateString('pt-BR')}.`];
+  try {
+    const ps = await getDocs(query(col('empresas', sessao.empresaId, 'projetos'), orderBy('criadoEm', 'desc'), limit(60)));
+    linhas.push(`\nPROJETOS (${ps.size}):`);
+    ps.docs.forEach(d => { const p = d.data(); linhas.push(`- ${p.cliente?.nome || '?'}${p.titulo ? ' — ' + p.titulo : ''}${p.cliente?.obra ? ' (obra ' + p.cliente.obra + ')' : ''}; ${p.qtdDocs || 0} doc.; ata: ${p.temAta ? 'sim' : 'não'}; ${p.osNumero ? 'OS ' + padNum(p.osNumero) : 'sem OS'}; criado ${fmtData(p.criadoEm)}`); });
+    const os = await getDocs(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc'), limit(80)));
+    linhas.push(`\nORDENS DE SERVIÇO (${os.size}):`);
+    os.docs.forEach(d => {
+      const o = d.data();
+      const st = (STATUS_OS.find(s => s.v === o.status) || STATUS_OS[0]).t;
+      const amb = (o.ambientes || []).map(a => `${a.nome} [${(a.moveis || []).map(m => m.nome).join(', ')}]`).join('; ');
+      linhas.push(`- OS ${padNum(o.numero)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
+    });
+    if (osAbertaId) {
+      const o = await getDoc(docRef('empresas', sessao.empresaId, 'os', osAbertaId));
+      if (o.exists()) {
+        const { fingerprint, ...dados } = o.data();
+        linhas.push(`\nOS ABERTA NA TELA AGORA (completa):\n${JSON.stringify(dados).slice(0, 20000)}`);
+      }
+    }
+  } catch (e) { linhas.push('(não consegui ler os dados agora)'); }
+  return linhas.join('\n').slice(0, 40000);
+}
+
+function Assistente({ sessao, osAberta }) {
+  const chave = 'osm_chat_' + sessao.uid;
+  const [aberto, setAberto] = useState(false);
+  const [msgs, setMsgs] = useState(() => { try { return JSON.parse(localStorage.getItem(chave) || '[]'); } catch { return []; } });
+  const [texto, setTexto] = useState('');
+  const [pensando, setPensando] = useState(false);
+  const [erro, setErro] = useState('');
+  const fimRef = useRef(null);
+  const [interim, setInterim] = useState('');
+  const fala = useFala({ onFinal: t => setTexto(v => (v ? v + ' ' : '') + t), onInterim: setInterim });
+
+  useEffect(() => { try { localStorage.setItem(chave, JSON.stringify(msgs.slice(-40))); } catch {} }, [msgs]);
+  useEffect(() => { fimRef.current?.scrollIntoView({ block: 'end' }); }, [msgs, pensando, aberto]);
+
+  const enviar = async (pergunta) => {
+    const q = (pergunta ?? (texto + ' ' + interim)).trim();
+    if (!q || pensando) return;
+    fala.parar();
+    setErro(''); setTexto(''); setInterim('');
+    const hist = [...msgs, { role: 'user', content: q }];
+    setMsgs(hist);
+    setPensando(true);
+    try {
+      const contexto = await montarContexto(sessao, osAberta);
+      const r = await chamarIA('assistente', { contexto, historico: hist });
+      setMsgs(h => [...h, { role: 'assistant', content: String(r?.texto || '').replace(/\*\*/g, '') }]);
+    } catch (e) { setErro(e.message); }
+    setPensando(false);
+  };
+
+  const sugestoes = osAberta
+    ? ['Confira esta OS e aponte o que está faltando', 'Sugira ferragens para os móveis desta OS', 'Escreva uma mensagem pro cliente confirmando os acabamentos']
+    : ['Quais OS estão em produção?', 'Quais projetos ainda não têm OS?', 'Sugira combinações de MDF para uma cozinha clara', 'Como eu faço a ata da reunião?'];
+
+  return html`
+    <button class=${'assist-fab' + (aberto ? ' on' : '')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
+      ${aberto ? '✕' : html`<span>✦</span> Assistente`}
+    </button>
+    ${aberto && html`
+      <div class="assist-panel glass" role="dialog" aria-label="Assistente de IA">
+        <div class="assist-head">
+          <div><b>Assistente Gestão Pró</b><div class="dim" style=${{ fontSize: '12px' }}>Conhece os projetos e as OS da sua empresa${osAberta ? ' e a OS aberta' : ''}</div></div>
+          ${msgs.length > 0 && html`<button class="btn btn-ghost btn-sm" onClick=${() => setMsgs([])}>Limpar</button>`}
+        </div>
+        <div class="assist-body">
+          ${msgs.length === 0 && html`
+            <div class="dim" style=${{ marginBottom: '8px' }}>Pergunte qualquer coisa sobre seus projetos, OS, materiais ou o uso do app.</div>
+            <div class="stack" style=${{ gap: '6px' }}>
+              ${sugestoes.map(s => html`<button key=${s} class="btn btn-sm" style=${{ justifyContent: 'flex-start', whiteSpace: 'normal', textAlign: 'left' }} onClick=${() => enviar(s)}>${s}</button>`)}
+            </div>`}
+          ${msgs.map((m, i) => html`<div key=${i} class=${'bolha ' + (m.role === 'user' ? 'eu' : 'ia')}>${m.content}</div>`)}
+          ${pensando && html`<div class="bolha ia dim">Pensando…</div>`}
+          ${erro && html`<div class="error-box">${erro}</div>`}
+          <div ref=${fimRef}></div>
+        </div>
+        <div class="assist-foot">
+          <textarea id="assist-txt" class="inp" rows="2" placeholder=${fala.ouvindo ? 'Ouvindo…' : 'Escreva ou fale sua pergunta…'} value=${texto + (interim ? ' ' + interim : '')}
+            onInput=${e => setTexto(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); } }}></textarea>
+          <div class="row" style=${{ flexWrap: 'nowrap' }}>
+            ${fala.suportado && html`<button class=${'btn btn-sm' + (fala.ouvindo ? ' btn-mic-on pulse' : '')} onClick=${fala.ouvindo ? fala.parar : fala.iniciar} title="Falar">🎤</button>`}
+            <button class="btn btn-primary btn-sm" style=${{ flex: 1 }} onClick=${() => enviar()} disabled=${pensando || !(texto.trim() || interim.trim())}>Enviar</button>
+          </div>
+        </div>
+      </div>`}`;
+}
+
+/* =========================================================
    App
    ========================================================= */
 function Principal({ sessao, toast }) {
@@ -1648,6 +1896,7 @@ function Principal({ sessao, toast }) {
       ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
       ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
+      <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
     </div>`;
 }
 
@@ -1666,6 +1915,12 @@ function App() {
       setSemAcesso(false);
       if (!user) { setSessao(null); return; }
       try {
+        // Acesso do desenvolvedor: confere se esta conta é a registrada em config/dev.
+        if (user.email === EMAIL_DEV) {
+          const d = await fsMod.getDoc(fsMod.doc(fb.db, 'config', 'dev')).catch(() => null);
+          if (d?.exists() && d.data().uid === user.uid) { setSessao({ uid: user.uid, tipo: 'dev', nome: 'Desenvolvedor' }); return; }
+          setSemAcesso('Esse acesso de desenvolvedor não é válido.'); setSessao(null); return;
+        }
         // Logo depois do cadastro, o índice pode levar um instante pra existir.
         let idx = null;
         for (let i = 0; i < 6 && !idx; i++) {
@@ -1673,12 +1928,13 @@ function App() {
           if (s.exists()) idx = s.data(); else await new Promise(r => setTimeout(r, 700));
         }
         if (!idx) { setSemAcesso(true); setSessao(null); return; }
-        let empresaNome = '';
-        for (let i = 0; i < 6 && !empresaNome; i++) {
+        let emp = null;
+        for (let i = 0; i < 6 && !emp; i++) {
           const e = await fsMod.getDoc(fsMod.doc(fb.db, 'empresas', idx.empresaId)).catch(() => null);
-          if (e?.exists()) empresaNome = e.data().nome; else await new Promise(r => setTimeout(r, 700));
+          if (e?.exists()) emp = e.data(); else await new Promise(r => setTimeout(r, 700));
         }
-        setSessao({ uid: user.uid, empresaId: idx.empresaId, papel: idx.papel, nome: idx.nome, empresaNome: empresaNome || idx.empresaId });
+        if (emp?.pausada) { setSemAcesso('O acesso desta empresa está pausado. Fale com o suporte do Gestão Pró.'); setSessao(null); return; }
+        setSessao({ uid: user.uid, empresaId: idx.empresaId, papel: idx.papel, nome: idx.nome, empresaNome: emp?.nome || idx.empresaId });
       } catch (e) {
         setSemAcesso(true); setSessao(null);
       }
@@ -1695,9 +1951,10 @@ function App() {
         : 'Não consegui conectar ao banco de dados. Confira a internet e recarregue a página.'}</div>
     </div></div>`;
   else if (!sessao) corpo = html`
-    ${semAcesso && html`<div class="error-box" style=${{ maxWidth: '420px', margin: '16px auto 0' }}>Esse acesso foi removido ou não está ligado a nenhuma empresa. Fale com o administrador.
-      <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => F().authMod.signOut(F().auth)}>Ok</button></div>`}
+    ${semAcesso && html`<div class="error-box" style=${{ maxWidth: '420px', margin: '16px auto 0' }}>${typeof semAcesso === 'string' ? semAcesso : 'Esse acesso foi removido ou não está ligado a nenhuma empresa. Fale com o administrador.'}
+      <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => { setSemAcesso(false); F().authMod.signOut(F().auth); }}>Ok</button></div>`}
     <${TelaLogin} />`;
+  else if (sessao.tipo === 'dev') corpo = html`<${PainelDev} toast=${toast} />`;
   else corpo = html`<${Principal} sessao=${sessao} toast=${toast} />`;
 
   return html`<div>${corpo}${toastEl}</div><div id="print-area"></div>`;
