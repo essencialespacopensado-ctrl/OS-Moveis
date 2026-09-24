@@ -40,9 +40,16 @@ async function chamarModelo({ system, messages, maxTokens }) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
     body: JSON.stringify({ contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens: Math.max(maxTokens, 8192) } }),
   });
-  let r = await pedir(GEMINI_MODEL);
-  if (r.status === 404) r = await pedir('gemini-flash-latest');
+  // Se um modelo estiver sobrecarregado ou não existir, tenta o próximo (todos gratuitos).
+  const modelos = [...new Set([GEMINI_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-flash-lite-latest'])];
+  let r;
+  for (let i = 0; i < modelos.length; i++) {
+    r = await pedir(modelos[i]);
+    if (![404, 500, 503].includes(r.status)) break;
+    await new Promise(ok => setTimeout(ok, 800));
+  }
   const body = await r.json().catch(() => ({}));
+  if (r.status === 503) throw new Error('os servidores gratuitos do Google estão cheios agora. Tente de novo em 1 minuto.');
   if (r.status === 429) throw new Error('limite gratuito do Gemini atingido por agora. Espere um minuto e tente de novo.');
   if (!r.ok) throw new Error(body?.error?.message || ('erro ' + r.status));
   const cand = (body.candidates || [])[0] || {};
