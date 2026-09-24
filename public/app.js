@@ -2273,55 +2273,83 @@ function FerragemLinha({ f, catalogo, sessao, up, remover }) {
 }
 
 function ImpressaoOS({ os, empresa }) {
+  const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
+  const P = os.padrao || {};
+  const F = P.ferragens || {};
+  const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
   const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
-  const cor = temCores(os) ? os.cores : null;
+  const st = (STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0]).t.replace(/^\d\. /, '');
+  const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : 'Sem tamponamento';
+  const info = [
+    ['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Prazo de entrega', os.prazoEntrega],
+    ['Endereço', os.cliente?.endereco, 2], ['Arquiteto / designer', os.arquiteto], ['Responsável', os.responsavel],
+    ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']],
+  ];
+  const grupos = [
+    ['Acabamentos', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Outras', P.outras]]],
+    ['Portas & frentes', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs], ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')]]],
+    ['Puxadores & iluminação', [['Puxadores', (P.puxadores || []).join('; ')], ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : '']]],
+    ['Ferragens', [['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Portas de correr', fl('correr')], ['Portas de passagem', fl('passagem')]]],
+    ['Fechaduras, vidros & tecidos', [['Fechaduras', textoFech(P.fech) || (P.fechaduras || []).join('; ')], ['Vidros', textoVidro(P.vidros)], ['Tecidos', textoTec(P.tec) || (P.tecidos || []).join('; ')]]],
+    ['Paredes / painéis', [['Parede inteira', P.parede?.ativo ? [P.parede.espec, P.parede.paginacao, P.parede.fixacao].filter(Boolean).join(' — ') : '']]],
+  ].map(([t, l]) => [t, l.filter(([, v]) => v)]).filter(([, l]) => l.length);
+  const et = os.execucao?.etapas || {};
+  const totalMov = (os.ambientes || []).reduce((n, a) => n + (a.moveis || []).length, 0);
   return html`
-    <div class=${'pr' + (cor ? ' pr-cor' : '')} style=${cor ? varsCores(cor) : undefined}>
-      <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div><div style=${{ fontWeight: 700 }}>${empresa}</div><h1>ORDEM DE SERVIÇO Nº ${numOS(os)}</h1></div>
-        <div style=${{ textAlign: 'right' }}>Emitida em ${new Date().toLocaleDateString('pt-BR')}<br/>Status: ${(STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0]).t}</div>
+    <div class="po" style=${varsCores(cor)}>
+      <div class="po-topo">
+        <div>
+          <div class="po-emp">${empresa || 'Gestão Pró'}</div>
+          <div class="po-tit">Ordem de Serviço</div>
+          <div class="po-sub">${(os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo || ''}</div>
+        </div>
+        <div class="po-num">
+          <div class="po-cod">${numOS(os)}</div>
+          <div class="po-dots">${cor.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</div>
+          <div class="po-meta">${st} · emitida ${new Date().toLocaleDateString('pt-BR')}${os.numeroAntigo ? ' · antiga ' + os.numeroAntigo : ''}</div>
+        </div>
       </div>
-      <table><tbody>
-        <tr><th>Cliente</th><td>${os.cliente?.nome}</td><th>Telefone</th><td>${os.cliente?.telefone}</td></tr>
-        <tr><th>Obra</th><td>${os.cliente?.obra}</td><th>Prazo</th><td>${os.prazoEntrega}</td></tr>
-        <tr><th>Endereço</th><td colspan="3">${os.cliente?.endereco}</td></tr>
-        ${os.observacoesGerais && html`<tr><th>Obs.</th><td colspan="3">${os.observacoesGerais}</td></tr>`}
-      </tbody></table>
-      ${(() => { const P = os.padrao || {}; const ac = (l) => textoAcab(P.acab?.[l]);
-        const F = P.ferragens || {}; const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
-        const linhas = [
-          ['Tamponamento', os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' ' + os.tamponamento.espessura + 'mm' : '') : ''],
-          ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']],
-          ['Responsável / arquiteto', [os.responsavel, os.arquiteto].filter(Boolean).join(' / ')],
-          ['Acabamento interno', ac('interno')], ['Acabamento externo', ac('externo')], ['Outras características', P.outras],
-          ['Portas', [P.portas?.modelo, P.portas?.obs].filter(Boolean).join(' — ')],
-          ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')], ['Puxadores', (P.puxadores || []).join('; ')],
-          ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : ''],
-          ['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Portas de correr', fl('correr')], ['Portas de passagem', fl('passagem')],
-          ['Fechaduras', textoFech(P.fech) || (P.fechaduras || []).join('; ')], ['Vidros', textoVidro(P.vidros)], ['Tecidos', textoTec(P.tec) || (P.tecidos || []).join('; ')],
-          ['Parede inteira', P.parede?.ativo ? [P.parede.espec, P.parede.paginacao, P.parede.fixacao].filter(Boolean).join(' — ') : ''],
-        ].filter(([, v]) => v);
-        return linhas.length ? html`<div class="amb-t">Especificações gerais</div><table><tbody>${linhas.map(([k, v]) => html`<tr><th style=${{ width: '22%' }}>${k}</th><td>${v}</td></tr>`)}</tbody></table>` : ''; })()}
-      ${(os.ambientes || []).map(a => html`
-        <div class="amb-t">${a.nome}</div>
-        <table>
-          <thead><tr><th>Móvel</th><th>Qtd</th><th>L × A × P (mm)</th><th>MDF caixa</th><th>MDF frente</th><th>Fita</th><th>Ferragens</th><th>Puxador / outros</th></tr></thead>
-          <tbody>
-            ${(a.moveis || []).map(m => html`<tr>
-              <td><b>${m.nome}</b>${m.portas ? html`<br/>Portas: ${m.portas}` : ''}${m.gavetas ? html`<br/>Gavetas: ${m.gavetas}` : ''}${m.observacoes ? html`<br/><i>${m.observacoes}</i>` : ''}</td>
-              <td>${m.quantidade}</td>
-              <td>${[m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ')}</td>
-              <td>${mdf(m.mdfCaixa)}</td><td>${mdf(m.mdfFrente)}</td><td>${m.fitaBorda}</td>
-              <td>${(m.ferragens || []).map(f => html`<div>${f.quantidade ? f.quantidade + '× ' : ''}${[f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' · ')}</div>`)}</td>
-              <td>${m.puxador}${m.iluminacao ? html`<br/>${m.iluminacao}` : ''}</td>
-            </tr>`)}
-          </tbody>
-        </table>`)}
-      <div style=${{ marginTop: '30px', display: 'flex', gap: '40px' }}>
-        <div style=${{ flex: 1, borderTop: '1px solid #000', paddingTop: '4px' }}>Responsável</div>
-        <div style=${{ flex: 1, borderTop: '1px solid #000', paddingTop: '4px' }}>Produção</div>
-        <div style=${{ flex: 1, borderTop: '1px solid #000', paddingTop: '4px' }}>Cliente</div>
+
+      <div class="po-info">
+        ${info.map(([k, v, span]) => html`<div key=${k} class="po-cel" style=${span ? { gridColumn: 'span ' + span } : undefined}><small>${k}</small><b>${v || '—'}</b></div>`)}
       </div>
+
+      ${grupos.length > 0 && html`
+        <div class="po-sec"><span>01</span> Especificações gerais</div>
+        <div class="po-grid">
+          ${grupos.map(([t, l]) => html`<div key=${t} class="po-card"><div class="po-card-t">${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po-kv"><small>${k}</small><div>${v}</div></div>`)}</div>`)}
+        </div>`}
+
+      <div class="po-sec"><span>${grupos.length ? '02' : '01'}</span> Ambientes & móveis <em>${(os.ambientes || []).length} ambientes · ${totalMov} móveis</em></div>
+      ${(os.ambientes || []).map((a, ai) => html`
+        <div key=${a.id || ai} class="po-amb">
+          <div class="po-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span>${a.nome || 'Ambiente'}</div>
+          <table>
+            <thead><tr><th style=${{ width: '24%' }}>Móvel</th><th>Qtd</th><th>L × A × P (mm)</th><th>MDF caixa</th><th>MDF frente</th><th>Fita</th><th>Ferragens</th><th>Puxador / outros</th></tr></thead>
+            <tbody>
+              ${(a.moveis || []).map(m => html`<tr key=${m.id}>
+                <td><b>${m.nome}</b>${m.portas ? html`<br/><small>Portas: ${m.portas}</small>` : ''}${m.gavetas ? html`<br/><small>Gavetas: ${m.gavetas}</small>` : ''}${m.observacoes ? html`<br/><i>${m.observacoes}</i>` : ''}</td>
+                <td class="c">${m.quantidade}</td>
+                <td class="c mono">${[m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ')}</td>
+                <td>${mdf(m.mdfCaixa)}</td><td>${mdf(m.mdfFrente)}</td><td>${m.fitaBorda}</td>
+                <td>${(m.ferragens || []).map(f => html`<div>${f.quantidade ? f.quantidade + '× ' : ''}${[f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' · ')}</div>`)}</td>
+                <td>${m.puxador}${m.iluminacao ? html`<br/>${m.iluminacao}` : ''}</td>
+              </tr>`)}
+              ${!(a.moveis || []).length && html`<tr><td colspan="8" class="c"><i>Sem móveis cadastrados</i></td></tr>`}
+            </tbody>
+          </table>
+        </div>`)}
+
+      ${os.observacoesGerais && html`<div class="po-obs"><b>Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
+
+      <div class="po-esteira">
+        ${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; return html`<div key=${k} class=${'po-et ' + (e.status || 'pendente')}><i></i><b>${t}</b><small>${({ pendente: 'Pendente', andamento: 'Em andamento', pronto: 'Pronto' })[e.status || 'pendente']}${e.onde === 'terceirizada' ? ' · terceirizado' : ''}</small></div>`; })}
+      </div>
+
+      <div class="po-ass">
+        ${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}
+      </div>
+      <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
     </div>`;
 }
 
