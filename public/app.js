@@ -51,10 +51,10 @@ function useToast() {
 const ESPESSURAS = ['6', '15', '18', '25'];
 const TIPOS_FERRAGEM = ['Dobradiça', 'Corrediça', 'Sistema de gaveta', 'Articulador', 'Abertura', 'Porta de correr', 'Canto e despenseiro', 'Closet e cozinha', 'Outro'];
 const STATUS_OS = [
-  { v: 'rascunho', t: 'Rascunho', c: 'chip' },
-  { v: 'aprovada', t: 'Aprovada', c: 'chip chip-teal' },
-  { v: 'producao', t: 'Em produção', c: 'chip chip-accent' },
-  { v: 'concluida', t: 'Concluída', c: 'chip chip-ok' },
+  { v: 'elaboracao', t: '1. Elaboração', c: 'chip' },
+  { v: 'producao', t: '2. Produção', c: 'chip chip-teal' },
+  { v: 'montagem', t: '3. Montagem', c: 'chip chip-roxo' },
+  { v: 'concluida', t: '4. Concluída', c: 'chip chip-ok' },
 ];
 const PAPEIS = [
   { v: 'admin', t: 'Administrador' },
@@ -217,7 +217,7 @@ async function criarOS(sessao, conteudo, extras = {}) {
     numero = (e.data()?.osSeq || 0) + 1;
     tx.update(empRef, { osSeq: numero });
     tx.set(osRef, {
-      ...os, numero, fingerprint: fp, status: 'rascunho',
+      ...os, numero, fingerprint: fp, status: 'elaboracao',
       projetoId: extras.projetoId || '', origem: extras.origem || 'manual',
       numeroAntigo: extras.numeroAntigo || '', dataAntiga: extras.dataAntiga || '', arquivoOrigem: extras.arquivoOrigem || '',
       criadoPor: sessao.nome, criadoEm: agora, atualizadoEm: agora, atualizadoPor: sessao.nome,
@@ -1274,7 +1274,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, status: os.status || 'rascunho', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1328,7 +1328,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <div class="dim">Criada por ${os.criadoPor || '—'} em ${fmtData(os.criadoEm)}${os.origem === 'importada' ? ' · importada de ' + (os.arquivoOrigem || 'OS antiga') : os.origem === 'ia' ? ' · gerada automaticamente' : ''}</div>
         </div>
         <div class="row">
-          <select id="os-status" class="inp" style=${{ width: 'auto' }} value=${os.status || 'rascunho'} onChange=${e => alterar(o => { o.status = e.target.value; })}>
+          <select id="os-status" class="inp" style=${{ width: 'auto' }} value=${os.status || 'elaboracao'} onChange=${e => alterar(o => { o.status = e.target.value; })}>
             ${STATUS_OS.map(s => html`<option key=${s.v} value=${s.v}>${s.t}</option>`)}
           </select>
           <button class="btn" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 150); }}>🖨️ Imprimir / PDF</button>
@@ -1856,8 +1856,132 @@ function Assistente({ sessao, osAberta }) {
 /* =========================================================
    App
    ========================================================= */
+// Data de prazo em texto (dd/mm/aaaa) -> Date, ou null.
+function lerPrazo(t) {
+  const m = /(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/.exec(String(t || ''));
+  if (!m) return null;
+  const a = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  const d = new Date(a, Number(m[2]) - 1, Number(m[1]), 23, 59);
+  return isNaN(d) ? null : d;
+}
+const atrasada = (o) => o.status !== 'concluida' && (lerPrazo(o.prazoEntrega)?.getTime() || Infinity) < Date.now();
+const CATEG_AMB = [
+  { t: 'Cozinha', k: ['cozinha', 'gourmet', 'copa', 'lavanderia', 'area de servico'] },
+  { t: 'Dormitório', k: ['dormitorio', 'quarto', 'suite', 'closet', 'roupeiro'] },
+  { t: 'Banheiro', k: ['banheiro', 'lavabo', 'bwc', 'wc'] },
+  { t: 'Sala / Estar', k: ['sala', 'estar', 'jantar', 'home', 'living', 'tv', 'hall'] },
+  { t: 'Corporativo', k: ['escritorio', 'recepcao', 'loja', 'consultorio', 'corporativo', 'sala de reuniao'] },
+];
+const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a => c.k.some(k => norm(a.nome).includes(k)))).map(c => c.t);
+
+function TelaInicio({ sessao, abrirOS, irPara }) {
+  const [lista, setLista] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [status, setStatus] = useState('');
+  const [amb, setAmb] = useState('');
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+  }, [sessao.empresaId]);
+  const os = lista || [];
+  const st = (v) => os.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === v).length;
+  const pct = (n) => os.length ? Math.round(n * 100 / os.length) + '% do fluxo' : '0% do fluxo';
+  const nAtr = os.filter(atrasada).length;
+  const tiles = [
+    { t: 'Total', n: os.length, s: '100% da carteira', cls: '' },
+    { t: '1. Elaboração', n: st('elaboracao'), s: pct(st('elaboracao')), cls: '', f: 'elaboracao' },
+    { t: '2. Produção', n: st('producao'), s: pct(st('producao')), cls: 'tile-teal', f: 'producao' },
+    { t: '3. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '4. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: 'Atrasadas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Tudo em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
+  ];
+  const filtradas = os.filter(o =>
+    (!status || (status === 'atrasadas' ? atrasada(o) : (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === status)) &&
+    (!amb || categoriasDaOS(o).includes(amb)) &&
+    (!busca || norm(`${padNum(o.numero)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
+
+  return html`
+    <div class="fade-up stack" style=${{ gap: '16px' }}>
+      <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
+        <div>
+          <div class="row" style=${{ gap: '10px' }}><span class="mini-mark">OS</span><h2 style=${{ fontSize: '24px' }}>Console de Produção</h2></div>
+          <div class="dim">${sessao.empresaNome} • Gestão integrada de ordens de serviço e fabricação</div>
+        </div>
+        <div class="row">
+          <button class="btn" onClick=${() => irPara('importar')}>Importar antigas</button>
+          <button class="btn btn-primary" onClick=${() => irPara('os')}>+ Nova OS</button>
+        </div>
+      </div>
+
+      <div class="card page-card">
+        <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div class="sec-title">〰 Fluxo da produção</div>
+          <span class="chip">${os.length} OSs cadastradas</span>
+        </div>
+        <div class="tiles">
+          ${tiles.map(t => html`
+            <button key=${t.t} class=${'tile ' + t.cls + (t.f && status === t.f ? ' sel' : '')} onClick=${() => t.f && setStatus(v => v === t.f ? '' : t.f)}>
+              <div class="tile-t">${t.t}</div>
+              <div class="tile-n mono">${lista === null ? '…' : t.n}</div>
+              <div class="tile-s">${t.s}</div>
+            </button>`)}
+        </div>
+      </div>
+
+      <div class="card page-card">
+        <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div>
+            <div class="sec-title">📋 Ordens de serviço em carteira <span class="badge-dark">${filtradas.length}</span></div>
+            <div class="dim">Identificação por número, cliente e ambiente</div>
+          </div>
+          <label class="row dim" style=${{ gap: '6px' }}>Status:
+            <select id="ini-status" class="inp inp-sm" style=${{ width: 'auto' }} value=${status} onChange=${e => setStatus(e.target.value)}>
+              <option value="">Todos os status</option>
+              ${STATUS_OS.map(x => html`<option key=${x.v} value=${x.v}>${x.t}</option>`)}
+              <option value="atrasadas">Atrasadas</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '12px' }}>
+          <input id="ini-busca" class="inp" style=${{ flex: '1 1 260px', maxWidth: '380px' }} placeholder="🔍 Buscar por nº da OS, cliente, ambiente ou obra…" value=${busca} onInput=${e => setBusca(e.target.value)} />
+          <div class="row" style=${{ gap: '6px' }}>
+            <span class="dim">Ambientes:</span>
+            ${['', ...CATEG_AMB.map(c => c.t)].map(c => html`<button key=${c || 'todos'} class=${'pill' + (amb === c ? ' on' : '')} onClick=${() => setAmb(c)}>${c || 'Todos'}</button>`)}
+          </div>
+        </div>
+        ${lista !== null && os.length === 0 ? html`
+          <div class="vazio">
+            <div style=${{ fontSize: '26px' }}>📋</div>
+            <b>Nenhuma ordem de serviço cadastrada ainda</b>
+            <div class="dim">Comece importando suas OSs antigas ou criando a primeira OS.</div>
+            <div class="row" style=${{ justifyContent: 'center', marginTop: '8px' }}>
+              <button class="btn btn-verde" onClick=${() => irPara('importar')}>Importar OSs antigas</button>
+              <button class="btn btn-primary" onClick=${() => irPara('os')}>+ Nova OS</button>
+            </div>
+          </div>` : html`
+          <div class="list">
+            ${filtradas.length === 0 && lista !== null && html`<div class="vazio dim">Nenhuma OS com esses filtros.</div>`}
+            ${filtradas.map(o => {
+              const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0];
+              return html`
+                <div key=${o.id} class="list-item" onClick=${() => abrirOS(o.id)}>
+                  <div class="os-num">${padNum(o.numero)}</div>
+                  <div class="grow">
+                    <div class="title">${o.cliente?.nome || 'Cliente não informado'}</div>
+                    <div class="dim">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || 'Sem ambientes'}${o.prazoEntrega ? ' · prazo ' + o.prazoEntrega : ''}</div>
+                  </div>
+                  ${categoriasDaOS(o).map(c => html`<span key=${c} class="chip">${c}</span>`)}
+                  ${atrasada(o) && html`<span class="chip chip-danger">Atrasada</span>`}
+                  <span class=${x.c}>${x.t}</span>
+                </div>`;
+            })}
+          </div>`}
+      </div>
+    </div>`;
+}
+
 function Principal({ sessao, toast }) {
-  const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'projetos'; } catch { return 'projetos'; } });
+  const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
   const [statusIA, setStatusIA] = useState(null);
@@ -1867,34 +1991,49 @@ function Principal({ sessao, toast }) {
   useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => setStatusIA({ ia: false })); }, []);
 
   const abrirOS = (id) => { setOsAberta(id); setAba('os'); window.scrollTo(0, 0); };
+  const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
   const abas = [
-    { v: 'projetos', t: 'Projetos', i: '📁' },
-    { v: 'os', t: 'Ordens de serviço', i: '📋' },
-    { v: 'importar', t: 'Importar antigas', i: '🗂️' },
+    { v: 'inicio', t: 'Início', i: '⌂' },
+    { v: 'os', t: 'Ordens de Serviço', i: '📋' },
+    { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
+    { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
   ];
+  const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
-    <div class="shell">
-      <div class="topbar glass">
-        <${Marca} />
-        <div class="dim" style=${{ textAlign: 'right', lineHeight: 1.25 }}>
-          <div style=${{ color: 'var(--text)', fontWeight: 700 }}>${sessao.empresaNome}</div>
-          <div>${sessao.nome}</div>
+    <div>
+      <header class="topo">
+        <div class="topo-in">
+          <div class="brand-mini">
+            <div class="brand-mark">GP</div>
+            <div>
+              <div class="row" style=${{ gap: '6px' }}><b style=${{ fontFamily: 'var(--font-display)', fontSize: '16px' }}>Gestão Pró</b><span class="tag">GESTÃO</span></div>
+              <div class="dim" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
+            </div>
+          </div>
+          <nav class="pillnav">
+            ${abas.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span class="ico">${a.i}</span>${a.t}</button>`)}
+          </nav>
+          <div class="row" style=${{ gap: '8px' }}>
+            <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
+              <span class="avatar">${iniciais}</span>
+              <span style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
+            </button>
+            <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥ Sair</button>
+          </div>
         </div>
-        <button class="btn btn-sm" onClick=${() => setConta(true)}>Minha conta</button>
-        <button class="btn btn-sm btn-ghost" onClick=${() => F().authMod.signOut(F().auth)}>Sair</button>
+      </header>
+      <div class="shell" style=${{ paddingTop: '20px' }}>
+        ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
+        ${aba === 'inicio' && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
+        ${aba === 'projetos' && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${setOsAberta} />`}
+        ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
+        ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
       </div>
-      <nav class="nav">
-        ${abas.map(a => html`<button key=${a.v} class=${'nav-tile' + (aba === a.v ? ' on' : '')} onClick=${() => { setAba(a.v); if (a.v !== 'os') setOsAberta(null); }}><span class="ico">${a.i}</span>${a.t}</button>`)}
-      </nav>
-      ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão; a leitura automática, a ata e a OS automática funcionam depois que a chave for configurada.</div>`}
-      ${aba === 'projetos' && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-      ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${setOsAberta} />`}
-      ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-      ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
-      ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
     </div>`;
