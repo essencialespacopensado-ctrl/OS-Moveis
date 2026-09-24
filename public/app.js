@@ -1393,7 +1393,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, modoExecucao: os.modoExecucao || 'interna', status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1405,6 +1405,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     onFinal: (t) => setFalaTexto(v => (v ? v + ' ' : '') + t),
     onInterim: setFalaInterim,
   });
+  const [etapa, setEtapa] = useState(1);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
   const aplicarVoz = async () => {
@@ -1434,73 +1435,379 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const setCli = (k) => (e) => alterar(o => { o.cliente = o.cliente || {}; o.cliente[k] = e.target.value; });
   const st = STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0];
 
+  const idxSt = Math.max(0, STATUS_OS.findIndex(x => x.v === (os.status || 'elaboracao')));
+  const prazoD = lerPrazo(os.prazoEntrega);
+  const diasPrazo = prazoD ? Math.ceil((prazoD.getTime() - Date.now()) / 86400000) : null;
+  const ETAPAS = [
+    { n: 1, t: 'Dados da OS', s: 'Cliente, obra & prazos' },
+    { n: 2, t: 'Especificações', s: 'MDF, ferragens, LED & móveis' },
+    { n: 3, t: 'Execução', s: 'Interna vs. terceirizada' },
+  ];
+  const ir = (n) => { setEtapa(n); window.scrollTo(0, 0); };
+  const pdf = () => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 150); };
+  const P = os.padrao || {};
+  const setP = (fn) => alterar(o => { o.padrao = o.padrao || {}; fn(o.padrao); });
+
   return html`
-    <div class="fade-up">
-      <div class="row" style=${{ marginTop: '6px' }}>
-        <button class="btn btn-ghost btn-sm" onClick=${voltar}>← Ordens de serviço</button>
-        <span class="dim" style=${{ marginLeft: 'auto' }}>${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
+    <div class="fade-up stack" style=${{ gap: '14px' }}>
+      <div class="card page-card row" style=${{ justifyContent: 'space-between', padding: '10px 14px' }}>
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class="btn btn-sm" onClick=${voltar}>← Voltar para lista de OSs</button>
+          <span class="dim">${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
+        </div>
+        <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${padNum(os.numero)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span></div>
       </div>
-      <div class="page-head">
+
+      <div class="card page-card etapas-bar">
+        ${ETAPAS.map((e, i) => html`
+          ${i > 0 && html`<span class="dim">›</span>`}
+          <button key=${e.n} class=${'etapa-bt' + (etapa === e.n ? ' on' : '')} onClick=${() => ir(e.n)}>
+            <span class="etapa-n">${e.n}</span><span><b>Etapa ${e.n}: ${e.t}</b><br/><small>${e.s}</small></span>
+          </button>`)}
+      </div>
+
+      ${dup && html`<div class="error-box">Esta OS ficou igual à <b>OS nº ${padNum(dup.numero)}</b> (mesmo cliente, móveis, medidas e cores). A alteração não foi salva, pra não duplicar. Mude algo que diferencie as duas.</div>`}
+
+      <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
         <div>
-          <div class="os-num" style=${{ fontSize: '15px' }}>OS nº ${padNum(os.numero)}${os.numeroAntigo ? html` <span class="dim">(antiga: ${os.numeroAntigo})</span>` : ''}</div>
-          <h2>${os.cliente?.nome || 'Cliente não informado'}</h2>
-          <div class="dim">Criada por ${os.criadoPor || '—'} em ${fmtData(os.criadoEm)}${os.origem === 'importada' ? ' · importada de ' + (os.arquivoOrigem || 'OS antiga') : os.origem === 'ia' ? ' · gerada automaticamente' : ''}</div>
+          <div class="row" style=${{ gap: '8px' }}><span class="os-num num-badge">${padNum(os.numero)}</span><span class=${(STATUS_OS[idxSt] || STATUS_OS[0]).c}>${(STATUS_OS[idxSt] || STATUS_OS[0]).t}</span>${os.numeroAntigo && html`<span class="chip">antiga: ${os.numeroAntigo}</span>`}</div>
+          <h2 style=${{ fontSize: '24px', marginTop: '6px' }}>${os.cliente?.nome || 'Cliente não informado'}</h2>
+          <div class="dim">Ambiente: <b>${(os.ambientes || []).map(x => x.nome).join(', ') || '—'}</b> • Obra: <b>${os.cliente?.obra || '—'}</b></div>
         </div>
         <div class="row">
-          <select id="os-status" class="inp" style=${{ width: 'auto' }} value=${os.status || 'elaboracao'} onChange=${e => alterar(o => { o.status = e.target.value; })}>
-            ${STATUS_OS.map(s => html`<option key=${s.v} value=${s.v}>${s.t}</option>`)}
-          </select>
-          <button class="btn" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 150); }}>🖨️ Imprimir / PDF</button>
+          <button class="btn" onClick=${pdf}>📄 Exportar PDF</button>
+          ${etapa < 3 && html`<button class="btn btn-marrom" onClick=${() => ir(etapa + 1)}>Ir para ${etapa === 1 ? 'Especificações' : 'Execução'} →</button>`}
         </div>
       </div>
 
-      ${dup && html`<div class="error-box" style=${{ marginBottom: '12px' }}>
-        Esta OS ficou igual à <b>OS nº ${padNum(dup.numero)}</b> (mesmo cliente, móveis, medidas e cores). Para não duplicar, a alteração não foi salva. Mude algo que diferencie as duas ou use a OS ${padNum(dup.numero)}.
-      </div>`}
+      ${etapa === 1 && html`
+        <div class="card page-card">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <div class="sec-title">Fluxo de andamento da marcenaria</div>
+            ${diasPrazo !== null && html`<span class=${'chip ' + (diasPrazo < 0 ? 'chip-danger' : '')}>📅 ${diasPrazo < 0 ? Math.abs(diasPrazo) + ' dias de atraso' : diasPrazo + ' dias para o prazo'}</span>`}
+          </div>
+          <div class="dim" style=${{ margin: '4px 0 14px' }}>Etapa atual: <b>${STATUS_OS[idxSt].t.replace(/^\d\. /, '')}</b> (${idxSt + 1}/4)</div>
+          <div class="trilho">
+            ${STATUS_OS.map((x, i) => html`
+              <button key=${x.v} class=${'trilho-pt' + (i < idxSt ? ' feito' : i === idxSt ? ' atual' : '')} onClick=${() => alterar(o => { o.status = x.v; })} title=${'Marcar como ' + x.t}>
+                <span class="bola">${i < idxSt ? '✓' : i + 1}</span><small>${x.t.replace(/^\d\. /, '')}</small>
+              </button>`)}
+            <div class="trilho-linha"><div style=${{ width: (idxSt / 3 * 100) + '%' }}></div></div>
+          </div>
+          ${idxSt < 3 && html`<button class="btn btn-marrom btn-block" style=${{ marginTop: '14px' }} onClick=${() => alterar(o => { o.status = STATUS_OS[idxSt + 1].v; })}>✓ Concluir ${STATUS_OS[idxSt].t.replace(/^\d\. /, '')} → Passar para ${STATUS_OS[idxSt + 1].t.replace(/^\d\. /, '')}</button>`}
+          ${idxSt === 3 && html`<div class="ok-box" style=${{ marginTop: '12px' }}>OS concluída ✓</div>`}
+        </div>
 
-      <div class="card stack" style=${{ marginBottom: '14px', borderColor: fala.ouvindo ? 'var(--danger)' : undefined }}>
+        <div class="grid2" style=${{ alignItems: 'start' }}>
+          <div class="card page-card stack">
+            <div class="sec-title">🏢 Dados da obra & responsáveis</div>
+            <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
+            <div class="grid2">
+              <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
+              <div class="field"><label class="lbl" for="os-obra">Obra / local</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
+            </div>
+            <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
+            <div class="grid2">
+              <div class="field"><label class="lbl" for="os-resp">Responsável</label><input id="os-resp" class="inp" value=${os.responsavel || ''} placeholder=${sessao.nome} onInput=${e => alterar(o => { o.responsavel = e.target.value; })} /></div>
+              <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} /></div>
+            </div>
+            <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
+          </div>
+          <div class="card page-card stack">
+            <div class="sec-title">🧱 Padrões de estrutura & tamponamento</div>
+            <span class="lbl">Tipo de tamponamento</span>
+            <div class="opcoes3">
+              ${[['aparente', 'Aparente', 'Laterais visíveis'], ['nao_aparente', 'Não aparente', 'Portas cobrem caixa'], ['sem', 'Sem tamponam.', 'Caixa simples']].map(([v, t, d]) => html`
+                <button key=${v} class=${'opc' + ((os.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), tipo: v }; })}><b>${t}</b><small>${d}</small></button>`)}
+            </div>
+            ${(os.tamponamento?.tipo || 'sem') !== 'sem' && html`
+              <span class="lbl">Espessura do tamponamento</span>
+              <div class="row" style=${{ gap: '6px' }}>${['15', '18', '25', '30', '36', '49', '54'].map(x => html`<button key=${x} class=${'pill' + (os.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), espessura: x }; })}>${x}mm</button>`)}</div>`}
+            <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
+              <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
+                <option value="interna">Execução 100% interna</option><option value="terceirizada">Execução 100% terceirizada</option><option value="mista">Mista / híbrida</option>
+              </select></div>
+            <div class="field"><label class="lbl" for="os-obs">Observações gerais</label><textarea id="os-obs" class="inp" rows="3" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
+          </div>
+        </div>`}
+
+      ${etapa === 2 && html`
+        <div class="card stack" style=${{ borderColor: fala.ouvindo ? 'var(--danger)' : undefined }}>
+          <div class="row">
+            ${fala.ouvindo
+              ? html`<button class="btn btn-mic-on pulse" onClick=${aplicarVoz}>■ Parar e aplicar na OS</button>`
+              : html`<button class="btn btn-teal" onClick=${fala.iniciar} disabled=${aplicandoVoz}>🎤 Preencher falando</button>`}
+            ${!fala.ouvindo && falaTexto && html`<button class="btn" onClick=${aplicarVoz} disabled=${aplicandoVoz}>${aplicandoVoz ? 'Aplicando…' : 'Aplicar na OS'}</button>`}
+            ${aplicandoVoz && html`<span class="dim">Aplicando o que você falou…</span>`}
+          </div>
+          ${fala.ouvindo || falaTexto ? html`<div class="transcript" style=${{ maxHeight: '120px' }}>${falaTexto}<span class="interim"> ${falaInterim}</span></div>`
+            : html`<div class="dim">Ex.: "Na cozinha, balcão da pia 1800 por 900 por 550, caixa Duratex Branco Diamante 18, frente Arauco Sálvia, três gavetas com Tandem Blum."</div>`}
+          ${fala.erro && html`<div class="error-box">${fala.erro}</div>`}
+          ${erroVoz && html`<div class="error-box">${erroVoz}</div>`}
+        </div>
+        <${EspecificacoesOS} P=${P} setP=${setP} catalogo=${catalogo} sessao=${sessao} />
+        <div class="card page-card">
+          <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div><div class="sec-title"><span class="num-sec">9</span> Conjuntos / ambientes e móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
+            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar conjunto</button>
+          </div>
+          <div class="stack">
+            ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} />`)}
+            ${!(os.ambientes || []).length && html`<div class="vazio dim">Nenhum conjunto ainda. Adicione, fale, ou gere a OS a partir de uma reunião.</div>`}
+          </div>
+        </div>
+        <div class="card page-card stack">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <div class="sec-title"><span class="num-sec">10</span> Paredes inteiras / painéis revestidos</div>
+            <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!P.parede?.ativo} onChange=${e => setP(p => { p.parede = { ...(p.parede || {}), ativo: e.target.checked }; })} /> Possui parede inteira</label>
+          </div>
+          ${P.parede?.ativo && html`
+            <textarea class="inp" rows="2" placeholder="Especificação da parede inteira" value=${P.parede?.espec || ''} onInput=${e => setP(p => { p.parede.espec = e.target.value; })}></textarea>
+            <div class="grid2">
+              <input class="inp" placeholder="Paginação / padrão (ex: friso vertical a cada 60cm)" value=${P.parede?.paginacao || ''} onInput=${e => setP(p => { p.parede.paginacao = e.target.value; })} />
+              <input class="inp" placeholder="Método de fixação" value=${P.parede?.fixacao || ''} onInput=${e => setP(p => { p.parede.fixacao = e.target.value; })} />
+            </div>`}
+        </div>`}
+
+      ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} />`}
+
+      <div class="rodape-escuro">
+        <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
         <div class="row">
-          ${fala.ouvindo
-            ? html`<button class="btn btn-mic-on pulse" onClick=${aplicarVoz}>■ Parar e aplicar na OS</button>`
-            : html`<button class="btn btn-teal" onClick=${fala.iniciar} disabled=${aplicandoVoz}>🎤 Preencher falando</button>`}
-          ${!fala.ouvindo && falaTexto && html`<button class="btn" onClick=${aplicarVoz} disabled=${aplicandoVoz}>${aplicandoVoz ? 'Aplicando…' : 'Aplicar na OS'}</button>`}
-          ${aplicandoVoz && html`<span class="dim">Aplicando o que você falou…</span>`}
-          ${(falaTexto || falaInterim) && !aplicandoVoz && html`<button class="btn btn-ghost btn-sm" onClick=${() => { setFalaTexto(''); setFalaInterim(''); }}>Limpar</button>`}
+          <button class="btn btn-sm" onClick=${pdf}>📄 PDF da OS</button>
+          ${etapa < 3 ? html`<button class="btn btn-amarelo" onClick=${() => ir(etapa + 1)}>Avançar para etapa ${etapa + 1}: ${ETAPAS[etapa].t} →</button>`
+            : html`<button class="btn btn-amarelo" onClick=${voltar}>✓ Concluir e voltar para a lista</button>`}
         </div>
-        ${fala.ouvindo || falaTexto ? html`<div class="transcript" style=${{ maxHeight: '120px' }}>${falaTexto}<span class="interim"> ${falaInterim}</span></div>`
-          : html`<div class="dim">Ex.: "Na cozinha, balcão da pia 1800 por 900 por 550, caixa Duratex Branco Diamante 18, frente Arauco Sálvia, três gavetas com Tandem Blum e puxador perfil gola preto fosco."</div>`}
-        ${fala.erro && html`<div class="error-box">${fala.erro}</div>`}
-        ${erroVoz && html`<div class="error-box">${erroVoz}</div>`}
       </div>
 
-      <div class="card stack" style=${{ marginBottom: '14px' }}>
-        <div class="section-label">Cliente</div>
-        <div class="grid2">
-          <div class="field"><label class="lbl" for="os-cli">Nome</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
-          <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
-          <div class="field"><label class="lbl" for="os-obra">Obra</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
-          <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
-          <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
-            <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
-              <option value="interna">Fabricação interna</option><option value="terceirizada">Terceirizada</option><option value="mista">Híbrida / mista</option>
-            </select></div>
-        </div>
-        <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
-        <div class="field"><label class="lbl" for="os-obs">Observações gerais</label><textarea id="os-obs" class="inp" rows="2" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
-      </div>
-
-      <div class="stack">
-        ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} />`)}
-        <button class="btn btn-primary" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar ambiente</button>
-      </div>
-
-      <div class="row" style=${{ justifyContent: 'flex-end', marginTop: '24px' }}>
+      <div class="row" style=${{ justifyContent: 'flex-end' }}>
         ${apagar
           ? html`<span class="dim">Excluir a OS ${padNum(os.numero)}? O número não será reaproveitado.</span><button class="btn btn-sm btn-danger" onClick=${excluir}>Sim, excluir</button><button class="btn btn-sm" onClick=${() => setApagar(false)}>Não</button>`
           : html`<button class="btn btn-sm btn-ghost" onClick=${() => setApagar(true)}>Excluir OS</button>`}
       </div>
       ${imprimir && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <datalist id="lista-fab-mdf">${fabricantesMDF.map(f => html`<option key=${f} value=${f} />`)}</datalist>
+    </div>`;
+}
+
+/* ---------- Etapa 2: especificações gerais da OS ---------- */
+const MATERIAIS = [['mdf', 'MDF', 'Chapas & cores'], ['formica', 'Fórmica', 'Laminados'], ['lamina', 'Lâmina', 'Madeira em lâmina'], ['madeira', 'Madeira', 'Maciça padrão'], ['laca', 'Cores laca', 'Pintura']];
+const PORTAS_RAPIDAS = [
+  ['Ripada 15+15', 'Ripas de 15mm com vão uniforme de 15mm'],
+  ['Ripada 15+6', 'Ripas de 15mm com friso de 6mm'],
+  ['Porta inglesa (moldura usinada)', 'Shaker/inglesa usinada em chapa única de MDF'],
+  ['Moldura inglesa 45°', 'Moldura com junção em meia-esquadria a 45°'],
+];
+const PORTAS_OUTRAS = ['Porta lisa / reta 18mm', 'Porta com cava usinada 45°', 'Perfil alumínio & vidro Reflecta'];
+const FER_ABAS = [
+  { k: 'dobradicas', t: 'Dobradiças', dica: 'Retas, curvas, supercurvas, 165° ou invisíveis', campos: [['modelo', 'Modelo', 'Ex: Dobradiça reta 110° com amortecedor'], ['marca', 'Marca', 'Ex: Blum Clip Top Blumotion'], ['calco', 'Calço, fixação e acabamento', 'Ex: Calço cruzado 3D, preto ônix'], ['obs', 'Observações', 'Ex: 3 dobradiças por porta acima de 1,5m']] },
+  { k: 'corredicas', t: 'Corrediças de gaveta', dica: 'Ocultas, telescópicas ou sistemas de gaveta', campos: [['modelo', 'Modelo', 'Ex: Oculta extração total com amortecedor'], ['marca', 'Marca', 'Ex: Blum Tandem / Hettich Actro'], ['tamanho', 'Comprimento', 'Ex: 500mm'], ['obs', 'Observações', 'Ex: gavetões de panela com 40kg']] },
+  { k: 'correr', t: 'Portas de correr (armários)', dica: 'Sistemas de correr para roupeiros e armários', campos: [['modelo', 'Sistema', 'Ex: Dominus / Slido'], ['marca', 'Marca', ''], ['perfil', 'Perfil / acabamento', 'Ex: alumínio champagne'], ['obs', 'Observações', '']] },
+  { k: 'passagem', t: 'Portas de passagem', dica: 'Divisão de ambientes', campos: [['modelo', 'Modelo', 'Ex: pivotante / de correr aparente'], ['marca', 'Marca', ''], ['perfil', 'Trilho / acabamento', ''], ['obs', 'Observações', '']] },
+];
+
+function ListaItens({ titulo, num, itens, onChange, placeholder, catalogo, filtro, sessao, salvarComo }) {
+  const [novo, setNovo] = useState('');
+  const add = (v) => { const t = (v ?? novo).trim(); if (!t) return; onChange([...(itens || []), t]); setNovo(''); };
+  return html`
+    <div class="card page-card stack">
+      <div class="sec-title"><span class="num-sec">${num}</span> ${titulo}</div>
+      <div class="row" style=${{ flexWrap: 'nowrap' }}>
+        <div style=${{ flex: 1 }}><${CatalogoInput} value=${novo} placeholder=${placeholder} catalogo=${catalogo} filtro=${filtro} sessao=${sessao} salvarComo=${salvarComo} onChange=${setNovo} onPick=${it => add([it.fabricante, it.nome].filter(Boolean).join(' '))} className="inp" /></div>
+        <button class="btn btn-primary" onClick=${() => add()}>Adicionar</button>
+      </div>
+      ${(itens || []).map((t, i) => html`<div key=${i} class="item-lista"><span>${t}</span><button class="x-btn" onClick=${() => onChange(itens.filter((_, j) => j !== i))}>🗑</button></div>`)}
+    </div>`;
+}
+
+function EspecificacoesOS({ P, setP, catalogo, sessao }) {
+  const [aba, setAba] = useState('dobradicas');
+  const fMDF = useMemo(() => ({ tipos: ['MDF'] }), []);
+  const fPux = useMemo(() => ({ tipos: ['Puxador'] }), []);
+  const fLed = useMemo(() => ({ tipos: ['Iluminação'] }), []);
+  const fFer = useMemo(() => ({ tipos: ['Ferragem', 'Acessório'] }), []);
+  const acab = (lado) => P.acab?.[lado] || {};
+  const setAcab = (lado, k, v) => setP(p => { p.acab = p.acab || {}; p.acab[lado] = { ...(p.acab[lado] || {}), [k]: v }; });
+  const led = P.led || {};
+  const setLed = (k, v) => setP(p => { p.led = { ...(p.led || {}), [k]: v }; });
+  const fer = (P.ferragens || {})[aba] || {};
+  const abaInfo = FER_ABAS.find(x => x.k === aba);
+
+  return html`
+    <div class="card page-card stack">
+      <div class="sec-title"><span class="num-sec">1</span> Acabamentos & materiais</div>
+      <div class="dim" style=${{ marginTop: '-6px' }}>Padrão geral da OS. Cada móvel pode ter o seu próprio no item 9.</div>
+      <div class="grid2" style=${{ alignItems: 'start' }}>
+        ${[['interno', 'Acabamento interno', 'Caixaria, prateleiras, divisões e estrutura'], ['externo', 'Acabamento externo', 'Frentes, portas, vistas, painéis e tamponamentos']].map(([lado, t, d]) => html`
+          <div key=${lado} class=${'acab-box' + (lado === 'externo' ? ' ext' : '')}>
+            <div><b>${t}</b> <span class="chip">${lado.toUpperCase()}</span><div class="dim">${d}</div></div>
+            <span class="lbl">Tipo de material</span>
+            <div class="row" style=${{ gap: '5px' }}>${MATERIAIS.map(([v, n]) => html`<button key=${v} class=${'pill' + ((acab(lado).tipo || 'mdf') === v ? ' on' : '')} onClick=${() => setAcab(lado, 'tipo', v)}>${n}</button>`)}</div>
+            <span class="lbl">Descrição da chapa / cor</span>
+            <${CatalogoInput} value=${acab(lado).desc || ''} placeholder=${(acab(lado).tipo || 'mdf') === 'mdf' ? 'Buscar: branco diamante, freijó…' : 'Descreva o material'} catalogo=${catalogo} filtro=${fMDF} sessao=${sessao}
+              onChange=${v => setAcab(lado, 'desc', v)} onPick=${it => { setAcab(lado, 'desc', it.nome); setAcab(lado, 'fabricante', it.fabricante); }} salvarComo=${() => ({ tipo: 'MDF', fabricante: acab(lado).fabricante || '' })} className="inp" />
+            ${acab(lado).fabricante && html`<div class="detectado">🏭 Fabricante detectado: <b>${acab(lado).fabricante}</b></div>`}
+            <div class="row" style=${{ gap: '5px' }}><span class="dim">Chapa:</span>${ESPESSURAS.map(x => html`<button key=${x} class=${'pill' + (acab(lado).esp === x ? ' on' : '')} onClick=${() => setAcab(lado, 'esp', x)}>${x}mm</button>`)}</div>
+          </div>`)}
+      </div>
+      <div class="field"><span class="lbl">Outras características da especificação</span><input class="inp" placeholder="Ex: fita de borda ABS 1mm colada com PUR nas áreas molhadas" value=${P.outras || ''} onInput=${e => setP(p => { p.outras = e.target.value; })} /></div>
+    </div>
+
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div class="sec-title">🚪 Portas (modelo, usinagem & estilo)</div>
+        ${P.portas?.modelo && html`<span class="chip chip-accent">✓ ${P.portas.modelo}</span>`}
+      </div>
+      <input class="inp" placeholder="Modelo / tipo de porta" value=${P.portas?.modelo || ''} onInput=${e => setP(p => { p.portas = { ...(p.portas || {}), modelo: e.target.value }; })} />
+      <span class="lbl">Modelos rápidos (1 clique)</span>
+      <div class="opcoes4">
+        ${PORTAS_RAPIDAS.map(([t, d]) => html`<button key=${t} class=${'opc' + (P.portas?.modelo === t ? ' on' : '')} onClick=${() => setP(p => { p.portas = { ...(p.portas || {}), modelo: t }; })}><b>${t}</b><small>${d}</small></button>`)}
+      </div>
+      <div class="row" style=${{ gap: '5px' }}><span class="dim">Outros estilos:</span>${PORTAS_OUTRAS.map(t => html`<button key=${t} class=${'pill' + (P.portas?.modelo === t ? ' on' : '')} onClick=${() => setP(p => { p.portas = { ...(p.portas || {}), modelo: t }; })}>${t}</button>`)}</div>
+      <textarea class="inp" rows="2" placeholder="Observações / detalhes de usinagem das portas" value=${P.portas?.obs || ''} onInput=${e => setP(p => { p.portas = { ...(p.portas || {}), obs: e.target.value }; })}></textarea>
+    </div>
+
+    <div class="grid2" style=${{ alignItems: 'start' }}>
+      <${ListaItens} num="2" titulo="Lâminas utilizadas" itens=${P.laminas} onChange=${v => setP(p => { p.laminas = v; })} placeholder="Ex: Lâmina natural carvalho europeu" catalogo=${catalogo} filtro=${fMDF} sessao=${sessao} />
+      <${ListaItens} num="3" titulo="Perfis utilizados" itens=${P.perfis} onChange=${v => setP(p => { p.perfis = v; })} placeholder="Ex: Perfil gola alumínio champagne" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} />
+    </div>
+    <${ListaItens} num="4" titulo="Puxadores" itens=${P.puxadores} onChange=${v => setP(p => { p.puxadores = v; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} />
+
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div class="sec-title"><span class="num-sec">5</span> Iluminação LED</div>
+        <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!led.ativo} onChange=${e => setLed('ativo', e.target.checked)} /> LED ativado no projeto</label>
+      </div>
+      ${led.ativo && html`
+        <div class="grid3">
+          <div class="field"><span class="lbl">Tipo de fita LED</span><${CatalogoInput} value=${led.fita || ''} placeholder="Ex: fita COB 2700K 12V" catalogo=${catalogo} filtro=${fLed} sessao=${sessao} onChange=${v => setLed('fita', v)} salvarComo=${() => ({ tipo: 'Iluminação' })} className="inp" /></div>
+          <div class="field"><span class="lbl">Temperatura da cor</span>
+            <select class="inp" value=${led.temp || ''} onChange=${e => setLed('temp', e.target.value)}><option value="">Escolha…</option><option>2700K (branco quente aconchegante)</option><option>3000K (branco neutro sofisticado)</option><option>4000K (branco de trabalho)</option><option>6500K (branco frio)</option></select></div>
+          <div class="field"><span class="lbl">Perfil de alumínio / difusor</span><${CatalogoInput} value=${led.perfil || ''} placeholder="Ex: perfil embutir slim" catalogo=${catalogo} filtro=${fLed} sessao=${sessao} onChange=${v => setLed('perfil', v)} salvarComo=${() => ({ tipo: 'Iluminação' })} className="inp" /></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><span class="lbl">Fonte & acionamento</span><${CatalogoInput} value=${led.fonte || ''} placeholder="Ex: fonte slim 12V + sensor de toque" catalogo=${catalogo} filtro=${fLed} sessao=${sessao} onChange=${v => setLed('fonte', v)} salvarComo=${() => ({ tipo: 'Iluminação' })} className="inp" /></div>
+          <div class="field"><span class="lbl">Locais de aplicação</span><input class="inp" placeholder="Ex: sob aéreos e nichos da torre quente" value=${led.locais || ''} onInput=${e => setLed('locais', e.target.value)} /></div>
+        </div>`}
+    </div>
+
+    <div class="card page-card stack">
+      <div class="sec-title"><span class="num-sec">6</span> Ferragens & sistemas de portas de correr</div>
+      <div class="abas-linha">${FER_ABAS.map(x => html`<button key=${x.k} class=${aba === x.k ? 'on' : ''} onClick=${() => setAba(x.k)}>${x.t}</button>`)}</div>
+      <div class="dica">✨ <b>${abaInfo.t}:</b> ${abaInfo.dica}. Escolha no catálogo ou escreva livre.</div>
+      <div class="grid2">
+        ${abaInfo.campos.map(([k, lbl, ph]) => html`
+          <div key=${aba + k} class="field"><span class="lbl">${lbl}</span>
+            <${CatalogoInput} value=${fer[k] || ''} placeholder=${ph} catalogo=${catalogo} filtro=${fFer} sessao=${sessao}
+              onChange=${v => setP(p => { p.ferragens = p.ferragens || {}; p.ferragens[aba] = { ...(p.ferragens[aba] || {}), [k]: v }; })}
+              onPick=${it => setP(p => { p.ferragens = p.ferragens || {}; p.ferragens[aba] = { ...(p.ferragens[aba] || {}), [k]: k === 'marca' ? it.fabricante + ' ' + it.nome : it.nome, ...(k === 'modelo' && it.fabricante ? { marca: (p.ferragens[aba] || {}).marca || it.fabricante } : {}) }; })}
+              className="inp" />
+          </div>`)}
+      </div>
+    </div>
+
+    <div class="grid2" style=${{ alignItems: 'start' }}>
+      <${ListaItens} num="7" titulo="Fechaduras & travamentos" itens=${P.fechaduras} onChange=${v => setP(p => { p.fechaduras = v; })} placeholder="Ex: fechadura de gaveta cromada, trava push" catalogo=${catalogo} filtro=${fFer} sessao=${sessao} />
+      <${ListaItens} num="8" titulo="Tecidos & tapeçaria / estofamento" itens=${P.tecidos} onChange=${v => setP(p => { p.tecidos = v; })} placeholder="Ex: cabeceira em linho cinza, fornecido pelo cliente" catalogo=${[]} sessao=${sessao} />
+    </div>`;
+}
+
+/* ---------- Etapa 3: execução ---------- */
+const ETAPAS_FAB = [
+  ['corte', 'Corte & usinagem', 'Corte reto, furações de cavilha/minifix e rebaixos'],
+  ['fita', 'Fita de borda', 'Colagem de fitas de PVC/ABS nos topos das peças'],
+  ['cavas', 'Cavas & puxadores', 'Perfis gola, cavas 45° ou usinagem no MDF'],
+  ['pintura', 'Pintura & laca', 'Fundo primer, laca fosca, acetinada ou brilho'],
+  ['tapecaria', 'Tapeçaria', 'Cabeceiras almofadadas, assentos ou painéis'],
+  ['montagem', 'Montagem final', 'Pré-montagem na fábrica e instalação no cliente'],
+];
+const ST_FAB = { pendente: 'Pendente', andamento: 'Em andamento', pronto: 'Pronto' };
+
+function ExecucaoOS({ os, alterar }) {
+  const ex = os.execucao || {};
+  const et = (k) => ex.etapas?.[k] || { onde: os.modoExecucao === 'terceirizada' ? 'terceirizada' : 'interna', status: 'pendente' };
+  const setEt = (k, patch) => alterar(o => { o.execucao = o.execucao || {}; o.execucao.etapas = o.execucao.etapas || {}; o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), ...patch }; });
+  const concluir = (i) => {
+    const k = ETAPAS_FAB[i][0];
+    alterar(o => {
+      o.execucao = o.execucao || {}; o.execucao.etapas = o.execucao.etapas || {};
+      o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), status: 'pronto', concluidaEm: nowIso() };
+      const prox = ETAPAS_FAB[i + 1]?.[0];
+      if (prox) o.execucao.etapas[prox] = { ...et(prox), ...(o.execucao.etapas[prox] || {}), status: 'andamento' };
+      if (o.status === 'elaboracao') o.status = 'producao';
+      if (prox === 'montagem' && o.status === 'producao') o.status = 'montagem';
+      if (!prox) o.status = 'concluida';
+    });
+  };
+  const setModo = (m) => alterar(o => {
+    o.modoExecucao = m;
+    if (m !== 'mista') { o.execucao = o.execucao || {}; o.execucao.etapas = o.execucao.etapas || {}; ETAPAS_FAB.forEach(([k]) => { o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), onde: m }; }); }
+  });
+  const nInt = ETAPAS_FAB.filter(([k]) => et(k).onde === 'interna').length;
+  const par = ex.parceiro || {};
+  const setPar = (k, v) => alterar(o => { o.execucao = o.execucao || {}; o.execucao.parceiro = { ...(o.execucao.parceiro || {}), [k]: v }; });
+  const MODOS = [['interna', 'Execução 100% interna', 'Toda a produção na marcenaria própria: corte, fita, usinagem, acabamento e montagem.', 'Controle total de prazos'], ['terceirizada', 'Execução 100% terceirizada', 'Produção entregue pronta por parceiro externo (central de corte, nesting ou prestador).', 'Escalabilidade alta'], ['mista', 'Execução mista / híbrida', 'Por etapa: ex. corte na central parceira, fita, laca e montagem internas.', 'Flexibilidade ideal']];
+
+  return html`
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div><span class="chip chip-accent">AUTOMAÇÃO DA OFICINA</span> <b>Esteira de produção</b><div class="dim">Ao concluir uma etapa, a próxima começa sozinha e o status da OS acompanha.</div></div>
+        ${ETAPAS_FAB.every(([k]) => et(k).status === 'pendente') && html`<button class="btn btn-primary" onClick=${() => setEt('corte', { status: 'andamento' })}>▶ Iniciar produção</button>`}
+      </div>
+      <div class="esteira">
+        ${ETAPAS_FAB.map(([k, t], i) => { const e = et(k); return html`
+          <div key=${k} class=${'est-card ' + e.status}>
+            <div class="row" style=${{ justifyContent: 'space-between' }}><small class="mono">0${i + 1}</small><small class="est-st">${ST_FAB[e.status]}</small></div>
+            <b>${t}</b><small class="dim">${e.onde === 'terceirizada' ? 'Terceirizada' : 'Interna'}</small>
+            ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>↺ Reabrir</button>`
+              : e.status === 'andamento' ? html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir</button>`
+              : html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>▶ Iniciar</button>`}
+          </div>`; })}
+      </div>
+    </div>
+
+    <div class="card page-card stack">
+      <div class="sec-title">1. Seleção do modelo operacional</div>
+      <div class="opcoes3">
+        ${MODOS.map(([v, t, d, tag]) => html`
+          <button key=${v} class=${'opc grande' + ((os.modoExecucao || 'interna') === v ? ' on' : '')} onClick=${() => setModo(v)}>
+            ${(os.modoExecucao || 'interna') === v && html`<span class="chip chip-teal" style=${{ alignSelf: 'flex-end' }}>✓ Selecionado</span>`}
+            <b>${t}</b><small>${d}</small><small style=${{ color: 'var(--text)', fontWeight: 700, marginTop: '6px' }}>${tag}</small>
+          </button>`)}
+      </div>
+    </div>
+
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div class="sec-title">2. Etapas de fabricação & controles</div>
+        <span class="chip">${nInt} internas • ${6 - nInt} terceirizadas</span>
+      </div>
+      ${ETAPAS_FAB.map(([k, t, d], i) => { const e = et(k); return html`
+        <div key=${k} class="fab-linha">
+          <div class="grow"><b>${t}</b> <span class=${'chip ' + (e.status === 'pronto' ? 'chip-ok' : e.status === 'andamento' ? 'chip-accent' : '')}>${ST_FAB[e.status]}</span><div class="dim">${d}</div>
+            ${e.onde === 'terceirizada' && html`<div class="grid3" style=${{ marginTop: '6px' }}>
+              <input class="inp inp-sm" placeholder="Parceiro / central externa" value=${e.parceiro || ''} onInput=${ev => setEt(k, { parceiro: ev.target.value })} />
+              <input class="inp inp-sm" placeholder="Prazo previsto (dd/mm/aaaa)" value=${e.prazo || ''} onInput=${ev => setEt(k, { prazo: ev.target.value })} />
+              <input class="inp inp-sm" placeholder="Status no parceiro" value=${e.stParceiro || ''} onInput=${ev => setEt(k, { stParceiro: ev.target.value })} />
+            </div>`}
+          </div>
+          <div class="seg-mini">
+            <button class=${e.onde === 'interna' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'interna' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Interna</button>
+            <button class=${e.onde === 'terceirizada' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'terceirizada' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Terceirizada</button>
+          </div>
+          ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>↺ Reabrir</button>` : html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir & avançar</button>`}
+        </div>`; })}
+    </div>
+
+    <div class="card page-card stack">
+      <div class="sec-title">🚚 3. Central parceira & logística externa</div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Central / fornecedor parceiro</span><input class="inp" value=${par.nome || ''} onInput=${e => setPar('nome', e.target.value)} /></div>
+        <div class="field"><span class="lbl">Contato / WhatsApp</span><input class="inp" value=${par.contato || ''} onInput=${e => setPar('contato', e.target.value)} /></div>
+        <div class="field"><span class="lbl">Código do pedido / orçamento</span><input class="inp" value=${par.pedido || ''} onInput=${e => setPar('pedido', e.target.value)} /></div>
+        <div class="field"><span class="lbl">Custo estimado do parceiro (R$)</span><input class="inp mono" inputmode="decimal" value=${par.custo || ''} onInput=${e => setPar('custo', e.target.value)} /></div>
+      </div>
+      <div class="field"><span class="lbl">Observações de produção & arquivos de corte</span><textarea class="inp" rows="2" value=${par.obs || ''} onInput=${e => setPar('obs', e.target.value)}></textarea></div>
     </div>`;
 }
 
@@ -1633,6 +1940,21 @@ function ImpressaoOS({ os, empresa }) {
         <tr><th>Endereço</th><td colspan="3">${os.cliente?.endereco}</td></tr>
         ${os.observacoesGerais && html`<tr><th>Obs.</th><td colspan="3">${os.observacoesGerais}</td></tr>`}
       </tbody></table>
+      ${(() => { const P = os.padrao || {}; const ac = (l) => [P.acab?.[l]?.fabricante, P.acab?.[l]?.desc, P.acab?.[l]?.esp ? P.acab[l].esp + ' mm' : ''].filter(Boolean).join(' · ');
+        const F = P.ferragens || {}; const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
+        const linhas = [
+          ['Tamponamento', os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' ' + os.tamponamento.espessura + 'mm' : '') : ''],
+          ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']],
+          ['Responsável / arquiteto', [os.responsavel, os.arquiteto].filter(Boolean).join(' / ')],
+          ['Acabamento interno', ac('interno')], ['Acabamento externo', ac('externo')], ['Outras características', P.outras],
+          ['Portas', [P.portas?.modelo, P.portas?.obs].filter(Boolean).join(' — ')],
+          ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')], ['Puxadores', (P.puxadores || []).join('; ')],
+          ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : ''],
+          ['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Portas de correr', fl('correr')], ['Portas de passagem', fl('passagem')],
+          ['Fechaduras', (P.fechaduras || []).join('; ')], ['Tecidos', (P.tecidos || []).join('; ')],
+          ['Parede inteira', P.parede?.ativo ? [P.parede.espec, P.parede.paginacao, P.parede.fixacao].filter(Boolean).join(' — ') : ''],
+        ].filter(([, v]) => v);
+        return linhas.length ? html`<div class="amb-t">Especificações gerais</div><table><tbody>${linhas.map(([k, v]) => html`<tr><th style=${{ width: '22%' }}>${k}</th><td>${v}</td></tr>`)}</tbody></table>` : ''; })()}
       ${(os.ambientes || []).map(a => html`
         <div class="amb-t">${a.nome}</div>
         <table>
