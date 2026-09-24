@@ -6,17 +6,32 @@ service cloud.firestore {
     function meuIndice() { return get(/databases/$(database)/documents/usuarios_index/$(request.auth.uid)).data; }
     function minhaEmpresa() { return meuIndice().empresaId; }
     function souAdmin() { return meuIndice().papel == 'admin'; }
+    // Desenvolvedor: a conta cujo uid está em config/dev (só existe uma).
+    function souDev() {
+      return logado() && exists(/databases/$(database)/documents/config/dev)
+        && get(/databases/$(database)/documents/config/dev).data.uid == request.auth.uid;
+    }
+    function empresaAtiva(e) { return get(/databases/$(database)/documents/empresas/$(e)).data.get('pausada', false) != true; }
+
+    // Registro do acesso do desenvolvedor: criado uma única vez, pelo próprio.
+    match /config/dev {
+      allow read: if true;
+      allow create: if logado() && request.resource.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/config/dev);
+      allow update, delete: if souDev();
+    }
 
     // Lista de empresas que aparece na tela de login (só o nome).
     match /empresas_publico/{empresaId} {
       allow read: if true;
       allow create: if logado() && minhaEmpresa() == empresaId;
-      allow update: if logado() && minhaEmpresa() == empresaId && souAdmin();
+      allow update: if souDev() || (logado() && minhaEmpresa() == empresaId && souAdmin());
+      allow delete: if souDev();
     }
 
     // Diz a qual empresa cada usuário pertence e qual o papel dele.
     match /usuarios_index/{uid} {
-      allow read: if logado() && (request.auth.uid == uid || resource.data.empresaId == minhaEmpresa());
+      allow read: if souDev() || (logado() && (request.auth.uid == uid || resource.data.empresaId == minhaEmpresa()));
       // Criar: (a) o próprio dono ao cadastrar uma empresa nova, ou (b) um admin cadastrando alguém da equipe.
       allow create: if logado() && (
         (request.auth.uid == uid
@@ -32,9 +47,13 @@ service cloud.firestore {
     // Tudo da empresa (projetos, OS, catálogo, equipe) só é visto por quem é dela.
     match /empresas/{empresaId} {
       allow create: if logado() && minhaEmpresa() == empresaId;
-      allow read, update: if logado() && minhaEmpresa() == empresaId;
+      allow read: if souDev() || (logado() && minhaEmpresa() == empresaId);
+      // A empresa não pode se "despausar" sozinha: só o desenvolvedor mexe em pausada.
+      allow update: if souDev() || (logado() && minhaEmpresa() == empresaId && empresaAtiva(empresaId)
+        && request.resource.data.get('pausada', false) == resource.data.get('pausada', false));
       match /{resto=**} {
-        allow read, write: if logado() && minhaEmpresa() == empresaId;
+        allow read: if souDev() || (logado() && minhaEmpresa() == empresaId && empresaAtiva(empresaId));
+        allow write: if logado() && minhaEmpresa() == empresaId && empresaAtiva(empresaId);
       }
     }
   }

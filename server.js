@@ -1,4 +1,4 @@
-// Servidor do OS Móveis (sem dependências externas: só Node 18+).
+// Servidor do Gestão Pró (sem dependências externas: só Node 18+).
 // 1) Entrega o site (pasta public).
 // 2) Rota /api/ia: conversa com a IA da Anthropic usando a chave guardada no Render
 //    (variável ANTHROPIC_API_KEY). A chave nunca vai para o navegador.
@@ -227,6 +227,44 @@ function lerCorpo(req, limite = 30 * 1024 * 1024) {
   });
 }
 
+// ---------- Assistente de IA (chat dentro do app) ----------
+const REGRAS_ASSISTENTE = `Você é o assistente de IA do Gestão Pró, app de ordens de serviço (OS) de uma marcenaria de móveis planejados de alto padrão no Brasil.
+Fale sempre em português do Brasil, de forma curta e prática.
+Você ajuda a equipe a: tirar dúvidas sobre projetos, clientes e OS da empresa (use os DADOS DA EMPRESA abaixo);
+sugerir MDF, fitas, ferragens e puxadores compatíveis (use nomes reais de fabricantes como Duratex, Arauco, Guararapes, Berneck, Blum, Hettich, Häfele, Grass, FGV);
+conferir OS (medidas incoerentes, ferragem faltando, corrediça x profundidade, dobradiças por altura de porta, fita que não combina);
+escrever mensagens para clientes e fornecedores; e explicar como usar o app.
+Como usar o app: Projetos (cliente, contrato/detalhamentos, Ata da reunião com microfone), botão "Gerar OS automática" no projeto,
+Ordens de serviço (editar, "Preencher falando", imprimir/PDF, status), Importar antigas, Catálogo, Equipe (só administrador).
+Se a pergunta depender de um dado que não está nos DADOS DA EMPRESA, diga isso em vez de inventar. Medidas em milímetros.`;
+
+async function assistente(res, dados) {
+  const contexto = String(dados.contexto || '').slice(0, 40000);
+  const historico = (Array.isArray(dados.historico) ? dados.historico : [])
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+    .slice(-20)
+    .map(m => ({ role: m.role, content: String(m.content).slice(0, 8000) }));
+  while (historico.length && historico[0].role !== 'user') historico.shift();
+  if (!historico.length || historico[historico.length - 1].role !== 'user') return enviarJSON(res, 400, { erro: 'Mensagem vazia.' });
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: 3000,
+        system: REGRAS_ASSISTENTE + '\n\nDADOS DA EMPRESA (agora):\n' + contexto,
+        messages: historico,
+      }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + (body?.error?.message || ('erro ' + r.status)) });
+    const texto = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+    enviarJSON(res, 200, { ok: true, resultado: { texto } });
+  } catch {
+    enviarJSON(res, 502, { erro: 'Sem conexão com a IA agora. Tente de novo em instantes.' });
+  }
+}
+
 async function rotaIA(req, res) {
   const u = await checkUser(req);
   if (!u.ok) return enviarJSON(res, 401, { erro: u.msg });
@@ -236,6 +274,7 @@ async function rotaIA(req, res) {
   let corpo;
   try { corpo = JSON.parse(await lerCorpo(req)); } catch { return enviarJSON(res, 413, { erro: 'Arquivo grande demais. Envie menos páginas por vez.' }); }
   const { tarefa, dados = {}, imagens = [] } = corpo || {};
+  if (tarefa === 'assistente') return assistente(res, dados);
   const prompt = tarefaPrompt(tarefa, dados);
   if (!prompt) return enviarJSON(res, 400, { erro: 'Tarefa desconhecida.' });
 
@@ -292,4 +331,4 @@ const server = http.createServer(async (req, res) => {
 });
 server.requestTimeout = 0;
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('OS Móveis rodando na porta ' + PORT));
+server.listen(PORT, () => console.log('Gestão Pró rodando na porta ' + PORT));
