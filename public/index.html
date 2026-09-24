@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0d0b">
+<title>OS Móveis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="root"><div class="boot">Carregando…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="/config.js"></script>
+<script type="module">
+  window.__fb = { ready: false, error: null };
+  (async () => {
+    try {
+      const cfg = window.__FIREBASE_CONFIG__;
+      if (!cfg) { window.__fb.error = 'no-config'; window.dispatchEvent(new Event('fb-done')); return; }
+      const V = '10.13.1';
+      const appMod = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
+      const authMod = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
+      const fsMod = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
+      const app = appMod.initializeApp(cfg);
+      window.__fb = {
+        ready: true, error: null, cfg,
+        app, auth: authMod.getAuth(app), db: fsMod.getFirestore(app),
+        appMod, authMod, fsMod,
+      };
+    } catch (e) {
+      window.__fb = { ready: false, error: String(e) };
+    }
+    window.dispatchEvent(new Event('fb-done'));
+  })();
+</script>
+<script src="/app.js"></script>
+</body>
+</html>
