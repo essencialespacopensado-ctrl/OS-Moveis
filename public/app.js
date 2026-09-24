@@ -217,7 +217,7 @@ async function criarOS(sessao, conteudo, extras = {}) {
     numero = (e.data()?.osSeq || 0) + 1;
     tx.update(empRef, { osSeq: numero });
     tx.set(osRef, {
-      ...os, numero, fingerprint: fp, status: 'elaboracao',
+      ...os, numero, fingerprint: fp, status: 'elaboracao', modoExecucao: 'interna',
       projetoId: extras.projetoId || '', origem: extras.origem || 'manual',
       numeroAntigo: extras.numeroAntigo || '', dataAntiga: extras.dataAntiga || '', arquivoOrigem: extras.arquivoOrigem || '',
       criadoPor: sessao.nome, criadoEm: agora, atualizadoEm: agora, atualizadoPor: sessao.nome,
@@ -787,9 +787,21 @@ function TelaProjetos({ sessao, catalogo, toast, abrirOS }) {
 
   return html`
     <div class="fade-up">
-      <div class="page-head">
-        <div><h2>Projetos</h2><div class="dim">Cada cliente com contrato, detalhamentos e ata da reunião</div></div>
-        <button class="btn btn-primary" onClick=${() => setNovo(true)}>+ Novo projeto</button>
+      <div class="hero-ia">
+        <div>
+          <div class="hero-eyebrow">● Inteligência artificial de marcenaria</div>
+          <h2>Reuniões & Projetos</h2>
+          <div class="hero-sub">Assistente que filtra conversas paralelas, gera atas por ambiente e móvel e preenche a ordem de serviço sozinho.</div>
+        </div>
+        <button class="btn btn-laranja" onClick=${() => setNovo(true)}>✦ + Nova reunião / projeto</button>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><span class="hs-ico">📄</span><div><b class="mono">${projetos.length}</b><div>Projetos e reuniões registrados</div></div></div>
+        <div class="hero-stat"><span class="hs-ico">✅</span><div><b class="mono">${projetos.filter(p => p.temAta).length}</b><div>Com ata da reunião</div></div></div>
+        <div class="hero-stat"><span class="hs-ico">🗂️</span><div><b class="mono">${projetos.filter(p => p.osNumero).length}</b><div>Já viraram ordem de serviço</div></div></div>
+      </div>
+      <div class="page-head" style=${{ marginTop: '4px' }}>
+        <div class="sec-title">Histórico (${projetos.length})</div>
       </div>
       <input id="busca-proj" class="inp" placeholder="Buscar cliente ou obra…" value=${busca} onInput=${e => setBusca(e.target.value)} style=${{ marginBottom: '12px' }} />
       <div class="list">
@@ -1165,6 +1177,12 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
   const [erro, setErro] = useState(null);
   const [pedirNome, setPedirNome] = useState(false);
   const [nomeCli, setNomeCli] = useState('');
+  const [execucao, setExecucao] = useState('');
+  const [soPrazo, setSoPrazo] = useState(false);
+  const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_vista') || 'grade'; } catch { return 'grade'; } });
+  useEffect(() => { try { localStorage.setItem('osm_vista', vista); } catch {} }, [vista]);
+  const [vozInterim, setVozInterim] = useState('');
+  const voz = useFala({ onFinal: t => { setBusca(t.replace(/^(buscar|procurar|abrir)\s+/i, '').replace(/^os\s+/i, '').replace(/[.!?]$/, '')); }, onInterim: setVozInterim });
 
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
@@ -1173,8 +1191,14 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
 
   if (osAberta) return html`<${EditorOS} key=${osAberta} osId=${osAberta} sessao=${sessao} catalogo=${catalogo} toast=${toast} voltar=${() => setOsAberta(null)} />`;
 
-  const filtradas = lista.filter(o => (!status || o.status === status) &&
-    (!busca || norm(`${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
+  const stOf = (o) => STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao';
+  const execOf = (o) => o.modoExecucao || 'interna';
+  const filtradas = lista.filter(o =>
+    (!status || (status === 'atrasadas' ? atrasada(o) : stOf(o) === status)) &&
+    (!execucao || execOf(o) === execucao) &&
+    (!soPrazo || !!lerPrazo(o.prazoEntrega)) &&
+    (!busca || norm(`${padNum(o.numero)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')} ${(STATUS_OS.find(x => x.v === stOf(o)) || {}).t}`).includes(norm(busca))))
+    .sort((x, y) => soPrazo ? ((lerPrazo(x.prazoEntrega) || 0) - (lerPrazo(y.prazoEntrega) || 0)) : 0);
 
   const nova = async () => {
     setErro(null);
@@ -1188,45 +1212,140 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
     setCriando(false);
   };
 
+  // Métricas
+  const agora = Date.now(), dia = 86400000;
+  const ativas = lista.filter(o => stOf(o) !== 'concluida');
+  const prox7 = ativas.filter(o => { const d = lerPrazo(o.prazoEntrega); return d && d.getTime() >= agora && d.getTime() - agora <= 7 * dia; }).length;
+  const hoje = new Date();
+  const noMes = ativas.filter(o => { const d = lerPrazo(o.prazoEntrega); return d && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear(); }).length;
+  const noPrazo = ativas.filter(o => !atrasada(o)).length;
+  const nExec = (m) => lista.filter(o => execOf(o) === m).length;
+  const pc = (n) => lista.length ? ` (${Math.round(n * 100 / lista.length)}%)` : ' (0%)';
+  const clientes = new Set(lista.map(o => norm(o.cliente?.nome)).filter(Boolean)).size;
+  const tiposAmb = new Set(lista.flatMap(o => (o.ambientes || []).map(a => norm(a.nome))).filter(Boolean)).size;
+  const cnt = (v) => lista.filter(o => stOf(o) === v).length;
+  const pf = (n) => lista.length ? Math.round(n * 100 / lista.length) + '% do fluxo' : '0% do fluxo';
+  const nAtr = lista.filter(atrasada).length;
+  const tiles = [
+    { t: 'Total de OSs', n: lista.length, s: '100% da carteira', cls: '' },
+    { t: '1. Elaboração', n: cnt('elaboracao'), s: pf(cnt('elaboracao')), cls: '', f: 'elaboracao' },
+    { t: '2. Produção', n: cnt('producao'), s: pf(cnt('producao')), cls: 'tile-teal', f: 'producao' },
+    { t: '3. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '4. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: 'Vencidas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
+  ];
+
+  const cartao = (o) => {
+    const x = STATUS_OS.find(y => y.v === stOf(o)) || STATUS_OS[0];
+    const nMov = (o.ambientes || []).reduce((n, a) => n + (a.moveis || []).length, 0);
+    const nRev = (o.ambientes || []).reduce((n, a) => n + (a.moveis || []).filter(m => (m.revisar || []).length).length, 0);
+    return { x, nMov, nRev };
+  };
+
   return html`
-    <div class="fade-up">
-      <div class="page-head">
-        <div><h2>Ordens de serviço</h2><div class="dim">${lista.length} no total · números únicos, sem repetição</div></div>
+    <div class="fade-up stack" style=${{ gap: '16px' }}>
+      <div class="page-head" style=${{ margin: 0 }}>
+        <div><h2>Ordens de Serviço</h2><div class="dim">Acompanhe a fabricação, prazos e modo de execução de cada projeto</div></div>
         <button class="btn btn-primary" onClick=${() => setPedirNome(v => !v)} disabled=${criando}>+ Nova OS</button>
       </div>
       ${pedirNome && html`
-        <div class="card row" style=${{ marginBottom: '12px', flexWrap: 'nowrap' }}>
+        <div class="card row" style=${{ flexWrap: 'nowrap' }}>
           <input id="nova-os-cli" class="inp" placeholder="Nome do cliente" value=${nomeCli} onInput=${e => setNomeCli(e.target.value)} onKeyDown=${e => e.key === 'Enter' && nova()} autoFocus />
           <button class="btn btn-primary" onClick=${nova} disabled=${criando}>${criando ? 'Criando…' : 'Criar'}</button>
         </div>`}
-      ${erro && html`<div class="error-box" style=${{ marginBottom: '10px' }}>${erro.message}
+      ${erro && html`<div class="error-box">${erro.message}
         ${erro.duplicada && html` <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => setOsAberta(erro.duplicada.id)}>Abrir OS ${padNum(erro.duplicada.numero)}</button>`}</div>`}
-      <div class="row" style=${{ marginBottom: '12px', flexWrap: 'nowrap' }}>
-        <input id="busca-os" class="inp" placeholder="Buscar por número, cliente, obra ou ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />
-        <select id="filtro-status" class="inp" style=${{ maxWidth: '170px' }} value=${status} onChange=${e => setStatus(e.target.value)}>
-          <option value="">Todos</option>
-          ${STATUS_OS.map(s => html`<option key=${s.v} value=${s.v}>${s.t}</option>`)}
-        </select>
+
+      <div class="card page-card">
+        <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div><div class="sec-title">〰 Fluxo & métricas</div><div class="dim">Dados da produção e prazos em tempo real</div></div>
+          <span class="chip">${lista.length} OSs cadastradas</span>
+        </div>
+        <div class="tiles">
+          ${tiles.map(t => html`
+            <button key=${t.t} class=${'tile ' + t.cls + (t.f && status === t.f ? ' sel' : '')} onClick=${() => t.f && setStatus(v => v === t.f ? '' : t.f)}>
+              <div class="tile-t">${t.t}</div><div class="tile-n mono">${t.n}</div><div class="tile-s">${t.s}</div>
+            </button>`)}
+        </div>
+        <div class="paineis">
+          <div class="painel"><div class="painel-t">📅 Prazos & entregas</div>
+            <div class="kv"><span>Próximos 7 dias</span><b>${prox7} entregas</b></div>
+            <div class="kv"><span>Previstas neste mês</span><b>${noMes}</b></div>
+            <div class="kv"><span>Ativas no prazo</span><b style=${{ color: 'var(--ok)' }}>${noPrazo}</b></div></div>
+          <div class="painel"><div class="painel-t">🔀 Modos de execução</div>
+            <div class="kv"><span>Fabricação interna</span><b>${nExec('interna')}${pc(nExec('interna'))}</b></div>
+            <div class="kv"><span>Terceirizada</span><b style=${{ color: 'var(--warn)' }}>${nExec('terceirizada')}${pc(nExec('terceirizada'))}</b></div>
+            <div class="kv"><span>Híbrida / mista</span><b style=${{ color: 'var(--roxo)' }}>${nExec('mista')}${pc(nExec('mista'))}</b></div></div>
+          <div class="painel"><div class="painel-t">📈 Volume & eficiência</div>
+            <div class="kv"><span>Clientes atendidos</span><b>${clientes}</b></div>
+            <div class="kv"><span>Tipos de ambientes</span><b>${tiposAmb}</b></div>
+            <div class="kv"><span>Projetos em andamento</span><b style=${{ color: 'var(--warn)' }}>${ativas.length}</b></div></div>
+        </div>
       </div>
-      <div class="list">
-        ${filtradas.length === 0 && html`<div class="card muted">Nenhuma OS encontrada. Gere uma a partir de um projeto, crie em branco ou importe as antigas.</div>`}
-        ${filtradas.map(o => {
-          const st = STATUS_OS.find(s => s.v === o.status) || STATUS_OS[0];
-          const nMov = (o.ambientes || []).reduce((n, a) => n + (a.moveis || []).length, 0);
-          const nRev = (o.ambientes || []).reduce((n, a) => n + (a.moveis || []).filter(m => (m.revisar || []).length).length, 0);
-          return html`
+
+      <div class="card page-card">
+        <div class="row" style=${{ gap: '8px' }}>
+          <div class="busca-voz">
+            <input id="busca-os" class="inp" placeholder="🔍 Pesquisar por OS, cliente, obra, ambiente… ou fale" value=${busca + (vozInterim ? ' ' + vozInterim : '')} onInput=${e => setBusca(e.target.value)} />
+            ${voz.suportado && html`<button class=${'btn btn-sm' + (voz.ouvindo ? ' btn-mic-on pulse' : '')} onClick=${() => { if (voz.ouvindo) voz.parar(); else { setBusca(''); voz.iniciar(); } }}>🎤 ${voz.ouvindo ? 'Ouvindo…' : 'Falar'}</button>`}
+          </div>
+          <span class="dim">Execução:</span>
+          ${[['', 'Todas'], ['interna', 'Interna'], ['terceirizada', 'Terceirizada'], ['mista', 'Mista']].map(([v, t]) => html`<button key=${t} class=${'pill' + (execucao === v ? ' on' : '')} onClick=${() => setExecucao(v)}>${t}</button>`)}
+          <button class=${'pill' + (soPrazo ? ' on' : '')} onClick=${() => setSoPrazo(v => !v)}>📅 Prazos</button>
+          <div class="pillnav" style=${{ marginLeft: 'auto' }}>
+            ${[['grade', '▦ Grade'], ['quadro', '▥ Quadro'], ['galeria', '▣ Galeria'], ['compacta', '☰ Compacta']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}
+          </div>
+        </div>
+        <div class="row dim" style=${{ gap: '6px', marginTop: '8px', fontSize: '12px' }}>
+          Exemplos de fala: ${['Buscar Davi', 'Cozinha', 'OS 0001', 'Em produção'].map(x => html`<button key=${x} class="pill" onClick=${() => setBusca(x.replace(/^Buscar /, '').replace(/^OS /, '').replace('Em produção', 'Produção'))}>🎤 "${x}"</button>`)}
+        </div>
+      </div>
+
+      ${filtradas.length === 0 ? html`<div class="vazio"><div style=${{ fontSize: '24px' }}>📄</div><b>Nenhuma ordem de serviço encontrada</b><div class="dim">${lista.length ? 'Nenhuma OS corresponde aos filtros.' : 'Crie a primeira OS, gere a partir de uma reunião ou importe as antigas.'}</div></div>`
+      : vista === 'quadro' ? html`
+        <div class="kanban">
+          ${STATUS_OS.map(col => html`
+            <div key=${col.v} class="kan-col">
+              <div class="kan-head"><span class=${col.c}>${col.t}</span><span class="dim">${filtradas.filter(o => stOf(o) === col.v).length}</span></div>
+              ${filtradas.filter(o => stOf(o) === col.v).map(o => { const { nMov } = cartao(o); return html`
+                <div key=${o.id} class="kan-card" onClick=${() => setOsAberta(o.id)}>
+                  <div class="os-num">${padNum(o.numero)}</div>
+                  <b>${o.cliente?.nome || '—'}</b>
+                  <div class="dim">${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'} · ${nMov} móveis</div>
+                  ${atrasada(o) && html`<span class="chip chip-danger">Vencida</span>`}
+                </div>`; })}
+            </div>`)}
+        </div>`
+      : vista === 'galeria' || vista === 'grade' ? html`
+        <div class=${vista === 'galeria' ? 'galeria' : 'grade'}>
+          ${filtradas.map(o => { const { x, nMov, nRev } = cartao(o); return html`
+            <div key=${o.id} class="os-card" onClick=${() => setOsAberta(o.id)}>
+              <div class="row" style=${{ justifyContent: 'space-between' }}><span class="os-num">OS ${padNum(o.numero)}</span><span class=${x.c}>${x.t}</span></div>
+              <div class="title" style=${{ fontSize: vista === 'galeria' ? '18px' : '15.5px', fontWeight: 700 }}>${o.cliente?.nome || 'Cliente não informado'}</div>
+              ${o.cliente?.obra && html`<div class="dim">${o.cliente.obra}</div>`}
+              <div class="row" style=${{ gap: '4px' }}>${(o.ambientes || []).slice(0, vista === 'galeria' ? 8 : 4).map(a => html`<span key=${a.id || a.nome} class="chip">${a.nome}</span>`)}</div>
+              <div class="dim">${nMov} móveis · ${({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[execOf(o)]}${o.prazoEntrega ? ' · prazo ' + o.prazoEntrega : ''}</div>
+              <div class="row" style=${{ gap: '4px' }}>
+                ${atrasada(o) && html`<span class="chip chip-danger">Vencida</span>`}
+                ${nRev > 0 && html`<span class="chip chip-warn">${nRev} p/ revisar</span>`}
+                ${o.origem === 'importada' && html`<span class="chip">Importada</span>`}
+              </div>
+            </div>`; })}
+        </div>`
+      : html`
+        <div class="list">
+          ${filtradas.map(o => { const { x, nMov, nRev } = cartao(o); return html`
             <div key=${o.id} class="list-item" onClick=${() => setOsAberta(o.id)}>
               <div class="os-num">${padNum(o.numero)}</div>
               <div class="grow">
                 <div class="title">${o.cliente?.nome || 'Cliente não informado'}</div>
-                <div class="dim">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || 'Sem ambientes'} · ${nMov} móveis · ${fmtData(o.atualizadoEm)}</div>
+                <div class="dim">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || 'Sem ambientes'} · ${nMov} móveis${o.prazoEntrega ? ' · prazo ' + o.prazoEntrega : ''}</div>
               </div>
-              ${o.origem === 'importada' && html`<span class="chip">Importada${o.numeroAntigo ? ' · antiga ' + o.numeroAntigo : ''}</span>`}
+              ${atrasada(o) && html`<span class="chip chip-danger">Vencida</span>`}
               ${nRev > 0 && html`<span class="chip chip-warn">${nRev} p/ revisar</span>`}
-              <span class=${st.c}>${st.t}</span>
-            </div>`;
-        })}
-      </div>
+              <span class=${x.c}>${x.t}</span>
+            </div>`; })}
+        </div>`}
     </div>`;
 }
 
@@ -1274,7 +1393,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, modoExecucao: os.modoExecucao || 'interna', status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1360,7 +1479,11 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <div class="field"><label class="lbl" for="os-cli">Nome</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
           <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
           <div class="field"><label class="lbl" for="os-obra">Obra</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
-          <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega</label><input id="os-prazo" class="inp" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
+          <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
+          <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
+            <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
+              <option value="interna">Fabricação interna</option><option value="terceirizada">Terceirizada</option><option value="mista">Híbrida / mista</option>
+            </select></div>
         </div>
         <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
         <div class="field"><label class="lbl" for="os-obs">Observações gerais</label><textarea id="os-obs" class="inp" rows="2" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
