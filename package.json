@@ -1,0 +1,14 @@
+{
+  "name": "os-moveis",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ordens de serviço de móveis planejados com ata ao vivo e IA",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

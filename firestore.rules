@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function meuIndice() { return get(/databases/$(database)/documents/usuarios_index/$(request.auth.uid)).data; }
+    function minhaEmpresa() { return meuIndice().empresaId; }
+    function souAdmin() { return meuIndice().papel == 'admin'; }
+
+    // Lista de empresas que aparece na tela de login (só o nome).
+    match /empresas_publico/{empresaId} {
+      allow read: if true;
+      allow create: if logado() && minhaEmpresa() == empresaId;
+      allow update: if logado() && minhaEmpresa() == empresaId && souAdmin();
+    }
+
+    // Diz a qual empresa cada usuário pertence e qual o papel dele.
+    match /usuarios_index/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || resource.data.empresaId == minhaEmpresa());
+      // Criar: (a) o próprio dono ao cadastrar uma empresa nova, ou (b) um admin cadastrando alguém da equipe.
+      allow create: if logado() && (
+        (request.auth.uid == uid
+          && request.resource.data.papel == 'admin'
+          && !exists(/databases/$(database)/documents/empresas/$(request.resource.data.empresaId)))
+        || (souAdmin() && request.resource.data.empresaId == minhaEmpresa())
+      );
+      allow update, delete: if logado() && souAdmin()
+        && resource.data.empresaId == minhaEmpresa()
+        && request.auth.uid != uid;
+    }
+
+    // Tudo da empresa (projetos, OS, catálogo, equipe) só é visto por quem é dela.
+    match /empresas/{empresaId} {
+      allow create: if logado() && minhaEmpresa() == empresaId;
+      allow read, update: if logado() && minhaEmpresa() == empresaId;
+      match /{resto=**} {
+        allow read, write: if logado() && minhaEmpresa() == empresaId;
+      }
+    }
+  }
+}
