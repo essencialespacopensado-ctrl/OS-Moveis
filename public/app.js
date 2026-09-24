@@ -1,4 +1,4 @@
-/* OS Móveis — app principal (React + htm, sem etapa de build) */
+/* Gestão Pró — app principal (React + htm, sem etapa de build) */
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
@@ -485,12 +485,12 @@ function CatalogoInput({ value, onChange, onPick, catalogo, filtro, placeholder,
 function Marca({ grande }) {
   return html`
     <div class=${grande ? 'login-brand' : 'brand-mini'}>
-      <div class=${'brand-mark' + (grande ? ' mark' : '')}>OS</div>
+      <div class=${'brand-mark' + (grande ? ' mark' : '')}>GP</div>
       ${grande ? html`
-        <h1><span class="grad-text">OS Móveis</span></h1>
+        <h1><span class="grad-text">Gestão Pró</span></h1>
         <div class="muted" style=${{ fontSize: '14px' }}>Contrato, ata e ordem de serviço de móveis planejados</div>
       ` : html`<div>
-        <div style=${{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '17px', lineHeight: 1.1 }}>OS Móveis</div>
+        <div style=${{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '17px', lineHeight: 1.1 }}>Gestão Pró</div>
       </div>`}
     </div>`;
 }
