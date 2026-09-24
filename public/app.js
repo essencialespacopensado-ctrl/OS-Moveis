@@ -1415,7 +1415,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1429,6 +1429,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   });
   const [etapa, setEtapa] = useState(1);
   const [organizando, setOrganizando] = useState(false);
+  const [liberada, setLiberada] = useState(false);
+  const [pedirLib, setPedirLib] = useState(false);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
   const aplicarVoz = async () => {
@@ -1467,6 +1469,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     { n: 3, t: 'Execução', s: 'Interna vs. terceirizada' },
   ];
   const ir = (n) => { setEtapa(n); window.scrollTo(0, 0); };
+  const bloqueada = os.status === 'concluida' && !liberada;
   const pdf = () => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 150); };
   const P = os.padrao || {};
   const setP = (fn) => alterar(o => { o.padrao = o.padrao || {}; fn(o.padrao); });
@@ -1511,8 +1514,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <span class="dim">${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
         </div>
         <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${numOS(os)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span>
-          <${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />
-          <button class="btn btn-sm" onClick=${organizar} disabled=${organizando} title="A IA coloca cada informação no seu campo">${organizando ? 'Organizando…' : '✨ Organizar campos'}</button>
+          <${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} travada=${bloqueada} />
+          <button class="btn btn-sm" onClick=${organizar} disabled=${organizando || bloqueada} title="A IA coloca cada informação no seu campo">${organizando ? 'Organizando…' : '✨ Organizar campos'}</button>
         </div>
       </div>
 
@@ -1538,6 +1541,12 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>
       </div>
 
+      ${bloqueada && html`<div class="card page-card trava-aviso row" style=${{ justifyContent: 'space-between' }}>
+        <div><b>🔒 OS pronta — bloqueada para edição.</b><div class="dim">Para editar é preciso a sua senha e o motivo da alteração (fica no histórico).</div></div>
+        <button class="btn btn-marrom" onClick=${() => setPedirLib(true)}>🔓 Desbloquear para editar</button></div>`}
+      ${(os.historico || []).length > 0 && html`<details class="card page-card"><summary class="dim">📜 Histórico de alterações após pronta (${os.historico.length})</summary>
+        ${os.historico.map((h, i) => html`<div key=${i} class="item-lista"><span>${h.motivo}<br/><small class="dim">${h.quem} · ${fmtData(h.quando)}</small></span></div>`)}</details>`}
+      <fieldset class="trava" disabled=${bloqueada}>
       ${etapa === 1 && html`
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between' }}>
@@ -1633,6 +1642,9 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>`}
 
       ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} />`}
+      </fieldset>
+      ${pedirLib && html`<${SenhaMotivo} titulo=${'Editar a OS ' + numOS(os) + ' (já pronta)'} texto="Diga o que vai ser alterado e por quê." botao="Desbloquear"
+        onOk=${async (motivo) => { alterar(o => { o.historico = [...(o.historico || []), { motivo, quem: sessao.nome, quando: nowIso() }]; }); setLiberada(true); toast('OS desbloqueada para edição.', 'ok'); }} fechar=${() => setPedirLib(false)} />`}
 
       <div class="rodape-escuro">
         <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
@@ -1643,13 +1655,99 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>
       </div>
 
-      <div class="row" style=${{ justifyContent: 'flex-end' }}>
-        ${apagar
-          ? html`<span class="dim">Excluir a OS ${numOS(os)}? O número não será reaproveitado.</span><button class="btn btn-sm btn-danger" onClick=${excluir}>Sim, excluir</button><button class="btn btn-sm" onClick=${() => setApagar(false)}>Não</button>`
-          : html`<button class="btn btn-sm btn-ghost" onClick=${() => setApagar(true)}>Excluir OS</button>`}
-      </div>
+      <div class="dim" style=${{ textAlign: 'right' }}>Para excluir esta OS use a aba <b>🗑 Excluir OSs</b> (pede senha e motivo).</div>
       ${imprimir && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <datalist id="lista-fab-mdf">${fabricantesMDF.map(f => html`<option key=${f} value=${f} />`)}</datalist>
+    </div>`;
+}
+
+/* ---------- Confirmação com senha + motivo (excluir / editar OS pronta) ---------- */
+async function conferirSenha(senha) {
+  const { authMod, auth } = F();
+  const u = auth.currentUser;
+  if (!u) throw new Error('Sessão expirada. Entre de novo.');
+  await authMod.reauthenticateWithCredential(u, authMod.EmailAuthProvider.credential(u.email, senha));
+}
+function SenhaMotivo({ titulo, texto, botao = 'Confirmar', perigo, onOk, fechar }) {
+  const [senha, setSenha] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [erro, setErro] = useState('');
+  const [rodando, setRodando] = useState(false);
+  const ok = async () => {
+    if (motivo.trim().length < 5) return setErro('Escreva o motivo (obrigatório, pelo menos 5 letras).');
+    if (!senha) return setErro('Digite a sua senha.');
+    setRodando(true); setErro('');
+    try { await conferirSenha(senha); await onOk(motivo.trim()); fechar(); }
+    catch (e) { setErro(/password|credential/i.test(e.code || e.message) ? 'Senha incorreta.' : e.message); setRodando(false); }
+  };
+  return html`
+    <div class="modal-fundo" onClick=${e => e.target === e.currentTarget && !rodando && fechar()}>
+      <div class="card modal-caixa stack">
+        <div class="sec-title">${perigo ? '🗑' : '🔓'} ${titulo}</div>
+        ${texto && html`<div class="dim">${texto}</div>`}
+        <div class="field"><span class="lbl">Motivo (obrigatório)</span><textarea class="inp" rows="3" placeholder="Ex: cliente cancelou o ambiente / OS duplicada / correção de medida" value=${motivo} onInput=${e => setMotivo(e.target.value)} autoFocus></textarea></div>
+        <div class="field"><span class="lbl">Sua senha</span><input class="inp" type="password" autocomplete="current-password" value=${senha} onInput=${e => setSenha(e.target.value)} onKeyDown=${e => e.key === 'Enter' && ok()} /></div>
+        ${erro && html`<div class="error-box">${erro}</div>`}
+        <div class="row" style=${{ justifyContent: 'flex-end', gap: '6px' }}>
+          <button class="btn" onClick=${fechar} disabled=${rodando}>Cancelar</button>
+          <button class=${'btn ' + (perigo ? 'btn-danger' : 'btn-primary')} onClick=${ok} disabled=${rodando}>${rodando ? 'Conferindo…' : botao}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function excluirOS(sessao, os, motivo) {
+  const { fsMod } = F();
+  const { id, ...dados } = os;
+  await fsMod.setDoc(docRef('empresas', sessao.empresaId, 'exclusoes', id), {
+    osId: id, codigo: numOS(os), cliente: os.cliente?.nome || '', status: os.status || '', motivo,
+    excluidoPor: sessao.nome, excluidoEm: nowIso(), dados: JSON.parse(JSON.stringify(dados)),
+  });
+  await fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'os', id));
+}
+
+function TelaExcluir({ sessao, toast }) {
+  const [lista, setLista] = useState(null);
+  const [hist, setHist] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [alvo, setAlvo] = useState(null);
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    const a = onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+    const b = onSnapshot(query(col('empresas', sessao.empresaId, 'exclusoes'), orderBy('excluidoEm', 'desc')), s => setHist(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setHist([]));
+    return () => { a(); b(); };
+  }, []);
+  const restaurar = async (h) => {
+    try {
+      await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'os', h.osId), { ...h.dados, restauradaEm: nowIso(), restauradaPor: sessao.nome });
+      await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'exclusoes', h.id));
+      toast('OS ' + h.codigo + ' restaurada.', 'ok');
+    } catch (e) { toast('Não restaurou: ' + e.message, 'erro'); }
+  };
+  const filtradas = (lista || []).filter(o => !busca || norm(numOS(o) + ' ' + (o.cliente?.nome || '') + ' ' + (o.ambientes || []).map(a => a.nome).join(' ')).includes(norm(busca)));
+  return html`
+    <div class="fade-up stack">
+      <div><h2>Excluir OSs</h2><div class="dim">Para excluir é obrigatório digitar a <b>sua senha</b> e o <b>motivo</b>. Tudo fica registrado no histórico abaixo e pode ser restaurado.</div></div>
+      <div class="card page-card stack">
+        <input class="inp" placeholder="Buscar por número, cliente ou ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />
+        ${lista === null ? html`<div class="dim">Carregando…</div>` : filtradas.length === 0 ? html`<div class="vazio dim">Nenhuma OS.</div>` : html`
+          <div class="list">${filtradas.map(o => html`
+            <div key=${o.id} class="list-item" style=${pinta(o)}>
+              <div class="os-num">${numOS(o)}${bolinhas(o)}</div>
+              <div class="grow"><div class="title">${o.cliente?.nome || 'Cliente não informado'}</div><div class="dim">${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'} · ${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t}</div></div>
+              <button class="btn btn-sm btn-danger" onClick=${() => setAlvo(o)}>🗑 Excluir</button>
+            </div>`)}</div>`}
+      </div>
+      <div class="card page-card stack">
+        <div class="sec-title">📜 Histórico de exclusões</div>
+        ${hist.length === 0 ? html`<div class="dim">Nenhuma OS excluída.</div>` : hist.map(h => html`
+          <div key=${h.id} class="item-lista" style=${{ alignItems: 'flex-start' }}>
+            <span><b>OS ${h.codigo}</b> — ${h.cliente}<br/><span class="dim">Motivo: ${h.motivo}</span><br/><small class="dim">Excluída por ${h.excluidoPor} em ${fmtData(h.excluidoEm)}</small></span>
+            ${sessao.papel === 'admin' && html`<button class="btn btn-sm" onClick=${() => restaurar(h)}>↩ Restaurar</button>`}
+          </div>`)}
+      </div>
+      ${alvo && html`<${SenhaMotivo} perigo titulo=${'Excluir a OS ' + numOS(alvo)} texto=${(alvo.cliente?.nome || '') + ' — o número não será reaproveitado.'} botao="Excluir OS"
+        onOk=${async (motivo) => { await excluirOS(sessao, alvo, motivo); toast('OS ' + numOS(alvo) + ' excluída.', 'ok'); }} fechar=${() => setAlvo(null)} />`}
     </div>`;
 }
 
@@ -1664,7 +1762,7 @@ const varsCores = (c) => ({ '--c1': c[0], '--c2': c[1], '--c3': c[2] });
 const pinta = (o) => temCores(o) ? { borderLeft: '5px solid ' + o.cores[0], background: 'linear-gradient(90deg,' + o.cores[1] + '22,#fff 60%)' } : undefined;
 const bolinhas = (o) => temCores(o) ? html`<span class="bolinhas">${o.cores.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</span>` : null;
 
-function PaletaOS({ os, alterar, sessao, toast }) {
+function PaletaOS({ os, alterar, sessao, toast, travada }) {
   const [aberto, setAberto] = useState(false);
   const [c, setC] = useState(temCores(os) ? os.cores : PALETAS[0][1]);
   const [padrao, setPadrao] = useState(null);
@@ -1676,7 +1774,7 @@ function PaletaOS({ os, alterar, sessao, toast }) {
   };
   return html`
     <span class="opc-wrap">
-      <button class="btn btn-sm" onClick=${() => setAberto(!aberto)} title="Cores da OS"><span class="bolinhas">${c.map((x, i) => html`<i key=${i} style=${{ background: temCores(os) ? x : '#ddd' }}></i>`)}</span> Cores</button>
+      <button class="btn btn-sm btn-cores" disabled=${travada} onClick=${() => setAberto(!aberto)} title="Cores da OS"><span class="bolinhas">${c.map((x, i) => html`<i key=${i} style=${{ background: temCores(os) ? x : '#ddd' }}></i>`)}</span> Cores</button>
       ${aberto && html`
         <div class="opc-pop" style=${{ width: '300px' }}>
           <div class="opc-g">Escolha as 3 cores</div>
@@ -2693,6 +2791,7 @@ function Principal({ sessao, toast }) {
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
+    { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
   ];
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -2728,6 +2827,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
