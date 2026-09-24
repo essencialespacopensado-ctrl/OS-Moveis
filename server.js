@@ -117,8 +117,30 @@ function rateOk(uid) {
 // ---------- Modelos de dados que a IA devolve ----------
 const OS_SCHEMA = `{
   "cliente": {"nome": "", "telefone": "", "endereco": "", "obra": ""},
-  "prazoEntrega": "",
+  "prazoEntrega": "dd/mm/aaaa",
   "observacoesGerais": "",
+  "responsavel": "", "arquiteto": "", "ambienteResumo": "Cozinha, Suíte",
+  "tamponamento": {"tipo": "aparente | nao_aparente | sem", "espessura": "Simples 18 | Duplo 18+18 (padrão nobre) | ..."},
+  "padrao": {
+    "acab": {
+      "interno": {"tipo": "mdf|formica|lamina|madeira|laca", "fabricante": "", "desc": "cor/padrão", "esp": "15", "acabamento": "", "laca": {"marca": "", "brilho": ""}},
+      "externo": {"tipo": "mdf", "fabricante": "", "desc": "", "esp": "18", "acabamento": "", "laca": {"marca": "", "brilho": ""}}
+    },
+    "outras": "",
+    "portas": {"modelo": "", "obs": ""},
+    "laminas": [""], "perfis": [""], "puxadores": [""],
+    "led": {"ativo": false, "fita": "", "temp": "", "perfil": "", "fonte": "", "locais": ""},
+    "ferragens": {
+      "dobradicas": {"modelo": "", "marca": "", "calco": "", "obs": ""},
+      "corredicas": {"modelo": "", "marca": "", "tamanho": "", "obs": ""},
+      "correr": {"modelo": "", "marca": "", "perfil": "", "obs": ""},
+      "passagem": {"modelo": "", "marca": "", "perfil": "", "obs": ""}
+    },
+    "fech": {"ativo": false, "onde": "interna|externa|ambas", "modelo": "", "marca": "", "acab": "", "qtd": "", "obs": ""},
+    "vidros": {"ativo": false, "tipo": "", "esp": "", "proc": [], "perfil": "", "aplic": "", "obs": ""},
+    "tec": {"ativo": false, "tipo": "", "ref": "", "resp": "marcenaria|cliente|tapecaria|arquiteto", "aplic": "", "espuma": "", "obs": ""},
+    "parede": {"ativo": false, "espec": "", "paginacao": "", "fixacao": ""}
+  },
   "ambientes": [
     {
       "nome": "Cozinha",
@@ -228,7 +250,8 @@ ${OS_SCHEMA}`;
       return `${REGRAS_GERAIS}
 
 Converta esta ORDEM DE SERVIÇO ANTIGA (texto extraído de PDF, Word, Excel ou foto) para o formato novo.
-Não perca nenhuma informação: o que não tiver campo próprio vai em "observacoes" do móvel ou em "observacoesGerais".
+Coloque CADA informação no seu campo certo (acabamentos, portas, puxadores, LED, ferragens, fechaduras, vidros, tecidos no "padrao";
+medidas e materiais de cada móvel no móvel). Não perca nenhuma informação: o que não tiver campo próprio vai em "observacoes" do móvel ou em "observacoesGerais".
 Também devolva "numeroAntigo" (o número que a OS tinha no documento, se houver) e "dataAntiga" (se houver).
 
 TEXTO DA OS ANTIGA:
@@ -237,6 +260,25 @@ ${d.temImagens ? '\nAs imagens enviadas são fotos/páginas da OS antiga. Leia t
 ${cat}
 
 Formato (com os campos extras "numeroAntigo" e "dataAntiga" no topo):
+${OS_SCHEMA}`;
+
+    case 'organizar_os':
+      return `${REGRAS_GERAIS}
+
+Esta ORDEM DE SERVIÇO foi criada num formato antigo e as informações estão misturadas (em observações, nomes de móveis,
+campos genéricos). REORGANIZE colocando CADA informação no seu campo certo do formato novo:
+- acabamentos internos/externos (MDF, fórmica, lâmina, madeira, laca) no "padrao.acab"; portas em "padrao.portas";
+- puxadores, perfis e lâminas nas listas; LED em "padrao.led"; dobradiças, corrediças, portas de correr e de passagem em "padrao.ferragens";
+- fechaduras/travas em "padrao.fech"; vidros e espelhos em "padrao.vidros"; tecidos/estofados em "padrao.tec"; painéis de parede em "padrao.parede";
+- tamponamento, responsável, arquiteto, prazo e ambientes nos campos de cima.
+Informação que vale para a OS toda vai no "padrao"; o que é de um móvel específico fica no móvel.
+NÃO perca nada: mantenha os ambientes e móveis, e o que não tiver campo fica em observações. Não invente.
+
+OS ATUAL (JSON):
+${JSON.stringify(d.os || {}, null, 0).slice(0, 45000)}
+${cat}
+
+Devolva a OS completa neste formato:
 ${OS_SCHEMA}`;
 
     case 'ler_imagens':
