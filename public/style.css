@@ -440,3 +440,25 @@ body::before { display: none; }
 .sw small{display:block;color:#8a8175;font-size:10.5px}
 .sw.on{border-color:#111;box-shadow:0 0 0 2px #111 inset}
 .acab-box.off{opacity:.75;background:repeating-linear-gradient(45deg,#faf9f7,#faf9f7 8px,#f3f1ed 8px,#f3f1ed 16px)}
+
+/* v9 — cores da OS */
+.bolinhas{display:inline-flex;gap:3px;vertical-align:middle;margin-left:6px}
+.bolinhas i{width:11px;height:11px;border-radius:50%;border:1px solid rgba(0,0,0,.15);display:inline-block}
+.bola-cor{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;position:relative}
+.bola-cor input{position:absolute;opacity:0;width:44px;height:44px;cursor:pointer}
+.bola-cor i{width:44px;height:44px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #ccc,0 2px 6px rgba(0,0,0,.15)}
+.bola-cor small{font-size:11px;color:#8a8175}
+.os-pintada .num-badge{background:var(--c1)!important;color:#fff!important;border-color:var(--c1)!important}
+.os-pintada .page-card{border-top:4px solid var(--c1)}
+.os-pintada .sec-title{color:var(--c1)}
+.os-pintada .num-sec{background:var(--c1)!important;color:#fff!important}
+.os-pintada .etapa-bt.on{border-color:var(--c1)!important;background:color-mix(in srgb,var(--c2) 35%,#fff)!important}
+.os-pintada .btn-marrom{background:var(--c3)!important;border-color:var(--c3)!important;color:#fff!important}
+.os-pintada .opc.on,.os-pintada .pill.on{border-color:var(--c1)!important;background:color-mix(in srgb,var(--c2) 45%,#fff)!important;color:#111!important}
+.os-pintada .acab-box{background:color-mix(in srgb,var(--c2) 18%,#fff)}
+.os-pintada .trilho-pt.atual .bola,.os-pintada .trilho-pt.feito .bola{background:var(--c1)!important;border-color:var(--c1)!important}
+.os-pintada .trilho-linha div{background:var(--c1)!important}
+.pr-cor h1{color:var(--c1)}
+.pr-cor .amb-t{background:var(--c1)!important;color:#fff!important;padding:4px 8px}
+.pr-cor th{background:color-mix(in srgb,var(--c2) 45%,#fff)!important}
+.pr-cor{border-top:8px solid var(--c1);-webkit-print-color-adjust:exact;print-color-adjust:exact}

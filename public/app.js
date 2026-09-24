@@ -20,6 +20,19 @@ const fmtData = (v) => {
 };
 const nowIso = () => new Date().toISOString();
 const padNum = (n) => String(n || 0).padStart(4, '0');
+// Número da OS no padrão ANO.SEQUÊNCIA (ex: 26.001). Vale também para as OSs antigas.
+const anoDe = (o) => {
+  const d = o && (o.criadoEm || o.dataAntiga);
+  const m = String(d || '').match(/(20\d\d)/);
+  return m ? m[1].slice(2) : String(new Date().getFullYear()).slice(2);
+};
+function numOS(o) {
+  if (o == null) return '';
+  if (typeof o === 'string' && o.includes('.')) return o;
+  if (typeof o !== 'object') return String(new Date().getFullYear()).slice(2) + '.' + String(o || 0).padStart(3, '0');
+  if (o.codigo) return o.codigo;
+  return (o.ano || anoDe(o)) + '.' + String(o.numero || 0).padStart(3, '0');
+}
 
 async function sha256(texto) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
@@ -81,6 +94,11 @@ function sanearOS(o) {
     cliente: { nome: s(o.cliente?.nome), telefone: s(o.cliente?.telefone), endereco: s(o.cliente?.endereco), obra: s(o.cliente?.obra) },
     prazoEntrega: s(o.prazoEntrega),
     observacoesGerais: s(o.observacoesGerais),
+    ...(o.padrao && typeof o.padrao === 'object' ? { padrao: o.padrao } : {}),
+    ...(o.tamponamento && typeof o.tamponamento === 'object' ? { tamponamento: o.tamponamento } : {}),
+    ...(o.responsavel ? { responsavel: s(o.responsavel) } : {}),
+    ...(o.arquiteto ? { arquiteto: s(o.arquiteto) } : {}),
+    ...(o.ambienteResumo ? { ambienteResumo: s(o.ambienteResumo) } : {}),
     ambientes: (Array.isArray(o.ambientes) ? o.ambientes : []).map(a => ({
       id: a.id || rand(8),
       nome: s(a.nome),
@@ -204,26 +222,30 @@ async function criarOS(sessao, conteudo, extras = {}) {
   const fp = await impressaoDigital(os);
   const dup = await acharDuplicada(sessao.empresaId, fp);
   if (dup) {
-    const err = new Error(`Já existe a OS nº ${padNum(dup.numero)} igual a esta (mesmo cliente, mesmos móveis, medidas e cores). Abra a OS existente em vez de criar outra.`);
+    const err = new Error(`Já existe a OS nº ${numOS(dup)} igual a esta (mesmo cliente, mesmos móveis, medidas e cores). Abra a OS existente em vez de criar outra.`);
     err.duplicada = dup;
     throw err;
   }
   const empRef = docRef('empresas', sessao.empresaId);
   const osRef = fsMod.doc(col('empresas', sessao.empresaId, 'os'));
   const agora = nowIso();
-  let numero = 0;
+  let numero = 0, codigo = '';
+  const ano = String(new Date().getFullYear()).slice(2);
   await fsMod.runTransaction(F().db, async (tx) => {
     const e = await tx.get(empRef);
-    numero = (e.data()?.osSeq || 0) + 1;
-    tx.update(empRef, { osSeq: numero });
+    const ed = e.data() || {};
+    const seqs = ed.seqAno || {};
+    numero = (seqs[ano] ?? (ed.seqAno ? 0 : (ed.osSeq || 0))) + 1;
+    codigo = ano + '.' + String(numero).padStart(3, '0');
+    tx.update(empRef, { osSeq: (ed.osSeq || 0) + 1, seqAno: { ...seqs, [ano]: numero } });
     tx.set(osRef, {
-      ...os, numero, fingerprint: fp, status: 'elaboracao', modoExecucao: 'interna',
+      ...os, numero, ano, codigo, fingerprint: fp, status: 'elaboracao', modoExecucao: 'interna',
       projetoId: extras.projetoId || '', origem: extras.origem || 'manual',
       numeroAntigo: extras.numeroAntigo || '', dataAntiga: extras.dataAntiga || '', arquivoOrigem: extras.arquivoOrigem || '',
       criadoPor: sessao.nome, criadoEm: agora, atualizadoEm: agora, atualizadoPor: sessao.nome,
     });
   });
-  return { id: osRef.id, numero };
+  return { id: osRef.id, numero: codigo, codigo };
 }
 
 /* =========================================================
@@ -814,7 +836,7 @@ function TelaProjetos({ sessao, catalogo, toast, abrirOS }) {
             </div>
             ${p.temAta && html`<span class="chip chip-teal">Ata</span>`}
             ${p.qtdDocs ? html`<span class="chip">${p.qtdDocs} doc.</span>` : null}
-            ${p.osNumero ? html`<span class="chip chip-accent">OS ${padNum(p.osNumero)}</span>` : null}
+            ${p.osNumero ? html`<span class="chip chip-accent">OS ${numOS(p.osNumero)}</span>` : null}
           </div>`)}
       </div>
       ${novo && html`<${NovoProjeto} sessao=${sessao} projetos=${projetos} fechar=${() => setNovo(false)} criado=${(id) => { setNovo(false); setAberto(id); }} toast=${toast} />`}
@@ -890,7 +912,7 @@ function Projeto({ projeto, sessao, catalogo, toast, voltar, abrirOS }) {
       res.cliente = { ...projeto.cliente, ...Object.fromEntries(Object.entries(res.cliente || {}).filter(([, v]) => v)) };
       const { id, numero } = await criarOS(sessao, res, { projetoId: projeto.id, origem: 'ia' });
       await F().fsMod.updateDoc(docRef(...base), { osId: id, osNumero: numero });
-      toast(`OS nº ${padNum(numero)} criada. Confira os campos em amarelo.`, 'ok');
+      toast(`OS nº ${numOS(numero)} criada. Confira os campos em amarelo.`, 'ok');
       abrirOS(id);
     } catch (e) {
       setErroGerar({ msg: e.message, dup: e.duplicada });
@@ -907,12 +929,12 @@ function Projeto({ projeto, sessao, catalogo, toast, voltar, abrirOS }) {
           <div class="dim">${[projeto.titulo, projeto.cliente?.obra, projeto.cliente?.endereco, projeto.cliente?.telefone].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="row">
-          ${projeto.osId && html`<button class="btn" onClick=${() => abrirOS(projeto.osId)}>Abrir OS ${padNum(projeto.osNumero)}</button>`}
+          ${projeto.osId && html`<button class="btn" onClick=${() => abrirOS(projeto.osId)}>Abrir OS ${numOS(projeto.osNumero)}</button>`}
           <button class="btn btn-primary" onClick=${gerarOS} disabled=${gerando}>${gerando ? 'Gerando OS… (até 1 min)' : '⚡ Gerar OS automática'}</button>
         </div>
       </div>
       ${erroGerar && html`<div class="error-box" style=${{ marginBottom: '12px' }}>${erroGerar.msg}
-        ${erroGerar.dup && html` <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => abrirOS(erroGerar.dup.id)}>Abrir OS ${padNum(erroGerar.dup.numero)}</button>`}</div>`}
+        ${erroGerar.dup && html` <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => abrirOS(erroGerar.dup.id)}>Abrir OS ${numOS(erroGerar.dup)}</button>`}</div>`}
       <div class="nav" style=${{ paddingTop: 0 }}>
         <button class=${'nav-tile' + (aba === 'docs' ? ' on' : '')} onClick=${() => setAba('docs')}><span class="ico">📄</span>Contrato e detalhamentos ${docs.length ? `(${docs.length})` : ''}</button>
         <button class=${'nav-tile' + (aba === 'ata' ? ' on' : '')} onClick=${() => setAba('ata')}><span class="ico">🎙️</span>Ata da reunião</button>
@@ -1197,7 +1219,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
     (!status || (status === 'atrasadas' ? atrasada(o) : stOf(o) === status)) &&
     (!execucao || execOf(o) === execucao) &&
     (!soPrazo || !!lerPrazo(o.prazoEntrega)) &&
-    (!busca || norm(`${padNum(o.numero)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')} ${(STATUS_OS.find(x => x.v === stOf(o)) || {}).t}`).includes(norm(busca))))
+    (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')} ${(STATUS_OS.find(x => x.v === stOf(o)) || {}).t}`).includes(norm(busca))))
     .sort((x, y) => soPrazo ? ((lerPrazo(x.prazoEntrega) || 0) - (lerPrazo(y.prazoEntrega) || 0)) : 0);
 
   const nova = async () => {
@@ -1254,7 +1276,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
           <button class="btn btn-primary" onClick=${nova} disabled=${criando}>${criando ? 'Criando…' : 'Criar'}</button>
         </div>`}
       ${erro && html`<div class="error-box">${erro.message}
-        ${erro.duplicada && html` <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => setOsAberta(erro.duplicada.id)}>Abrir OS ${padNum(erro.duplicada.numero)}</button>`}</div>`}
+        ${erro.duplicada && html` <button class="btn btn-sm" style=${{ marginLeft: '8px' }} onClick=${() => setOsAberta(erro.duplicada.id)}>Abrir OS ${numOS(erro.duplicada)}</button>`}</div>`}
 
       <div class="card page-card">
         <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -1308,8 +1330,8 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
             <div key=${col.v} class="kan-col">
               <div class="kan-head"><span class=${col.c}>${col.t}</span><span class="dim">${filtradas.filter(o => stOf(o) === col.v).length}</span></div>
               ${filtradas.filter(o => stOf(o) === col.v).map(o => { const { nMov } = cartao(o); return html`
-                <div key=${o.id} class="kan-card" onClick=${() => setOsAberta(o.id)}>
-                  <div class="os-num">${padNum(o.numero)}</div>
+                <div key=${o.id} class="kan-card" style=${pinta(o)} onClick=${() => setOsAberta(o.id)}>
+                  <div class="os-num">${numOS(o)}${bolinhas(o)}</div>
                   <b>${o.cliente?.nome || '—'}</b>
                   <div class="dim">${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'} · ${nMov} móveis</div>
                   ${atrasada(o) && html`<span class="chip chip-danger">Vencida</span>`}
@@ -1319,8 +1341,8 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
       : vista === 'galeria' || vista === 'grade' ? html`
         <div class=${vista === 'galeria' ? 'galeria' : 'grade'}>
           ${filtradas.map(o => { const { x, nMov, nRev } = cartao(o); return html`
-            <div key=${o.id} class="os-card" onClick=${() => setOsAberta(o.id)}>
-              <div class="row" style=${{ justifyContent: 'space-between' }}><span class="os-num">OS ${padNum(o.numero)}</span><span class=${x.c}>${x.t}</span></div>
+            <div key=${o.id} class="os-card" style=${pinta(o)} onClick=${() => setOsAberta(o.id)}>
+              <div class="row" style=${{ justifyContent: 'space-between' }}><span class="os-num">OS ${numOS(o)}${bolinhas(o)}</span><span class=${x.c}>${x.t}</span></div>
               <div class="title" style=${{ fontSize: vista === 'galeria' ? '18px' : '15.5px', fontWeight: 700 }}>${o.cliente?.nome || 'Cliente não informado'}</div>
               ${o.cliente?.obra && html`<div class="dim">${o.cliente.obra}</div>`}
               <div class="row" style=${{ gap: '4px' }}>${(o.ambientes || []).slice(0, vista === 'galeria' ? 8 : 4).map(a => html`<span key=${a.id || a.nome} class="chip">${a.nome}</span>`)}</div>
@@ -1335,8 +1357,8 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
       : html`
         <div class="list">
           ${filtradas.map(o => { const { x, nMov, nRev } = cartao(o); return html`
-            <div key=${o.id} class="list-item" onClick=${() => setOsAberta(o.id)}>
-              <div class="os-num">${padNum(o.numero)}</div>
+            <div key=${o.id} class="list-item" style=${pinta(o)} onClick=${() => setOsAberta(o.id)}>
+              <div class="os-num">${numOS(o)}${bolinhas(o)}</div>
               <div class="grow">
                 <div class="title">${o.cliente?.nome || 'Cliente não informado'}</div>
                 <div class="dim">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || 'Sem ambientes'} · ${nMov} móveis${o.prazoEntrega ? ' · prazo ' + o.prazoEntrega : ''}</div>
@@ -1393,7 +1415,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1406,6 +1428,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     onInterim: setFalaInterim,
   });
   const [etapa, setEtapa] = useState(1);
+  const [organizando, setOrganizando] = useState(false);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
   const aplicarVoz = async () => {
@@ -1416,7 +1439,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     try {
       const atual = sanearOS(os);
       const nova = sanearOS(await chamarIA('voz_os', { fala: texto, os: atual, catalogo: resumoCatalogo(catalogo) }));
-      alterar(o => { o.cliente = nova.cliente; o.prazoEntrega = nova.prazoEntrega; o.observacoesGerais = nova.observacoesGerais; o.ambientes = nova.ambientes; });
+      alterar(o => { o.cliente = nova.cliente; o.prazoEntrega = nova.prazoEntrega; o.observacoesGerais = nova.observacoesGerais; o.ambientes = nova.ambientes; if (nova.padrao) o.padrao = { ...(o.padrao || {}), ...nova.padrao }; if (nova.tamponamento?.tipo) o.tamponamento = nova.tamponamento; });
       setFalaTexto(''); setFalaInterim('');
       toast('Aplicado na OS.', 'ok');
     } catch (e) { setErroVoz(e.message); }
@@ -1448,6 +1471,24 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const P = os.padrao || {};
   const setP = (fn) => alterar(o => { o.padrao = o.padrao || {}; fn(o.padrao); });
 
+  const organizar = async () => {
+    setOrganizando(true);
+    try {
+      const nova = await chamarIA('organizar_os', { os: { ...sanearOS(os), padrao: os.padrao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '' }, catalogo: resumoCatalogo(catalogo) });
+      const n = sanearOS(nova);
+      alterar(o => {
+        o.cliente = { ...o.cliente, ...Object.fromEntries(Object.entries(n.cliente).filter(([, v]) => v)) };
+        if (n.ambientes.length) o.ambientes = n.ambientes;
+        if (n.observacoesGerais) o.observacoesGerais = n.observacoesGerais;
+        if (n.prazoEntrega && !o.prazoEntrega) o.prazoEntrega = n.prazoEntrega;
+        if (n.padrao) o.padrao = { ...(o.padrao || {}), ...n.padrao };
+        if (n.tamponamento?.tipo && !o.tamponamento?.tipo) o.tamponamento = n.tamponamento;
+        ['responsavel', 'arquiteto', 'ambienteResumo'].forEach(k => { if (n[k] && !o[k]) o[k] = n[k]; });
+      });
+      toast('Pronto: informações colocadas nos campos certos. Confira.', 'ok');
+    } catch (e) { toast('Não consegui organizar agora: ' + e.message, 'erro'); }
+    setOrganizando(false);
+  };
   const cartaoVoz = html`
         <div class="card stack" style=${{ borderColor: fala.ouvindo ? 'var(--danger)' : undefined }}>
           <div class="row">
@@ -1463,13 +1504,16 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           ${erroVoz && html`<div class="error-box">${erroVoz}</div>`}
         </div>`;
   return html`
-    <div class="fade-up stack" style=${{ gap: '14px' }}>
+    <div class=${'fade-up stack' + (temCores(os) ? ' os-pintada' : '')} style=${{ gap: '14px', ...(temCores(os) ? varsCores(os.cores) : {}) }}>
       <div class="card page-card row" style=${{ justifyContent: 'space-between', padding: '10px 14px' }}>
         <div class="row" style=${{ gap: '6px' }}>
           <button class="btn btn-sm" onClick=${voltar}>← Voltar para lista de OSs</button>
           <span class="dim">${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
         </div>
-        <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${padNum(os.numero)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span></div>
+        <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${numOS(os)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span>
+          <${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />
+          <button class="btn btn-sm" onClick=${organizar} disabled=${organizando} title="A IA coloca cada informação no seu campo">${organizando ? 'Organizando…' : '✨ Organizar campos'}</button>
+        </div>
       </div>
 
       <div class="card page-card etapas-bar">
@@ -1480,11 +1524,11 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           </button>`)}
       </div>
 
-      ${dup && html`<div class="error-box">Esta OS ficou igual à <b>OS nº ${padNum(dup.numero)}</b> (mesmo cliente, móveis, medidas e cores). A alteração não foi salva, pra não duplicar. Mude algo que diferencie as duas.</div>`}
+      ${dup && html`<div class="error-box">Esta OS ficou igual à <b>OS nº ${numOS(dup)}</b> (mesmo cliente, móveis, medidas e cores). A alteração não foi salva, pra não duplicar. Mude algo que diferencie as duas.</div>`}
 
       <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
         <div>
-          <div class="row" style=${{ gap: '8px' }}><span class="os-num num-badge">${padNum(os.numero)}</span><span class=${(STATUS_OS[idxSt] || STATUS_OS[0]).c}>${(STATUS_OS[idxSt] || STATUS_OS[0]).t}</span>${os.numeroAntigo && html`<span class="chip">antiga: ${os.numeroAntigo}</span>`}</div>
+          <div class="row" style=${{ gap: '8px' }}><span class="os-num num-badge">${numOS(os)}</span><span class=${(STATUS_OS[idxSt] || STATUS_OS[0]).c}>${(STATUS_OS[idxSt] || STATUS_OS[0]).t}</span>${os.numeroAntigo && html`<span class="chip">antiga: ${os.numeroAntigo}</span>`}</div>
           <h2 style=${{ fontSize: '24px', marginTop: '6px' }}>${os.cliente?.nome || 'Cliente não informado'}</h2>
           <div class="dim">Ambiente: <b>${(os.ambientes || []).map(x => x.nome).join(', ') || '—'}</b> • Obra: <b>${os.cliente?.obra || '—'}</b></div>
         </div>
@@ -1601,12 +1645,56 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
 
       <div class="row" style=${{ justifyContent: 'flex-end' }}>
         ${apagar
-          ? html`<span class="dim">Excluir a OS ${padNum(os.numero)}? O número não será reaproveitado.</span><button class="btn btn-sm btn-danger" onClick=${excluir}>Sim, excluir</button><button class="btn btn-sm" onClick=${() => setApagar(false)}>Não</button>`
+          ? html`<span class="dim">Excluir a OS ${numOS(os)}? O número não será reaproveitado.</span><button class="btn btn-sm btn-danger" onClick=${excluir}>Sim, excluir</button><button class="btn btn-sm" onClick=${() => setApagar(false)}>Não</button>`
           : html`<button class="btn btn-sm btn-ghost" onClick=${() => setApagar(true)}>Excluir OS</button>`}
       </div>
       ${imprimir && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <datalist id="lista-fab-mdf">${fabricantesMDF.map(f => html`<option key=${f} value=${f} />`)}</datalist>
     </div>`;
+}
+
+/* ---------- Cores da OS (3 bolinhas) ---------- */
+const PALETAS = [
+  ['Madeira', ['#6B4423', '#C8A27A', '#1F2937']], ['Grafite', ['#111827', '#6B7280', '#F59E0B']],
+  ['Verde', ['#1F4D3A', '#8FB39B', '#C59B27']], ['Azul', ['#1E3A5F', '#7DA2C9', '#E0B24A']],
+  ['Vinho', ['#632B30', '#D6BEB2', '#3E4144']], ['Terracota', ['#A85A44', '#E8D5C4', '#2B2B2A']],
+];
+const temCores = (o) => Array.isArray(o?.cores) && o.cores.length === 3;
+const varsCores = (c) => ({ '--c1': c[0], '--c2': c[1], '--c3': c[2] });
+const pinta = (o) => temCores(o) ? { borderLeft: '5px solid ' + o.cores[0], background: 'linear-gradient(90deg,' + o.cores[1] + '22,#fff 60%)' } : undefined;
+const bolinhas = (o) => temCores(o) ? html`<span class="bolinhas">${o.cores.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</span>` : null;
+
+function PaletaOS({ os, alterar, sessao, toast }) {
+  const [aberto, setAberto] = useState(false);
+  const [c, setC] = useState(temCores(os) ? os.cores : PALETAS[0][1]);
+  const [padrao, setPadrao] = useState(null);
+  useEffect(() => { if (aberto && padrao === null) F().fsMod.getDoc(docRef('empresas', sessao.empresaId)).then(d => setPadrao(d.data()?.coresPadrao || false)).catch(() => setPadrao(false)); }, [aberto]);
+  const aplicar = (cores) => { alterar(o => { o.cores = cores; }); setC(cores); };
+  const salvarPadrao = async () => {
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { coresPadrao: c }); setPadrao(c); toast('Cores salvas como padrão da empresa.', 'ok'); }
+    catch (e) { toast('Não salvou o padrão: ' + e.message, 'erro'); }
+  };
+  return html`
+    <span class="opc-wrap">
+      <button class="btn btn-sm" onClick=${() => setAberto(!aberto)} title="Cores da OS"><span class="bolinhas">${c.map((x, i) => html`<i key=${i} style=${{ background: temCores(os) ? x : '#ddd' }}></i>`)}</span> Cores</button>
+      ${aberto && html`
+        <div class="opc-pop" style=${{ width: '300px' }}>
+          <div class="opc-g">Escolha as 3 cores</div>
+          <div class="row" style=${{ gap: '10px', justifyContent: 'center', padding: '6px 0' }}>
+            ${['Principal', 'Fundo', 'Destaque'].map((t, i) => html`
+              <label key=${i} class="bola-cor"><input type="color" value=${c[i]} onInput=${e => { const n = [...c]; n[i] = e.target.value; setC(n); }} /><i style=${{ background: c[i] }}></i><small>${t}</small></label>`)}
+          </div>
+          <button class="btn btn-primary btn-sm" onClick=${() => { aplicar(c); setAberto(false); }}>Aplicar nesta OS</button>
+          <div class="opc-g">Paletas prontas</div>
+          ${PALETAS.map(([n, p]) => html`<button key=${n} class="opc-i" onClick=${() => setC(p)}><span>${n}</span><span class="bolinhas">${p.map((x, i) => html`<i key=${i} style=${{ background: x }}></i>`)}</span></button>`)}
+          <div class="opc-g">Padrão da empresa</div>
+          ${padrao ? html`<button class="opc-i" onClick=${() => { aplicar(padrao); setAberto(false); }}><span>Aplicar o padrão</span><span class="bolinhas">${padrao.map((x, i) => html`<i key=${i} style=${{ background: x }}></i>`)}</span></button>` : html`<div class="dim" style=${{ padding: '0 6px' }}>Nenhum padrão salvo ainda.</div>`}
+          <div class="row" style=${{ gap: '6px' }}>
+            <button class="btn btn-sm" onClick=${salvarPadrao}>Salvar estas como padrão</button>
+            ${temCores(os) && html`<button class="btn btn-ghost btn-sm" onClick=${() => { alterar(o => { o.cores = null; }); setAberto(false); }}>Tirar cores</button>`}
+          </div>
+        </div>`}
+    </span>`;
 }
 
 /* ---------- Etapa 2: especificações gerais da OS ---------- */
@@ -2088,10 +2176,11 @@ function FerragemLinha({ f, catalogo, sessao, up, remover }) {
 
 function ImpressaoOS({ os, empresa }) {
   const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
+  const cor = temCores(os) ? os.cores : null;
   return html`
-    <div class="pr">
+    <div class=${'pr' + (cor ? ' pr-cor' : '')} style=${cor ? varsCores(cor) : undefined}>
       <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div><div style=${{ fontWeight: 700 }}>${empresa}</div><h1>ORDEM DE SERVIÇO Nº ${padNum(os.numero)}</h1></div>
+        <div><div style=${{ fontWeight: 700 }}>${empresa}</div><h1>ORDEM DE SERVIÇO Nº ${numOS(os)}</h1></div>
         <div style=${{ textAlign: 'right' }}>Emitida em ${new Date().toLocaleDateString('pt-BR')}<br/>Status: ${(STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0]).t}</div>
       </div>
       <table><tbody>
@@ -2161,7 +2250,7 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
         const { id, numero } = await criarOS(sessao, res, {
           origem: 'importada', numeroAntigo: String(res.numeroAntigo || ''), dataAntiga: String(res.dataAntiga || ''), arquivoOrigem: item.nome,
         });
-        upd(item.key, { status: `Importada como OS nº ${padNum(numero)}`, ok: true, osId: id, rodando: false });
+        upd(item.key, { status: `Importada como OS nº ${numOS(numero)}`, ok: true, osId: id, rodando: false });
       } catch (e) {
         upd(item.key, { status: e.message, erro: true, dupId: e.duplicada?.id, rodando: false });
       }
@@ -2372,14 +2461,14 @@ async function montarContexto(sessao, osAbertaId) {
   try {
     const ps = await getDocs(query(col('empresas', sessao.empresaId, 'projetos'), orderBy('criadoEm', 'desc'), limit(60)));
     linhas.push(`\nPROJETOS (${ps.size}):`);
-    ps.docs.forEach(d => { const p = d.data(); linhas.push(`- ${p.cliente?.nome || '?'}${p.titulo ? ' — ' + p.titulo : ''}${p.cliente?.obra ? ' (obra ' + p.cliente.obra + ')' : ''}; ${p.qtdDocs || 0} doc.; ata: ${p.temAta ? 'sim' : 'não'}; ${p.osNumero ? 'OS ' + padNum(p.osNumero) : 'sem OS'}; criado ${fmtData(p.criadoEm)}`); });
+    ps.docs.forEach(d => { const p = d.data(); linhas.push(`- ${p.cliente?.nome || '?'}${p.titulo ? ' — ' + p.titulo : ''}${p.cliente?.obra ? ' (obra ' + p.cliente.obra + ')' : ''}; ${p.qtdDocs || 0} doc.; ata: ${p.temAta ? 'sim' : 'não'}; ${p.osNumero ? 'OS ' + numOS(p.osNumero) : 'sem OS'}; criado ${fmtData(p.criadoEm)}`); });
     const os = await getDocs(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc'), limit(80)));
     linhas.push(`\nORDENS DE SERVIÇO (${os.size}):`);
     os.docs.forEach(d => {
       const o = d.data();
       const st = (STATUS_OS.find(s => s.v === o.status) || STATUS_OS[0]).t;
       const amb = (o.ambientes || []).map(a => `${a.nome} [${(a.moveis || []).map(m => m.nome).join(', ')}]`).join('; ');
-      linhas.push(`- OS ${padNum(o.numero)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
+      linhas.push(`- OS ${numOS(o)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
     });
     if (osAbertaId) {
       const o = await getDoc(docRef('empresas', sessao.empresaId, 'os', osAbertaId));
@@ -2503,7 +2592,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const filtradas = os.filter(o =>
     (!status || (status === 'atrasadas' ? atrasada(o) : (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === status)) &&
     (!amb || categoriasDaOS(o).includes(amb)) &&
-    (!busca || norm(`${padNum(o.numero)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
+    (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
   return html`
     <div class="fade-up stack" style=${{ gap: '16px' }}>
@@ -2569,8 +2658,8 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
             ${filtradas.map(o => {
               const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0];
               return html`
-                <div key=${o.id} class="list-item" onClick=${() => abrirOS(o.id)}>
-                  <div class="os-num">${padNum(o.numero)}</div>
+                <div key=${o.id} class="list-item" style=${pinta(o)} onClick=${() => abrirOS(o.id)}>
+                  <div class="os-num">${numOS(o)}${bolinhas(o)}</div>
                   <div class="grow">
                     <div class="title">${o.cliente?.nome || 'Cliente não informado'}</div>
                     <div class="dim">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || 'Sem ambientes'}${o.prazoEntrega ? ' · prazo ' + o.prazoEntrega : ''}</div>
@@ -2626,6 +2715,7 @@ function Principal({ sessao, toast }) {
               <span class="avatar">${iniciais}</span>
               <span style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
+            <button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); }}>⟳ Atualizar</button>
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥ Sair</button>
           </div>
         </div>
