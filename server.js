@@ -43,10 +43,14 @@ async function chamarModelo({ system, messages, maxTokens }) {
   // Se um modelo estiver sobrecarregado ou não existir, tenta o próximo (todos gratuitos).
   const modelos = [...new Set([GEMINI_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-flash-lite-latest'])];
   let r;
-  for (let i = 0; i < modelos.length; i++) {
-    r = await pedir(modelos[i]);
-    if (![404, 500, 503].includes(r.status)) break;
-    await new Promise(ok => setTimeout(ok, 800));
+  // Até 2 rodadas por todos os modelos, esperando mais a cada tentativa (1s, 2s, 4s… com variação).
+  let espera = 1000;
+  fora: for (let rodada = 0; rodada < 2; rodada++) {
+    for (const modelo of modelos) {
+      r = await pedir(modelo);
+      if (![404, 429, 500, 503].includes(r.status)) break fora;
+      if (r.status !== 404) { await new Promise(ok => setTimeout(ok, espera + Math.random() * 400)); espera = Math.min(espera * 2, 8000); }
+    }
   }
   const body = await r.json().catch(() => ({}));
   if (r.status === 503) throw new Error('os servidores gratuitos do Google estão cheios agora. Tente de novo em 1 minuto.');
