@@ -424,3 +424,19 @@ body::before { display: none; }
 .seg-mini button { border: none; background: #fff; padding: 6px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text-mid); }
 .seg-mini button.on { background: #166534; color: #fff; }
 .rodape-escuro { background: #1c1917; border-radius: 14px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* v8 — opções de mercado */
+.opc-wrap{position:relative;display:inline-block}
+.opc-pop{position:absolute;right:0;top:calc(100% + 4px);z-index:60;width:min(420px,86vw);max-height:360px;overflow:auto;background:#fff;border:1px solid #e5e2dc;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.14);padding:8px;display:flex;flex-direction:column;gap:4px}
+.opc-g{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#8a8175;margin:8px 4px 2px}
+.opc-i{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:7px 8px;cursor:pointer;color:inherit;font:inherit}
+.opc-i:hover{background:#f5f2ec}
+.opc-i small{display:block;color:#8a8175;font-size:11.5px;font-weight:400}
+.opcoes5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+@media(max-width:700px){.opcoes5{grid-template-columns:repeat(2,1fr)}}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;max-height:260px;overflow:auto}
+.sw{display:flex;gap:8px;align-items:center;text-align:left;background:#fff;border:1px solid #e5e2dc;border-radius:10px;padding:6px;cursor:pointer;font:inherit;color:inherit;font-size:12.5px}
+.sw i{width:28px;height:28px;border-radius:6px;flex:none;border:1px solid rgba(0,0,0,.12)}
+.sw small{display:block;color:#8a8175;font-size:10.5px}
+.sw.on{border-color:#111;box-shadow:0 0 0 2px #111 inset}
+.acab-box.off{opacity:.75;background:repeating-linear-gradient(45deg,#faf9f7,#faf9f7 8px,#f3f1ed 8px,#f3f1ed 16px)}
