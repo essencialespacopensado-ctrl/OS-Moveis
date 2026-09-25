@@ -1415,7 +1415,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], ata: os.ata || null, contrato: os.contrato || null, parceiros: os.parceiros || {}, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], alteracoes: os.alteracoes || [], reaberturas: os.reaberturas || [], ata: os.ata || null, contrato: os.contrato || null, parceiros: os.parceiros || {}, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1430,6 +1430,10 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const [etapa, setEtapa] = useState(1);
   const [organizando, setOrganizando] = useState(false);
   const [liberada, setLiberada] = useState(false);
+  const [snapLib, setSnapLib] = useState(null);
+  const [motivoLib, setMotivoLib] = useState('');
+  const [imprimirPedido, setImprimirPedido] = useState(null);
+  const [pedirVoltar, setPedirVoltar] = useState(null);
   const [pedirLib, setPedirLib] = useState(false);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
@@ -1546,6 +1550,32 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         <button class="btn btn-marrom" onClick=${() => setPedirLib(true)}>🔓 Desbloquear para editar</button></div>`}
       ${(os.historico || []).length > 0 && html`<details class="card page-card"><summary class="dim">📜 Histórico de alterações após pronta (${os.historico.length})</summary>
         ${os.historico.map((h, i) => html`<div key=${i} class="item-lista"><span>${h.motivo}<br/><small class="dim">${h.quem} · ${fmtData(h.quando)}</small></span></div>`)}</details>`}
+
+      ${liberada && snapLib && (() => { const itens = diffOS(snapLib, os); return html`
+        <div class="card page-card stack pedido-alt">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <div><div class="sec-title">📝 Pedido de alteração em andamento</div><div class="dim">Motivo: <b>${motivoLib}</b></div></div>
+            <span class="chip chip-accent">${itens.length} ${itens.length === 1 ? 'alteração' : 'alterações'}</span>
+          </div>
+          ${itens.length === 0 ? html`<div class="dim">Altere o que precisar na OS. Cada mudança aparece aqui: "estou alterando isso, de … para …".</div>` : html`
+            <div class="alt-lista">${itens.map((it, i) => html`<div key=${i} class="alt-item"><b>${it.campo}</b><span class="de">${it.de}</span><span class="seta">→</span><span class="para">${it.para}</span></div>`)}</div>`}
+          <div class="row" style=${{ justifyContent: 'flex-end', gap: '6px' }}>
+            <button class="btn" onClick=${() => { setLiberada(false); setSnapLib(null); }}>Bloquear sem gerar pedido</button>
+            <button class="btn btn-marrom" disabled=${!itens.length} onClick=${() => {
+              const pedido = { n: (os.alteracoes || []).length + 1, motivo: motivoLib, quem: sessao.nome, quando: nowIso(), itens };
+              alterar(o => { o.alteracoes = [...(o.alteracoes || []), pedido]; });
+              setLiberada(false); setSnapLib(null); setImprimirPedido(pedido);
+              setTimeout(() => { window.print(); setImprimirPedido(null); }, 250);
+              toast('Pedido de alteração nº ' + pedido.n + ' gerado. OS bloqueada de novo.', 'ok');
+            }}>✓ Concluir alteração e gerar pedido</button>
+          </div>
+        </div>`; })()}
+      <${LinhaDoTempo} os=${os} />
+      ${(os.alteracoes || []).length > 0 && html`<details class="card page-card"><summary class="dim">📝 Pedidos de alteração (${os.alteracoes.length})</summary>
+        ${os.alteracoes.slice().reverse().map(p => html`<div key=${p.n} class="item-lista" style=${{ alignItems: 'flex-start' }}><span><b>Nº ${p.n}</b> — ${p.motivo}<br/><small class="dim">${p.itens.length} itens · ${p.quem} · ${fmtData(p.quando)}</small>
+          <div class="alt-lista mini">${p.itens.slice(0, 6).map((it, i) => html`<div key=${i} class="alt-item"><b>${it.campo}</b><span class="de">${it.de}</span><span class="seta">→</span><span class="para">${it.para}</span></div>`)}${p.itens.length > 6 ? html`<small class="dim">+${p.itens.length - 6}…</small>` : ''}</div></span>
+          <button class="btn btn-sm" onClick=${() => { setImprimirPedido(p); setTimeout(() => { window.print(); setImprimirPedido(null); }, 250); }}>🖨 Imprimir</button></div>`)}</details>`}
+      ${imprimirPedido && ReactDOM.createPortal(html`<${ImpressaoPedido} os=${os} pedido=${imprimirPedido} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <fieldset class="trava" disabled=${bloqueada}>
       ${etapa === 1 && html`
         <div class="grid2" style=${{ alignItems: 'start' }}>
@@ -1560,7 +1590,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <div class="dim" style=${{ margin: '4px 0 14px' }}>Etapa atual: <b>${STATUS_OS[idxSt].t.replace(/^\d\. /, '')}</b> (${idxSt + 1}/4)</div>
           <div class="trilho">
             ${STATUS_OS.map((x, i) => html`
-              <button key=${x.v} class=${'trilho-pt' + (i < idxSt ? ' feito' : i === idxSt ? ' atual' : '')} onClick=${() => alterar(o => { o.status = x.v; })} title=${'Marcar como ' + x.t}>
+              <button key=${x.v} class=${'trilho-pt' + (i < idxSt ? ' feito' : i === idxSt ? ' atual' : '')} onClick=${() => i < idxSt ? setPedirVoltar(x) : alterar(o => { o.status = x.v; })} title=${'Marcar como ' + x.t}>
                 <span class="bola">${i < idxSt ? '✓' : i + 1}</span><small>${x.t.replace(/^\d\. /, '')}</small>
               </button>`)}
             <div class="trilho-linha"><div style=${{ width: (idxSt / 3 * 100) + '%' }}></div></div>
@@ -1645,10 +1675,13 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             </div>`}
         </div>`}
 
-      ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} />`}
+      ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
       </fieldset>
+      ${pedirVoltar && html`<${SenhaMotivo} titulo=${'Voltar a OS para ' + pedirVoltar.t.replace(/^\d\. /, '')} texto="Voltar um processo que já começou precisa de senha e motivo." botao="Voltar etapa"
+        onOk=${async (motivo) => { alterar(o => { o.reaberturas = [...(o.reaberturas || []), { oque: 'Status da OS: ' + (STATUS_OS.find(x => x.v === o.status) || {}).t + ' → ' + pedirVoltar.t, motivo, quem: sessao.nome, quando: nowIso() }]; o.status = pedirVoltar.v; }); toast('Processo reaberto.', 'ok'); }} fechar=${() => setPedirVoltar(null)} />`}
+      ${(os.reaberturas || []).length > 0 && html`<details class="card page-card"><summary class="dim">↺ Reaberturas de processo (${os.reaberturas.length})</summary>${os.reaberturas.slice().reverse().map((r, i) => html`<div key=${i} class="item-lista"><span><b>${r.oque}</b><br/>${r.motivo}<br/><small class="dim">${r.quem} · ${fmtData(r.quando)}</small></span></div>`)}</details>`}
       ${pedirLib && html`<${SenhaMotivo} titulo=${'Editar a OS ' + numOS(os) + ' (já pronta)'} texto="Diga o que vai ser alterado e por quê." botao="Desbloquear"
-        onOk=${async (motivo) => { alterar(o => { o.historico = [...(o.historico || []), { motivo, quem: sessao.nome, quando: nowIso() }]; }); setLiberada(true); toast('OS desbloqueada para edição.', 'ok'); }} fechar=${() => setPedirLib(false)} />`}
+        onOk=${async (motivo) => { setSnapLib(JSON.parse(JSON.stringify(os))); setMotivoLib(motivo); alterar(o => { o.historico = [...(o.historico || []), { motivo, quem: sessao.nome, quando: nowIso() }]; }); setLiberada(true); toast('OS desbloqueada. Tudo o que você mudar vai para o pedido de alteração.', 'ok'); }} fechar=${() => setPedirLib(false)} />`}
 
       <div class="rodape-escuro">
         <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
@@ -1660,7 +1693,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       </div>
 
       <div class="dim" style=${{ textAlign: 'right' }}>Para excluir esta OS use a aba <b>🗑 Excluir OSs</b> (pede senha e motivo).</div>
-      ${imprimir && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
+      ${imprimir && !imprimirPedido && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <datalist id="lista-fab-mdf">${fabricantesMDF.map(f => html`<option key=${f} value=${f} />`)}</datalist>
     </div>`;
 }
@@ -1975,6 +2008,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
   const [filtro, setFiltro] = useState('todas');
   const [busca, setBusca] = useState('');
   const [sheet, setSheet] = useState(null); // {osId, tipo:'parc'|'prod'|'add', k}
+  const [conf, setConf] = useState(null); // {titulo, oque, fazer(motivo)}
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
@@ -1997,10 +2031,20 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
     const status = todas ? 'concluida' : k === 'montagem' || etapas.montagem?.status === 'andamento' ? 'montagem' : 'producao';
     salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: o.status === 'concluida' ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
   };
+  const reab = (o, oque, motivo) => [...(o.reaberturas || []), { oque, motivo, quem: sessao.nome, quando: nowIso() }];
   const voltarEtapa = (o, k) => {
-    const etapas = { ...(o.execucao?.etapas || {}) };
-    etapas[k] = { ...(etapas[k] || {}), status: 'andamento' };
-    salvar(o, { execucao: { ...(o.execucao || {}), etapas } }, 'Etapa reaberta');
+    const t = (ETAPAS_FAB.find(e => e[0] === k) || [])[1];
+    setConf({ titulo: 'Reabrir etapa: ' + t, fazer: async (motivo) => {
+      const etapas = { ...(o.execucao?.etapas || {}) };
+      etapas[k] = { ...(etapas[k] || {}), status: 'andamento' };
+      await salvar(o, { execucao: { ...(o.execucao || {}), etapas }, reaberturas: reab(o, 'Etapa ' + t + ' reaberta', motivo) }, 'Etapa reaberta');
+    } });
+  };
+  const voltarParc = (o, p, v) => {
+    setConf({ titulo: p.t + ': voltar para "' + infoSt(v)[2] + '"', fazer: async (motivo) => {
+      const atual = (o.parceiros || {})[p.k] || {};
+      await salvar(o, { parceiros: { ...(o.parceiros || {}), [p.k]: { ...atual, st: v, hist: [...(atual.hist || []), { st: v, quem: sessao.nome, em: nowIso(), motivo }] } }, reaberturas: reab(o, p.t + ': ' + infoSt(atual.st || 'orcar')[2] + ' → ' + infoSt(v)[2], motivo) }, 'Situação voltada');
+    } });
   };
   const ativas = (lista || []).filter(o => o.status !== 'concluida');
   const cards = ativas.map(o => {
@@ -2069,7 +2113,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
                 : html`<div class="ok-box">✓ Recebido na fábrica</div>`; })()}
               <div class="sheet-passos">
                 ${ST_PARC.map(([v, , t, c], i) => { const at = ST_PARC.findIndex(x => x[0] === pSheet.st); return html`
-                  <button key=${v} class=${'sheet-passo' + (i <= at ? ' feito' : '') + (i === at ? ' atual' : '')} style=${i <= at ? { background: c, borderColor: c } : undefined} onClick=${() => setParc(osSheet, pSheet.k, { st: v })}>${i < at ? '✓ ' : ''}${t}</button>`; })}
+                  <button key=${v} class=${'sheet-passo' + (i <= at ? ' feito' : '') + (i === at ? ' atual' : '')} style=${i <= at ? { background: c, borderColor: c } : undefined} onClick=${() => i < at ? voltarParc(osSheet, pSheet, v) : setParc(osSheet, pSheet.k, { st: v })}>${i < at ? '✓ ' : ''}${t}</button>`; })}
               </div>
               <div class="grid2">
                 <div class="field"><span class="lbl">Parceiro / fornecedor</span><input class="inp" value=${pSheet.parceiro || ''} placeholder="Ex: Projetta" onChange=${e => setParc(osSheet, pSheet.k, { parceiro: e.target.value })} /></div>
@@ -2086,6 +2130,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
               </div>`}
           </div>
         </div>`, document.body)}
+      ${conf && html`<${SenhaMotivo} titulo=${conf.titulo} texto="Este processo já foi iniciado. Para reabrir/voltar, informe o motivo e a senha." botao="Confirmar" onOk=${conf.fazer} fechar=${() => setConf(null)} />`}
     </div>`;
 }
 
@@ -2386,6 +2431,73 @@ function TelaCronograma({ sessao, abrirOS, toast }) {
           ${!entregas.length && html`<div class="card vazio dim">Nenhuma OS com prazo de entrega definido.</div>`}
         </div>`}
     </div>`;
+}
+
+/* ---------- Pedido de alteração (OS pronta/desbloqueada) ---------- */
+const IGNORAR_DIFF = new Set(['atualizadoEm', 'atualizadoPor', 'historico', 'alteracoes', 'reaberturas', 'fingerprint', 'id', 'revisar', 'hist', 'arquivos', 'atualizadaEm', 'concluidaEm', 'ata']);
+const ROT_DIFF = {
+  cliente: 'Cliente', nome: 'Nome', telefone: 'Telefone', endereco: 'Endereço', obra: 'Obra', prazoEntrega: 'Prazo de entrega', observacoesGerais: 'Observações',
+  responsavel: 'Responsável', arquiteto: 'Arquiteto', tamponamento: 'Tamponamento', tipo: 'Tipo', espessura: 'Espessura', modoExecucao: 'Execução',
+  padrao: 'Especificações', acab: 'Acabamento', interno: 'Interno', externo: 'Externo', desc: 'Descrição', fabricante: 'Fabricante', esp: 'Espessura',
+  portas: 'Portas', modelo: 'Modelo', obs: 'Obs.', laminas: 'Lâminas', perfis: 'Perfis', puxadores: 'Puxadores', led: 'LED', ferragens: 'Ferragens',
+  dobradicas: 'Dobradiças', corredicas: 'Corrediças', correr: 'Portas de correr', passagem: 'Portas de passagem', marca: 'Marca', fech: 'Fechaduras',
+  vidros: 'Vidros', tec: 'Tecidos', parede: 'Parede', quantidade: 'Qtd', largura: 'Largura', altura: 'Altura', profundidade: 'Profundidade',
+  mdfCaixa: 'MDF caixa', mdfFrente: 'MDF frente', cor: 'Cor', fitaBorda: 'Fita', gavetas: 'Gavetas', puxador: 'Puxador', iluminacao: 'Iluminação',
+  observacoes: 'Observações', execucao: 'Execução', etapas: 'Etapas', status: 'Status', prazo: 'Prazo', onde: 'Onde', parceiros: 'Parceiros', cores: 'Cores', contrato: 'Contrato',
+};
+const valTxt = (v) => v == null || v === '' ? '(vazio)' : Array.isArray(v) ? (v.every(x => typeof x !== 'object') ? v.join('; ') || '(vazio)' : v.length + ' itens') : typeof v === 'boolean' ? (v ? 'Sim' : 'Não') : typeof v === 'object' ? JSON.stringify(v) : String(v);
+function diffOS(a, b, caminho = [], out = []) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const A = a || [], B = b || [];
+    const deObj = [...A, ...B].some(x => x && typeof x === 'object');
+    if (!deObj) { if (JSON.stringify(A) !== JSON.stringify(B)) out.push({ campo: caminho.join(' › '), de: valTxt(A), para: valTxt(B) }); return out; }
+    const chave = (x, i) => x?.id || x?.nome || i;
+    const mapA = new Map(A.map((x, i) => [chave(x, i), x])), mapB = new Map(B.map((x, i) => [chave(x, i), x]));
+    for (const [k, x] of mapB) { const nome = x?.nome || ('item ' + k); if (!mapA.has(k)) out.push({ campo: [...caminho, nome].join(' › '), de: '(não existia)', para: 'ADICIONADO' }); else diffOS(mapA.get(k), x, [...caminho, nome], out); }
+    for (const [k, x] of mapA) if (!mapB.has(k)) out.push({ campo: [...caminho, x?.nome || ('item ' + k)].join(' › '), de: 'existia', para: 'REMOVIDO' });
+    return out;
+  }
+  if ((a && typeof a === 'object') || (b && typeof b === 'object')) {
+    const ks = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const k of ks) { if (IGNORAR_DIFF.has(k)) continue; diffOS((a || {})[k], (b || {})[k], [...caminho, ROT_DIFF[k] || k], out); }
+    return out;
+  }
+  const na = a == null || a === '' || a === false ? '' : a, nb = b == null || b === '' || b === false ? '' : b;
+  if (String(na) !== String(nb)) out.push({ campo: caminho.join(' › '), de: valTxt(a), para: valTxt(b) });
+  return out;
+}
+function linhaDoTempo(os) {
+  const ev = [];
+  if (os.criadoEm) ev.push({ q: os.criadoEm, ic: '🆕', t: 'OS criada', d: (os.origem ? 'origem: ' + os.origem : ''), p: os.criadoPor });
+  (os.historico || []).forEach(h => ev.push({ q: h.quando, ic: '🔓', t: 'Desbloqueada para edição', d: h.motivo, p: h.quem }));
+  (os.alteracoes || []).forEach(a => ev.push({ q: a.quando, ic: '📝', t: 'Pedido de alteração nº ' + a.n + ' (' + a.itens.length + ' itens)', d: a.motivo, p: a.quem }));
+  (os.reaberturas || []).forEach(r => ev.push({ q: r.quando, ic: '↺', t: r.oque, d: r.motivo, p: r.quem }));
+  Object.entries(os.execucao?.etapas || {}).forEach(([k, e]) => { if (e.concluidaEm) ev.push({ q: e.concluidaEm, ic: '✅', t: 'Etapa concluída: ' + ((ETAPAS_FAB.find(x => x[0] === k) || [])[1] || k) }); });
+  Object.entries(os.parceiros || {}).forEach(([k, pa]) => (pa.hist || []).forEach(h => ev.push({ q: h.em, ic: '🤝', t: ((TIPOS_PARC.find(x => x[0] === k) || [])[2] || k) + ': ' + infoSt(h.st)[2], d: h.motivo || '', p: h.quem })));
+  (os.contrato?.arquivos || []).forEach(a => ev.push({ q: a.em, ic: '📑', t: 'Contrato anexado: ' + a.nome }));
+  if (os.restauradaEm) ev.push({ q: os.restauradaEm, ic: '♻️', t: 'OS restaurada', p: os.restauradaPor });
+  if (os.atualizadoEm) ev.push({ q: os.atualizadoEm, ic: '💾', t: 'Última modificação', p: os.atualizadoPor, ultima: true });
+  return ev.filter(e => e.q).sort((a, b) => String(b.q).localeCompare(String(a.q)));
+}
+function LinhaDoTempo({ os }) {
+  const ev = linhaDoTempo(os);
+  return html`<details class="card page-card"><summary><b>🕒 Linha do tempo — datas das modificações</b> <span class="chip">${ev.length}</span></summary>
+    <div class="tl">${ev.map((e, i) => html`<div key=${i} class=${'tl-i' + (e.ultima ? ' ult' : '')}><span class="tl-ic">${e.ic}</span>
+      <div><div class="tl-d">${new Date(e.q).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}${e.p ? ' · ' + e.p : ''}</div><b>${e.t}</b>${e.d ? html`<div class="dim">${e.d}</div>` : ''}</div></div>`)}</div></details>`;
+}
+
+function ImpressaoPedido({ os, pedido, empresa }) {
+  const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
+  return html`<div class="po" style=${varsCores(cor)}>
+    <div class="po-topo"><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">Pedido de alteração nº ${pedido.n}</div><div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div>
+      <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${fmtData(pedido.quando)} · ${pedido.quem}</div></div></div>
+    <div class="po-obs" style=${{ marginTop: '12px' }}><b>Motivo</b><div>${pedido.motivo}</div></div>
+    <div class="po-sec"><span>${pedido.itens.length}</span> O que está sendo alterado</div>
+    <table><thead><tr><th style=${{ width: '34%' }}>Item</th><th>Como era</th><th>Como fica</th></tr></thead>
+      <tbody>${pedido.itens.map((it, i) => html`<tr key=${i}><td><b>${it.campo}</b></td><td style=${{ color: '#991b1b', textDecoration: it.para === 'ADICIONADO' ? 'none' : 'line-through' }}>${it.de}</td><td style=${{ color: '#166534', fontWeight: 700 }}>${it.para}</td></tr>`)}</tbody></table>
+    <div class="po-ass">${['Solicitado por', 'Produção (ciente)', 'Cliente (de acordo)'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+    <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)} · alteração ${pedido.n}</span><span>Gerado pelo Gestão Pró</span></div>
+  </div>`;
 }
 
 /* ---------- Confirmação com senha + motivo (excluir / editar OS pronta) ---------- */
@@ -2796,7 +2908,8 @@ const ETAPAS_FAB = [
 ];
 const ST_FAB = { pendente: 'Pendente', andamento: 'Em andamento', pronto: 'Pronto' };
 
-function ExecucaoOS({ os, alterar }) {
+function ExecucaoOS({ os, alterar, sessao, toast }) {
+  const [reabrir, setReabrir] = useState(null);
   const ex = os.execucao || {};
   const et = (k) => ex.etapas?.[k] || { onde: os.modoExecucao === 'terceirizada' ? 'terceirizada' : 'interna', status: 'pendente' };
   const setEt = (k, patch) => alterar(o => { o.execucao = o.execucao || {}; o.execucao.etapas = o.execucao.etapas || {}; o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), ...patch }; });
@@ -2832,7 +2945,7 @@ function ExecucaoOS({ os, alterar }) {
           <div key=${k} class=${'est-card ' + e.status}>
             <div class="row" style=${{ justifyContent: 'space-between' }}><small class="mono">0${i + 1}</small><small class="est-st">${ST_FAB[e.status]}</small></div>
             <b>${t}</b><small class="dim">${e.onde === 'terceirizada' ? 'Terceirizada' : 'Interna'}</small>
-            ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>↺ Reabrir</button>`
+            ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setReabrir(k)}>↺ Reabrir</button>`
               : e.status === 'andamento' ? html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir</button>`
               : html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>▶ Iniciar</button>`}
           </div>`; })}
@@ -2868,7 +2981,7 @@ function ExecucaoOS({ os, alterar }) {
             <button class=${e.onde === 'interna' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'interna' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Interna</button>
             <button class=${e.onde === 'terceirizada' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'terceirizada' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Terceirizada</button>
           </div>
-          ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>↺ Reabrir</button>` : html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir & avançar</button>`}
+          ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setReabrir(k)}>↺ Reabrir</button>` : html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir & avançar</button>`}
         </div>`; })}
     </div>
 
@@ -2881,6 +2994,8 @@ function ExecucaoOS({ os, alterar }) {
         <div class="field"><span class="lbl">Custo estimado do parceiro (R$)</span><input class="inp mono" inputmode="decimal" value=${par.custo || ''} onInput=${e => setPar('custo', e.target.value)} /></div>
       </div>
       <div class="field"><span class="lbl">Observações de produção & arquivos de corte</span><textarea class="inp" rows="2" value=${par.obs || ''} onInput=${e => setPar('obs', e.target.value)}></textarea></div>
+      ${reabrir && html`<${SenhaMotivo} titulo=${'Reabrir etapa: ' + (ETAPAS_FAB.find(e => e[0] === reabrir) || [])[1]} texto="Esta etapa já foi concluída. Para reabrir, informe o motivo e a senha." botao="Reabrir etapa"
+        onOk=${async (motivo) => { alterar(o => { o.reaberturas = [...(o.reaberturas || []), { oque: 'Etapa ' + (ETAPAS_FAB.find(e => e[0] === reabrir) || [])[1] + ' reaberta', motivo, quem: sessao?.nome || '', quando: nowIso() }]; o.execucao.etapas[reabrir] = { ...(o.execucao.etapas[reabrir] || {}), status: 'andamento' }; }); toast && toast('Etapa reaberta.', 'ok'); }} fechar=${() => setReabrir(null)} />`}
     </div>`;
 }
 
@@ -3076,7 +3191,8 @@ function ImpressaoOS({ os, empresa }) {
       <div class="po-ass">
         ${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}
       </div>
-      <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
+      ${(os.alteracoes || []).length > 0 && html`<div class="po-sec"><span>⟳</span> Alterações</div><table><tbody>${os.alteracoes.map(a => html`<tr key=${a.n}><td style=${{ width: '18%' }}>${fmtData(a.quando)}</td><td><b>Nº ${a.n}</b> — ${a.motivo} <small>(${a.itens.length} itens · ${a.quem})</small></td></tr>`)}</tbody></table>`}
+      <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}${os.atualizadoEm ? ' · última modificação ' + fmtData(os.atualizadoEm) : ''}</span><span>Gerado pelo Gestão Pró</span></div>
     </div>`;
 }
 
