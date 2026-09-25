@@ -281,6 +281,44 @@ ${cat}
 Devolva a OS completa neste formato:
 ${OS_SCHEMA}`;
 
+    case 'contrato_os':
+      return `${REGRAS_GERAIS}
+
+Leia o CONTRATO (e anexos/detalhamentos) de móveis planejados e extraia TUDO o que for relevante para a ORDEM DE SERVIÇO:
+cliente (nome, telefone, endereço, obra), prazo de entrega, arquiteto, ambientes e móveis contratados com medidas e materiais,
+acabamentos, cores de MDF, ferragens, puxadores, LED, vidros, fechaduras, tecidos e observações técnicas.
+Coloque cada informação no seu campo. Não invente nada.
+Além da OS, devolva no topo "contrato": {"numero": "", "dataAssinatura": "", "valorTotal": "", "formaPagamento": "",
+"prazoContratual": "", "garantia": "", "clausulasImportantes": ["multas, condições de entrega, o que NÃO está incluso, etc."]}.
+
+OS ATUAL (para não repetir o que já existe):
+${JSON.stringify(d.os || {}, null, 0).slice(0, 15000)}
+
+TEXTO DO CONTRATO:
+"""${String(d.texto || '').slice(0, 45000)}"""
+${d.temImagens ? '\nAs imagens são páginas do contrato. Leia tudo o que estiver escrito nelas.' : ''}
+${cat}
+
+Formato (com "contrato" no topo):
+${OS_SCHEMA}`;
+
+    case 'preencher_os':
+      return `${REGRAS_GERAIS}
+
+A partir da ATA da reunião, complete a ORDEM DE SERVIÇO. Preencha APENAS os campos que estão vazios na OS atual;
+não altere o que já está preenchido. Crie os ambientes e móveis citados na ata que ainda não existem na OS.
+Coloque cada informação no seu campo certo (acabamentos, portas, ferragens, LED, fechaduras, vidros, tecidos no "padrao").
+
+ATA (JSON):
+${JSON.stringify(d.ata || {}, null, 0).slice(0, 15000)}
+
+OS ATUAL (JSON):
+${JSON.stringify(d.os || {}, null, 0).slice(0, 40000)}
+${cat}
+
+Devolva a OS completa neste formato:
+${OS_SCHEMA}`;
+
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
