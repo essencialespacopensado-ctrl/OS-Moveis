@@ -1987,6 +1987,80 @@ function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
     </div>`;
 }
 
+/* ---------- Diário de obra por OS (ambiente): pendências faladas + fotos ---------- */
+async function fotoCompacta(file) { return imagemParaJpeg(file, 1024); }
+function DiarioOS({ sessao, os, toast }) {
+  const [itens, setItens] = useState(null);
+  const [texto, setTexto] = useState('');
+  const [interim, setInterim] = useState('');
+  const [fotos, setFotos] = useState([]);
+  const [tipo, setTipo] = useState('pendencia');
+  const [salvando, setSalvando] = useState(false);
+  const [verFoto, setVerFoto] = useState(null);
+  const cam = useRef(null), gal = useRef(null);
+  const base = ['empresas', sessao.empresaId, 'os', os.id, 'diario'];
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    return onSnapshot(query(col(...base), orderBy('em', 'desc')), s => setItens(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setItens([]));
+  }, [os.id]);
+  const fala = useFala({ onFinal: (t) => setTexto(v => (v ? v + ' ' : '') + t), onInterim: setInterim });
+  const addFotos = async (files) => {
+    const novas = [];
+    for (const f of [...files].slice(0, 6 - fotos.length)) { try { novas.push(await fotoCompacta(f)); } catch {} }
+    setFotos(v => [...v, ...novas].slice(0, 6));
+  };
+  const contar = async (lista) => {
+    const abertas = lista.filter(i => i.tipo === 'pendencia' && !i.resolvida).length;
+    await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { pendAbertas: abertas, diarioN: lista.length, diarioEm: nowIso() });
+  };
+  const salvar = async () => {
+    fala.ouvindo && fala.parar();
+    const t = (texto + ' ' + interim).trim();
+    if (!t && !fotos.length) return toast('Fale, escreva ou tire uma foto.');
+    setSalvando(true);
+    try {
+      const doc = { tipo, texto: t, fotos, quem: sessao.nome, em: nowIso(), resolvida: false };
+      const r = await F().fsMod.addDoc(col(...base), doc);
+      await contar([{ id: r.id, ...doc }, ...(itens || [])]);
+      setTexto(''); setInterim(''); setFotos([]);
+      toast(tipo === 'pendencia' ? 'Pendência registrada.' : 'Registro salvo no diário.', 'ok');
+    } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+    setSalvando(false);
+  };
+  const resolver = async (it, v) => {
+    await F().fsMod.updateDoc(docRef(...base, it.id), { resolvida: v, resolvidaPor: v ? sessao.nome : '', resolvidaEm: v ? nowIso() : '' });
+    await contar((itens || []).map(x => x.id === it.id ? { ...x, resolvida: v } : x));
+  };
+  const abertas = (itens || []).filter(i => i.tipo === 'pendencia' && !i.resolvida);
+  return html`
+    <div class="sheet-t">📓 Diário de obra</div>
+    <div class="dim" style=${{ marginTop: '-6px' }}>${numOS(os)} · ${(os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || ''}</div>
+    <div class="seg-mini dia-tipo">${[['pendencia', '⚠ Pendência'], ['registro', '📝 Registro'], ['foto', '📷 Só foto']].map(([v, t]) => html`<button key=${v} class=${tipo === v ? 'on' : ''} onClick=${() => setTipo(v)}>${t}</button>`)}</div>
+    <div class="dia-box">
+      <textarea class="inp" rows="3" placeholder=${tipo === 'pendencia' ? 'Ex: falta 1 dobradiça na porta do balcão, puxador riscado…' : 'O que foi feito hoje / observação'} value=${texto + (interim ? ' ' + interim : '')} onInput=${e => { setTexto(e.target.value); setInterim(''); }}></textarea>
+      <div class="dia-acoes">
+        ${fala.ouvindo ? html`<button class="btn btn-grande btn-mic-on pulse" onClick=${fala.parar}>■ Parar</button>` : html`<button class="btn btn-grande btn-teal" onClick=${fala.iniciar}>🎤 Falar</button>`}
+        <button class="btn btn-grande" onClick=${() => cam.current?.click()}>📷 Foto</button>
+        <button class="btn btn-grande btn-ghost" onClick=${() => gal.current?.click()}>🖼️</button>
+        <input ref=${cam} type="file" accept="image/*" capture="environment" hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
+        <input ref=${gal} type="file" accept="image/*" multiple hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
+      </div>
+      ${fala.erro && html`<div class="error-box">${fala.erro}</div>`}
+      ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}
+      <button class="btn btn-grande btn-verde btn-block" disabled=${salvando} onClick=${salvar}>${salvando ? 'Salvando…' : '✓ Salvar no diário'}</button>
+    </div>
+    ${abertas.length > 0 && html`<div class="sheet-t" style=${{ fontSize: '15px' }}>⚠ Pendências em aberto (${abertas.length})</div>`}
+    ${itens === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Nenhum registro ainda.</div>` : itens.map(it => html`
+      <div key=${it.id} class=${'dia-item ' + it.tipo + (it.resolvida ? ' ok' : '')}>
+        <div class="dia-cab"><span>${it.tipo === 'pendencia' ? (it.resolvida ? '✅' : '⚠') : it.tipo === 'foto' ? '📷' : '📝'} <b>${new Date(it.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> · ${it.quem}</span>
+          ${it.tipo === 'pendencia' && (it.resolvida ? html`<button class="btn btn-sm" onClick=${() => resolver(it, false)}>Reabrir</button>` : html`<button class="btn btn-sm btn-verde" onClick=${() => resolver(it, true)}>✓ Resolvida</button>`)}</div>
+        ${it.texto && html`<div class="dia-txt">${it.texto}</div>`}
+        ${(it.fotos || []).length > 0 && html`<div class="dia-fotos">${it.fotos.map((f, i) => html`<span key=${i}><img src=${f} onClick=${() => setVerFoto(f)} /></span>`)}</div>`}
+        ${it.resolvida && it.resolvidaPor && html`<small class="dim">Resolvida por ${it.resolvidaPor} · ${fmtData(it.resolvidaEm)}</small>`}
+      </div>`)}
+    ${verFoto && html`<div class="foto-cheia" onClick=${() => setVerFoto(null)}><img src=${verFoto} /></div>`}`;
+}
+
 /* ---------- Quadro geral: andamento de cada cliente (celular, só botões) ---------- */
 const TIPOS_PARC = [
   ['vidros', '🪟', 'Vidros & espelhos'], ['pintura', '🎨', 'Pintura / laca'], ['tapecaria', '🛋️', 'Tapeçaria'],
@@ -2020,6 +2094,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
   const [busca, setBusca] = useState('');
   const [sheet, setSheet] = useState(null); // {osId, tipo:'parc'|'prod'|'add', k}
   const [conf, setConf] = useState(null); // {titulo, oque, fazer(motivo)}
+  const [cliSel, setCliSel] = useState(null);
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
@@ -2078,14 +2153,35 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
 
   return html`
     <div class="fade-up stack qg">
-      <div><h2>Quadro geral</h2><div class="dim">Toque em um item para avançar. Produção da fábrica e parceiros de cada cliente.</div></div>
+      <div><h2>Quadro geral</h2><div class="dim">Toque no cliente para ver o andamento de cada ambiente, parceiros e o diário de obra.</div></div>
       <div class="qg-filtros">
         ${[['todas', 'Todas', ativas.length], ['parceiros', 'Pendências de parceiro', cont.parceiros], ['aprovacao', 'Aguard. aprovação', cont.aprovacao], ['atrasadas', 'Atrasadas', cont.atrasadas]].map(([v, t, n]) => html`
           <button key=${v} class=${'qg-f' + (filtro === v ? ' on' : '') + (v === 'atrasadas' && n ? ' perigo' : '')} onClick=${() => setFiltro(v)}>${t} <b>${n}</b></button>`)}
       </div>
       <input class="inp" placeholder="🔍 Buscar cliente, OS ou ambiente" value=${busca} onInput=${e => setBusca(e.target.value)} />
       <div class="qg-leg">${ST_PARC.map(s => html`<span key=${s[0]}><i style=${{ background: s[3] }}></i>${s[2]}</span>`)}</div>
-      ${lista === null ? html`<div class="card">Carregando…</div>` : cards.length === 0 ? html`<div class="card vazio dim">Nada por aqui.</div>` : cards.map(({ o, parc, et, feitas, atras }) => html`
+      ${lista === null ? html`<div class="card">Carregando…</div>` : cards.length === 0 ? html`<div class="card vazio dim">Nada por aqui.</div>` : !cliSel ? (() => {
+        const grupos = {};
+        cards.forEach(c => { const k = norm(c.o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: c.o.cliente?.nome || 'Sem cliente', cards: [] }).cards.push(c); });
+        return Object.entries(grupos).sort((a, b) => b[1].cards.some(c => c.atras) - a[1].cards.some(c => c.atras) || a[1].nome.localeCompare(b[1].nome)).map(([k, g]) => {
+          const tot = g.cards.length * 6, feitas = g.cards.reduce((n, c) => n + c.feitas, 0);
+          const pend = g.cards.reduce((n, c) => n + c.pendParc.length, 0), atr = g.cards.filter(c => c.atras).length, pendD = g.cards.reduce((n, c) => n + (c.o.pendAbertas || 0), 0);
+          const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
+          const cor = g.cards.find(c => temCores(c.o))?.o.cores[0];
+          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${cor ? { borderLeftColor: cor } : undefined} onClick=${() => setCliSel(k)}>
+            <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
+            <div class="qg-barra"><i style=${{ width: (tot ? feitas / tot * 100 : 0) + '%' }}></i></div>
+            <div class="qg-badges">
+              <span title="Produção">🏭 ${Math.round(tot ? feitas / tot * 100 : 0)}%</span>
+              ${pend > 0 && html`<span class="b-par" title="Parceiros pendentes">🤝 ${pend}</span>`}
+              ${pendD > 0 && html`<span class="b-dia" title="Pendências do diário">📓 ${pendD}</span>`}
+              ${atr > 0 && html`<span class="b-atr">⚠ ${atr}</span>`}
+              ${prazos[0] && html`<span>🚚 ${prazos[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>`}
+            </div>
+          </button>`; });
+      })() : html`
+        <div class="row" style=${{ gap: '8px' }}><button class="btn btn-sm" onClick=${() => setCliSel(null)}>← Clientes</button><b style=${{ fontSize: '17px' }}>${cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || ''}</b></div>
+        ${cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(({ o, parc, et, feitas, atras }) => html`
         <div key=${o.id} class=${'qg-card' + (atras ? ' atras' : '')} style=${temCores(o) ? { borderLeftColor: o.cores[0] } : undefined}>
           <div class="qg-top" onClick=${() => abrirOS(o.id)}>
             <b class="qg-num">${numOS(o)}</b>
@@ -2102,7 +2198,8 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
               <span>${p.ic}</span>${p.t.split(/[ /]/)[0]}<b style=${{ color: s[3] }}>· ${s[2]}</b>${p.previsao ? html`<small>${p.previsao.slice(0, 5)}</small>` : ''}</button>`; })}
             <button class="qg-chip add" onClick=${() => setSheet({ osId: o.id, tipo: 'add' })}>＋ parceiro</button>
           </div>
-        </div>`)}
+          <button class=${'qg-diario' + (o.pendAbertas ? ' tem' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'diario' })}>📓 Diário de obra${o.pendAbertas ? html` · <b>${o.pendAbertas} ${o.pendAbertas === 1 ? 'pendência' : 'pendências'}</b>` : ''}${o.diarioN ? html` <small>(${o.diarioN} registros)</small>` : ''}</button>
+        </div>`)}`}
 
       ${osSheet && ReactDOM.createPortal(html`
         <div class="sheet-fundo" onClick=${e => e.target === e.currentTarget && setSheet(null)}>
@@ -2137,6 +2234,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
               ${(pSheet.hist || []).length > 0 && html`<details><summary class="dim">Histórico</summary>${pSheet.hist.slice().reverse().map((h, i) => html`<div key=${i} class="dim" style=${{ fontSize: '12px' }}>${infoSt(h.st)[2]} · ${h.quem} · ${fmtData(h.em)}</div>`)}</details>`}
               <button class="btn btn-sm btn-ghost" onClick=${() => { setParc(osSheet, pSheet.k, { st: 'nao' }, 'Removido do quadro'); setSheet(null); }}>Não precisa deste parceiro nesta OS</button>`}
 
+            ${sheet.tipo === 'diario' && html`<${DiarioOS} sessao=${sessao} os=${osSheet} toast=${toast} />`}
             ${sheet.tipo === 'add' && html`
               <div class="sheet-t">Adicionar parceiro nesta OS</div>
               <div class="sheet-grade">
