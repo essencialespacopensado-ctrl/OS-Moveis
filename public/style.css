@@ -766,3 +766,6 @@ fieldset.trava[disabled]{opacity:.72}
 .ini-kc .mono{font:700 11.5px 'JetBrains Mono',monospace}
 .ini-kc.atras{background:#fffafa}.vermelho{color:#dc2626!important;font-weight:700}
 @media (max-width:700px){.ini-kan{grid-template-columns:repeat(6,78vw)}.ini-clis{grid-template-columns:minmax(0,1fr)}}
+.btn-nova-versao{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important;animation:pulsa 1.6s infinite}
+@keyframes pulsa{0%{box-shadow:0 0 0 0 rgba(22,163,74,.6)}70%{box-shadow:0 0 0 10px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+.faixa-versao{display:block;width:100%;border:0;background:#16a34a;color:#fff;padding:9px 12px;font:600 14px inherit;font-family:inherit;cursor:pointer;text-align:center;position:sticky;top:0;z-index:29}

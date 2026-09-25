@@ -1,6 +1,28 @@
 /* Gestão Pró — app principal (React + htm, sem etapa de build) */
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
+// Versão carregada (do ?v= do app.js) — usada para avisar quando sair versão nova.
+const APP_VERSAO = ((document.currentScript && document.currentScript.src) || '').match(/[?&]v=([\w.-]+)/)?.[1] || '';
+function useNovaVersao() {
+  const [nova, setNova] = useState('');
+  useEffect(() => {
+    if (!APP_VERSAO) return;
+    const checar = async () => {
+      try {
+        const t = await (await fetch('/?_=' + Date.now(), { cache: 'no-store' })).text();
+        const v = t.match(/app\.js\?v=([\w.-]+)/)?.[1];
+        if (v && v !== APP_VERSAO) setNova(v);
+      } catch {}
+    };
+    const id = setInterval(checar, 60000);
+    const vis = () => document.visibilityState === 'visible' && checar();
+    document.addEventListener('visibilitychange', vis);
+    setTimeout(checar, 8000);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  return nova;
+}
+const recarregarApp = async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); };
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -3833,6 +3855,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
 }
 
 function Principal({ sessao, toast }) {
+  const novaVersao = useNovaVersao();
   const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
@@ -3877,11 +3900,13 @@ function Principal({ sessao, toast }) {
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
-            <button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); }}>⟳<span class="txt-desk"> Atualizar</span></button>
+            ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
+              : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
         </div>
       </header>
+      ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
         ${aba === 'inicio' && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
