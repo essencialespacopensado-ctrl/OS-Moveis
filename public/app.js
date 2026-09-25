@@ -65,9 +65,10 @@ const ESPESSURAS = ['6', '15', '18', '25'];
 const TIPOS_FERRAGEM = ['Dobradiça', 'Corrediça', 'Sistema de gaveta', 'Articulador', 'Abertura', 'Porta de correr', 'Canto e despenseiro', 'Closet e cozinha', 'Outro'];
 const STATUS_OS = [
   { v: 'elaboracao', t: '1. Elaboração', c: 'chip' },
-  { v: 'producao', t: '2. Produção', c: 'chip chip-teal' },
-  { v: 'montagem', t: '3. Montagem', c: 'chip chip-roxo' },
-  { v: 'concluida', t: '4. Concluída', c: 'chip chip-ok' },
+  { v: 'projetos', t: '2. Projetos', c: 'chip chip-azul' },
+  { v: 'producao', t: '3. Produção', c: 'chip chip-teal' },
+  { v: 'montagem', t: '4. Montagem', c: 'chip chip-roxo' },
+  { v: 'concluida', t: '5. Concluída', c: 'chip chip-ok' },
 ];
 const PAPEIS = [
   { v: 'admin', t: 'Administrador' },
@@ -1251,9 +1252,10 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
   const tiles = [
     { t: 'Total de OSs', n: lista.length, s: '100% da carteira', cls: '' },
     { t: '1. Elaboração', n: cnt('elaboracao'), s: pf(cnt('elaboracao')), cls: '', f: 'elaboracao' },
-    { t: '2. Produção', n: cnt('producao'), s: pf(cnt('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '3. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '4. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: '2. Projetos', n: cnt('projetos'), s: pf(cnt('projetos')), cls: 'tile-azul', f: 'projetos' },
+    { t: '3. Produção', n: cnt('producao'), s: pf(cnt('producao')), cls: 'tile-teal', f: 'producao' },
+    { t: '4. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '5. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
     { t: 'Vencidas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
 
@@ -1587,16 +1589,16 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             <div class="sec-title">Fluxo de andamento da marcenaria</div>
             ${diasPrazo !== null && html`<span class=${'chip ' + (diasPrazo < 0 ? 'chip-danger' : '')}>📅 ${diasPrazo < 0 ? Math.abs(diasPrazo) + ' dias de atraso' : diasPrazo + ' dias para o prazo'}</span>`}
           </div>
-          <div class="dim" style=${{ margin: '4px 0 14px' }}>Etapa atual: <b>${STATUS_OS[idxSt].t.replace(/^\d\. /, '')}</b> (${idxSt + 1}/4)</div>
+          <div class="dim" style=${{ margin: '4px 0 14px' }}>Etapa atual: <b>${STATUS_OS[idxSt].t.replace(/^\d\. /, '')}</b> (${idxSt + 1}/${STATUS_OS.length})</div>
           <div class="trilho">
             ${STATUS_OS.map((x, i) => html`
               <button key=${x.v} class=${'trilho-pt' + (i < idxSt ? ' feito' : i === idxSt ? ' atual' : '')} onClick=${() => i < idxSt ? setPedirVoltar(x) : alterar(o => { o.status = x.v; })} title=${'Marcar como ' + x.t}>
                 <span class="bola">${i < idxSt ? '✓' : i + 1}</span><small>${x.t.replace(/^\d\. /, '')}</small>
               </button>`)}
-            <div class="trilho-linha"><div style=${{ width: (idxSt / 3 * 100) + '%' }}></div></div>
+            <div class="trilho-linha"><div style=${{ width: (idxSt / (STATUS_OS.length - 1) * 100) + '%' }}></div></div>
           </div>
-          ${idxSt < 3 && html`<button class="btn btn-marrom btn-block" style=${{ marginTop: '14px' }} onClick=${() => alterar(o => { o.status = STATUS_OS[idxSt + 1].v; })}>✓ Concluir ${STATUS_OS[idxSt].t.replace(/^\d\. /, '')} → Passar para ${STATUS_OS[idxSt + 1].t.replace(/^\d\. /, '')}</button>`}
-          ${idxSt === 3 && html`<div class="ok-box" style=${{ marginTop: '12px' }}>OS concluída ✓</div>`}
+          ${idxSt < (STATUS_OS.length - 1) && html`<button class="btn btn-marrom btn-block" style=${{ marginTop: '14px' }} onClick=${() => alterar(o => { o.status = STATUS_OS[idxSt + 1].v; })}>✓ Concluir ${STATUS_OS[idxSt].t.replace(/^\d\. /, '')} → Passar para ${STATUS_OS[idxSt + 1].t.replace(/^\d\. /, '')}</button>`}
+          ${idxSt === (STATUS_OS.length - 1) && html`<div class="ok-box" style=${{ marginTop: '12px' }}>OS concluída ✓</div>`}
         </div>
 
         <div class="grid2" style=${{ alignItems: 'start' }}>
@@ -2921,7 +2923,7 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
       o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), status: 'pronto', concluidaEm: nowIso() };
       const prox = ETAPAS_FAB[i + 1]?.[0];
       if (prox) o.execucao.etapas[prox] = { ...et(prox), ...(o.execucao.etapas[prox] || {}), status: 'andamento' };
-      if (o.status === 'elaboracao') o.status = 'producao';
+      if (o.status === 'elaboracao' || o.status === 'projetos') o.status = 'producao';
       if (prox === 'montagem' && o.status === 'producao') o.status = 'montagem';
       if (!prox) o.status = 'concluida';
     });
@@ -3554,9 +3556,10 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const tiles = [
     { t: 'Total', n: os.length, s: '100% da carteira', cls: '' },
     { t: '1. Elaboração', n: st('elaboracao'), s: pct(st('elaboracao')), cls: '', f: 'elaboracao' },
-    { t: '2. Produção', n: st('producao'), s: pct(st('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '3. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '4. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: '2. Projetos', n: st('projetos'), s: pct(st('projetos')), cls: 'tile-azul', f: 'projetos' },
+    { t: '3. Produção', n: st('producao'), s: pct(st('producao')), cls: 'tile-teal', f: 'producao' },
+    { t: '4. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '5. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
     { t: 'Atrasadas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Tudo em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
   const filtradas = os.filter(o =>
