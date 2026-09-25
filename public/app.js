@@ -2443,6 +2443,7 @@ const ROT_DIFF = {
   dobradicas: 'Dobradiças', corredicas: 'Corrediças', correr: 'Portas de correr', passagem: 'Portas de passagem', marca: 'Marca', fech: 'Fechaduras',
   vidros: 'Vidros', tec: 'Tecidos', parede: 'Parede', quantidade: 'Qtd', largura: 'Largura', altura: 'Altura', profundidade: 'Profundidade',
   mdfCaixa: 'MDF caixa', mdfFrente: 'MDF frente', cor: 'Cor', fitaBorda: 'Fita', gavetas: 'Gavetas', puxador: 'Puxador', iluminacao: 'Iluminação',
+  ambientes: 'Ambiente', moveis: 'Móvel', ativo: 'Ativo', ambienteResumo: 'Ambientes', tipo: 'Tipo',
   observacoes: 'Observações', execucao: 'Execução', etapas: 'Etapas', status: 'Status', prazo: 'Prazo', onde: 'Onde', parceiros: 'Parceiros', cores: 'Cores', contrato: 'Contrato',
 };
 const valTxt = (v) => v == null || v === '' ? '(vazio)' : Array.isArray(v) ? (v.every(x => typeof x !== 'object') ? v.join('; ') || '(vazio)' : v.length + ' itens') : typeof v === 'boolean' ? (v ? 'Sim' : 'Não') : typeof v === 'object' ? JSON.stringify(v) : String(v);
