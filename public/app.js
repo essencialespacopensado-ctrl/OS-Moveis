@@ -1811,6 +1811,123 @@ function AtaOS({ os, alterar, catalogo, toast }) {
     </div>`;
 }
 
+/* ---------- Aba Contratos: lê o contrato e cria/atualiza as OSs ---------- */
+function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
+  const [lista, setLista] = useState([]);
+  const [oss, setOss] = useState([]);
+  const [rodando, setRodando] = useState('');
+  const [erro, setErro] = useState('');
+  const [res, setRes] = useState(null); // resultado da IA em revisão
+  const [marcados, setMarcados] = useState({});
+  const [destino, setDestino] = useState('novas'); // novas | existente
+  const [osAlvo, setOsAlvo] = useState('');
+  const inp = useRef(null);
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    const a = onSnapshot(query(col('empresas', sessao.empresaId, 'contratos'), orderBy('criadoEm', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+    const b = onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setOss([]));
+    return () => { a(); b(); };
+  }, []);
+  const ler = async (files) => {
+    if (!files?.length) return;
+    setErro(''); setRes(null);
+    try {
+      let texto = '', imagens = [];
+      for (const f of files) { setRodando('Lendo ' + f.name + '…'); const r = await extrairArquivo(f); texto += `\n=== ${f.name} ===\n` + r.texto; imagens = imagens.concat(r.imagens || []).slice(0, 12); }
+      setRodando('A IA está extraindo o contrato…');
+      const r = await chamarIA('contrato_os', { texto, temImagens: imagens.length > 0, os: {}, catalogo: resumoCatalogo(catalogo) }, imagens);
+      const os = sanearOS(r);
+      setRes({ os, contrato: r.contrato || {}, arquivos: [...files].map(f => f.name) });
+      setMarcados(Object.fromEntries(os.ambientes.map((_, i) => [i, true])));
+      const mesmo = oss.find(o => norm(o.cliente?.nome) && norm(o.cliente?.nome) === norm(os.cliente.nome));
+      if (mesmo) { setDestino('existente'); setOsAlvo(mesmo.id); } else setDestino('novas');
+    } catch (e) { setErro(e.message); }
+    setRodando('');
+  };
+  const txtC = (v) => Array.isArray(v) ? v.join('\n') : String(v || '');
+  const aplicar = async () => {
+    const { os, contrato, arquivos } = res;
+    const dadosC = Object.fromEntries(Object.entries(contrato).map(([k, v]) => [k, txtC(v)]));
+    const ambs = os.ambientes.filter((_, i) => marcados[i]);
+    setRodando('Gravando…');
+    try {
+      const criadas = [];
+      if (destino === 'novas') {
+        const base = { ...os, ambientes: [] };
+        const grupos = ambs.length ? ambs.map(a => [a]) : [[]];
+        for (const g of grupos) {
+          try {
+            const { id, codigo } = await criarOS(sessao, { ...base, ambientes: g, ambienteResumo: g.map(a => a.nome).join(', ') }, { origem: 'contrato' });
+            await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', id), { contrato: { ...dadosC, arquivos: arquivos.map(nome => ({ nome, em: nowIso() })) } });
+            criadas.push({ id, codigo, amb: g.map(a => a.nome).join(', ') });
+          } catch (e) { if (e.duplicada) criadas.push({ id: e.duplicada.id, codigo: numOS(e.duplicada), amb: 'já existia' }); else throw e; }
+        }
+      } else {
+        const alvo = oss.find(o => o.id === osAlvo);
+        if (!alvo) throw new Error('Escolha a OS.');
+        const o = JSON.parse(JSON.stringify(alvo));
+        const n = mesclarOS(o, { ...os, ambientes: ambs });
+        o.contrato = { ...(o.contrato || {}) };
+        Object.entries(dadosC).forEach(([k, v]) => { if (vazio(o.contrato[k]) && v) o.contrato[k] = v; });
+        o.contrato.arquivos = [...(o.contrato.arquivos || []), ...arquivos.map(nome => ({ nome, em: nowIso() }))];
+        const { id, ...resto } = o;
+        await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', id), { ...resto, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        criadas.push({ id, codigo: numOS(alvo), amb: n + ' campos preenchidos' });
+      }
+      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'contratos'), {
+        cliente: os.cliente.nome || '', obra: os.cliente.obra || '', ...dadosC, arquivos, ambientes: ambs.map(a => a.nome),
+        oss: criadas, criadoPor: sessao.nome, criadoEm: nowIso(),
+      });
+      toast(destino === 'novas' ? `${criadas.length} OS criadas pelo contrato.` : 'OS atualizada pelo contrato.', 'ok');
+      setRes(null);
+    } catch (e) { setErro(e.message); }
+    setRodando('');
+  };
+  const C = res?.contrato || {};
+  return html`
+    <div class="fade-up stack">
+      <div><h2>Contratos</h2><div class="dim">Coloque o contrato: a IA extrai cliente, ambientes, materiais, prazos e condições, e cria as OSs (uma por ambiente) ou completa uma OS que já existe.</div></div>
+      <div class="card page-card stack drop-grande" onDragOver=${e => e.preventDefault()} onDrop=${e => { e.preventDefault(); ler([...e.dataTransfer.files]); }}>
+        <div style=${{ fontSize: '30px' }}>📑</div>
+        <b>${rodando || 'Arraste o contrato aqui ou toque para escolher'}</b>
+        <div class="dim">PDF, Word, Excel ou foto — pode mandar vários arquivos (contrato + anexos)</div>
+        <button class="btn btn-marrom" disabled=${!!rodando} onClick=${() => inp.current?.click()}>⬆ Escolher contrato</button>
+        <input ref=${inp} type="file" multiple hidden accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { ler([...e.target.files]); e.target.value = ''; }} />
+      </div>
+      ${erro && html`<div class="error-box">${erro}</div>`}
+
+      ${res && html`
+        <div class="card page-card stack" style=${{ borderColor: '#b45309' }}>
+          <div class="sec-title">✅ Confira o que a IA encontrou</div>
+          <div class="grid3">
+            ${[['Cliente', res.os.cliente.nome], ['Telefone', res.os.cliente.telefone], ['Obra', res.os.cliente.obra], ['Endereço', res.os.cliente.endereco], ['Prazo de entrega', res.os.prazoEntrega], ['Nº contrato', txtC(C.numero)], ['Assinatura', txtC(C.dataAssinatura)], ['Valor', txtC(C.valorTotal)], ['Pagamento', txtC(C.formaPagamento)]].map(([k, v]) => html`<div key=${k} class="kv-mini"><small>${k}</small><b>${v || '—'}</b></div>`)}
+          </div>
+          ${txtC(C.clausulasImportantes) && html`<div class="dica"><b>Cláusulas importantes:</b><div style=${{ whiteSpace: 'pre-wrap' }}>${txtC(C.clausulasImportantes)}</div></div>`}
+          <span class="lbl">Ambientes encontrados (${res.os.ambientes.length})</span>
+          ${res.os.ambientes.map((a, i) => html`<label key=${i} class="item-lista" style=${{ cursor: 'pointer' }}><span><input type="checkbox" checked=${!!marcados[i]} onChange=${e => setMarcados({ ...marcados, [i]: e.target.checked })} /> <b>${a.nome}</b> <span class="dim">· ${a.moveis.length} móveis</span></span></label>`)}
+          <div class="opcoes3" style=${{ gridTemplateColumns: '1fr 1fr' }}>
+            <button class=${'opc' + (destino === 'novas' ? ' on' : '')} onClick=${() => setDestino('novas')}><b>Criar OSs novas</b><small>Uma OS para cada ambiente marcado</small></button>
+            <button class=${'opc' + (destino === 'existente' ? ' on' : '')} onClick=${() => setDestino('existente')}><b>Completar OS existente</b><small>Preenche só o que estiver vazio</small></button>
+          </div>
+          ${destino === 'existente' && html`<select class="inp" value=${osAlvo} onChange=${e => setOsAlvo(e.target.value)}><option value="">Escolha a OS…</option>${oss.map(o => html`<option key=${o.id} value=${o.id}>${numOS(o)} — ${o.cliente?.nome || ''} · ${(o.ambientes || []).map(a => a.nome).join(', ')}</option>`)}</select>`}
+          <div class="row" style=${{ justifyContent: 'flex-end', gap: '6px' }}>
+            <button class="btn" onClick=${() => setRes(null)}>Cancelar</button>
+            <button class="btn btn-marrom" disabled=${!!rodando || (destino === 'existente' && !osAlvo)} onClick=${aplicar}>${destino === 'novas' ? `Criar ${Object.values(marcados).filter(Boolean).length || 1} OS` : 'Completar a OS'}</button>
+          </div>
+        </div>`}
+
+      <div class="card page-card stack">
+        <div class="sec-title">📚 Contratos lidos</div>
+        ${lista.length === 0 ? html`<div class="dim">Nenhum contrato ainda.</div>` : lista.map(c => html`
+          <div key=${c.id} class="item-lista" style=${{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px' }}>
+            <span style=${{ flex: 1, minWidth: '200px' }}><b>${c.cliente || 'Cliente'}</b>${c.numero ? html` · nº ${c.numero}` : ''}${c.valorTotal ? html` · ${c.valorTotal}` : ''}
+              <br/><small class="dim">${(c.arquivos || []).join(', ')} · ${c.criadoPor} · ${fmtData(c.criadoEm)}</small></span>
+            <span class="row" style=${{ gap: '4px' }}>${(c.oss || []).map(o => html`<button key=${o.id} class="btn btn-sm" onClick=${() => abrirOS(o.id)} title=${o.amb}>OS ${o.codigo}</button>`)}</span>
+          </div>`)}
+      </div>
+    </div>`;
+}
+
 /* ---------- Quadro geral: andamento de cada cliente (celular, só botões) ---------- */
 const TIPOS_PARC = [
   ['vidros', '🪟', 'Vidros & espelhos'], ['pintura', '🎨', 'Pintura / laca'], ['tapecaria', '🛋️', 'Tapeçaria'],
@@ -3411,6 +3528,7 @@ function Principal({ sessao, toast }) {
     { v: 'inicio', t: 'Início', i: '⌂' },
     { v: 'quadro', t: 'Quadro geral', i: '📊' },
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
+    { v: 'contratos', t: 'Contratos', i: '📑' },
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
@@ -3452,6 +3570,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'contratos' && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}

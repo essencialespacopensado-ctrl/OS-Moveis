@@ -629,3 +629,5 @@ fieldset.trava[disabled]{opacity:.72}
 .sheet-passo.feito{color:#fff}
 .sheet-passo.atual{box-shadow:0 0 0 3px rgba(0,0,0,.12)}
 .sheet-grade{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.drop-grande{align-items:center;text-align:center;border:2px dashed #d6d3d1!important;padding:26px!important}
+.kv-mini{border:1px solid #eee;border-radius:8px;padding:6px 9px}.kv-mini small{display:block;font-size:10.5px;color:#8a8175;text-transform:uppercase;letter-spacing:.05em}
