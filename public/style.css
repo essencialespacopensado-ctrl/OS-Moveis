@@ -679,3 +679,61 @@ fieldset.trava[disabled]{opacity:.72}
 .dia-txt{font-size:14px;white-space:pre-wrap}
 .foto-cheia{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:500;display:flex;align-items:center;justify-content:center}
 .foto-cheia img{max-width:96vw;max-height:92vh;border-radius:8px}
+
+/* v26 — celular + início compacto */
+.stack > *, .grid2 > *, .grid3 > *, .row > * { min-width: 0; }
+.stack { grid-template-columns: minmax(0, 1fr); }
+.ini-fluxo{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.ini-f{border:1px solid #e7e5e4;background:#fff;border-radius:9px;padding:5px 2px;display:flex;flex-direction:column;align-items:center;cursor:pointer;font-family:inherit;min-width:0}
+.ini-f b{font:700 16px 'JetBrains Mono',monospace;line-height:1.1}
+.ini-f small{font-size:9.5px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ini-f.sel{outline:2px solid #1c1917}
+.ini-f.tile-danger{background:#fef2f2;border-color:#fecaca}.ini-f.tile-danger b{color:#b91c1c}
+.ini-lista{display:flex;flex-direction:column;border:1px solid #eee;border-radius:10px;overflow:hidden;background:#fff}
+.ini-l{display:flex;align-items:center;gap:8px;padding:6px 9px;border:0;border-bottom:1px solid #f1efec;border-left:3px solid transparent;background:#fff;text-align:left;font-family:inherit;cursor:pointer;min-height:36px}
+.ini-l:hover{background:#faf9f7}
+.ini-l.atras{background:#fffafa}
+.ini-n{font:700 12px 'JetBrains Mono',monospace;color:#57534e;flex:none}
+.ini-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.ini-t small{color:#8a8175}
+.ini-p{font-size:11.5px;color:#57534e;flex:none}.ini-p.atras{color:#dc2626;font-weight:700}
+.ini-st{width:10px;height:10px;border-radius:50%;flex:none;background:#a8a29e}
+.st-projetos{background:#3b82f6}.st-producao{background:#0d9488}.st-liberacao{background:#f59e0b}.st-montagem{background:#7c3aed}.st-concluida{background:#16a34a}
+@media (max-width: 700px) {
+  body { font-size: 14px; }
+  .shell { padding-inline: 10px; padding-bottom: 80px; }
+  .topo-in { padding: 6px 10px; gap: 6px; }
+  .brand-mini { flex: 1; min-width: 0; }
+  .brand-mark { width: 32px !important; height: 32px !important; font-size: 13px !important; }
+  .topo-emp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-size: 11px !important; }
+  .txt-desk { display: none !important; }
+  .topo-acoes { gap: 4px !important; }
+  .topo-acoes .btn { padding: 6px 9px; }
+  .user-box { padding: 3px !important; }
+  .pillnav { order: 3; width: 100%; flex-basis: 100%; border-radius: 10px; }
+  .pillnav button { padding: 6px 10px; font-size: 12.5px; }
+  .card, .page-card { padding: 12px !important; border-radius: 12px; }
+  h2 { font-size: 20px !important; }
+  .page-head { flex-direction: column; align-items: flex-start !important; gap: 8px; }
+  .dim { overflow-wrap: anywhere; }
+  .row { flex-wrap: wrap; }
+  .tiles { grid-template-columns: repeat(3, minmax(0,1fr)) !important; gap: 6px; }
+  .tile { padding: 8px !important; }
+  .tile-n { font-size: 20px !important; }
+  .tile-s { display: none; }
+  .tile-t { font-size: 11px !important; }
+  .grid2, .grid3 { grid-template-columns: minmax(0,1fr) !important; }
+  .opcoes4, .opcoes3, .opcoes5 { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .list-item { flex-wrap: wrap; padding: 10px 12px; gap: 6px 10px; }
+  .list-item .grow { flex: 1 1 60%; }
+  .grade, .galeria { grid-template-columns: minmax(0,1fr) !important; }
+  .assist-fab { padding: 12px 14px !important; right: 12px; bottom: 12px; }
+  .assist-panel { left: 8px !important; right: 8px !important; width: auto !important; bottom: 70px !important; }
+  .etapas-bar { overflow-x: auto; flex-wrap: nowrap !important; }
+  .etapa-bt small { display: none; }
+  .rodape-escuro { flex-direction: column; align-items: stretch !important; gap: 8px; }
+  .modal-caixa, .sheet { width: 100% !important; }
+  .ini-fluxo { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .qg-top { flex-wrap: wrap; }
+  .alt-item { grid-template-columns: minmax(0,1fr); }
+}

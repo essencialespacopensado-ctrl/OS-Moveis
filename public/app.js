@@ -3600,7 +3600,7 @@ function Assistente({ sessao, osAberta }) {
 
   return html`
     <button class=${'assist-fab' + (aberto ? ' on' : '')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
-      ${aberto ? '✕' : html`<span>✦</span> Assistente`}
+      ${aberto ? '✕' : html`<span>✦</span><em class="txt-desk"> Assistente</em>`}
     </button>
     ${aberto && html`
       <div class="assist-panel glass" role="dialog" aria-label="Assistente de IA">
@@ -3653,6 +3653,8 @@ const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a =
 
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const [lista, setLista] = useState(null);
+  const [compacto, setCompacto] = useState(() => { try { return localStorage.getItem('osm_ini_compacto') !== '0'; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem('osm_ini_compacto', compacto ? '1' : '0'); } catch {} }, [compacto]);
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState('');
   const [amb, setAmb] = useState('');
@@ -3679,8 +3681,31 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     (!amb || categoriasDaOS(o).includes(amb)) &&
     (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
+  const togg = html`<div class="seg-mini"><button class=${compacto ? 'on' : ''} onClick=${() => setCompacto(true)}>☰ Compacto</button><button class=${!compacto ? 'on' : ''} onClick=${() => setCompacto(false)}>▦ Detalhado</button></div>`;
+  if (compacto) return html`
+    <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
+      <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
+        <b style=${{ fontSize: '17px' }}>Produção <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
+        <div class="row" style=${{ gap: '6px' }}>${togg}<button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button></div>
+      </div>
+      <div class="ini-fluxo">
+        ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
+      </div>
+      <input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <div class="ini-lista">
+        ${filtradas.length === 0 && lista !== null && html`<div class="vazio dim">Nenhuma OS.</div>`}
+        ${filtradas.map(o => { const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0]; const at = atrasada(o); return html`
+          <button key=${o.id} class=${'ini-l' + (at ? ' atras' : '')} style=${temCores(o) ? { borderLeftColor: o.cores[0] } : undefined} onClick=${() => abrirOS(o.id)}>
+            <span class="ini-n">${numOS(o)}</span>
+            <span class="ini-t"><b>${o.cliente?.nome || '—'}</b> <small>${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ')}</small></span>
+            ${o.prazoEntrega && html`<span class=${'ini-p' + (at ? ' atras' : '')}>${o.prazoEntrega.slice(0, 5)}</span>`}
+            <i class=${'ini-st st-' + x.v} title=${x.t}></i>
+          </button>`; })}
+      </div>
+    </div>`;
   return html`
     <div class="fade-up stack" style=${{ gap: '16px' }}>
+      <div class="row" style=${{ justifyContent: 'flex-end' }}>${togg}</div>
       <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
         <div>
           <div class="row" style=${{ gap: '10px' }}><span class="mini-mark">OS</span><h2 style=${{ fontSize: '24px' }}>Console de Produção</h2></div>
@@ -3792,20 +3817,20 @@ function Principal({ sessao, toast }) {
           <div class="brand-mini">
             <div class="brand-mark">GP</div>
             <div>
-              <div class="row" style=${{ gap: '6px' }}><b style=${{ fontFamily: 'var(--font-display)', fontSize: '16px' }}>Gestão Pró</b><span class="tag">GESTÃO</span></div>
-              <div class="dim" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
+              <div class="row" style=${{ gap: '6px' }}><b style=${{ fontFamily: 'var(--font-display)', fontSize: '16px' }}>Gestão Pró</b><span class="tag txt-desk">GESTÃO</span></div>
+              <div class="dim topo-emp" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
             </div>
           </div>
           <nav class="pillnav">
             ${abas.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span class="ico">${a.i}</span>${a.t}</button>`)}
           </nav>
-          <div class="row" style=${{ gap: '8px' }}>
+          <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
               <span class="avatar">${iniciais}</span>
-              <span style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
+              <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
-            <button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); }}>⟳ Atualizar</button>
-            <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥ Sair</button>
+            <button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); }}>⟳<span class="txt-desk"> Atualizar</span></button>
+            <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
         </div>
       </header>
