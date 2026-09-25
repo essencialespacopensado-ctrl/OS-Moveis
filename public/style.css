@@ -737,3 +737,32 @@ fieldset.trava[disabled]{opacity:.72}
   .qg-top { flex-wrap: wrap; }
   .alt-item { grid-template-columns: minmax(0,1fr); }
 }
+
+/* v27 — início: por cliente e kanban */
+.ini-vistas{display:flex;overflow-x:auto;max-width:100%}
+.ini-vistas button{white-space:nowrap}
+.ini-clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.ini-cli{border-radius:14px;overflow:hidden;background:#fff;border:1px solid color-mix(in srgb,var(--cc) 30%,#eee);box-shadow:0 2px 8px -4px color-mix(in srgb,var(--cc) 50%,transparent)}
+.ini-cli-top{background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 70%,#000));color:#fff;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ini-cli-top b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-cli-top span{font-size:12px;opacity:.9;white-space:nowrap}.ini-cli-top em{font-style:normal;background:#dc2626;border-radius:999px;padding:0 6px}
+.ini-cli-oss{display:flex;flex-direction:column;background:color-mix(in srgb,var(--cc) 6%,#fff)}
+.ini-cli-os{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center;padding:7px 12px;border:0;border-top:1px solid color-mix(in srgb,var(--cc) 12%,#eee);background:transparent;text-align:left;font-family:inherit;cursor:pointer}
+.ini-cli-os:hover{background:color-mix(in srgb,var(--cc) 12%,#fff)}
+.ini-cli-os .mono{font:700 12px 'JetBrains Mono',monospace;color:var(--cc)}
+.ini-cli-os .nm{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-cli-os small{grid-column:2/4;font-size:11px;color:#78716c}
+.ini-cli-os.atras small{color:#dc2626;font-weight:700}
+.chip.mini{font-size:10px!important;padding:1px 7px!important}
+.ini-kan{display:grid;grid-template-columns:repeat(6,minmax(170px,1fr));gap:8px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}
+.ini-kcol{background:#f5f4f1;border-radius:12px;display:flex;flex-direction:column;min-width:0;scroll-snap-align:start;border-top:4px solid #a8a29e}
+.k-projetos{border-top-color:#3b82f6}.k-producao{border-top-color:#0d9488}.k-liberacao{border-top-color:#f59e0b}.k-montagem{border-top-color:#7c3aed}.k-concluida{border-top-color:#16a34a}
+.ini-kh{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font-size:12.5px}
+.ini-kh span{background:#fff;border-radius:999px;padding:0 8px;font-weight:700}
+.ini-kcards{display:flex;flex-direction:column;gap:6px;padding:0 6px 8px;max-height:65vh;overflow-y:auto}
+.ini-kc{display:flex;flex-direction:column;gap:2px;text-align:left;background:#fff;border:1px solid #eee;border-left:5px solid #999;border-radius:9px;padding:7px 9px;font-family:inherit;cursor:pointer}
+.ini-kc b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-kc small{font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-kc .mono{font:700 11.5px 'JetBrains Mono',monospace}
+.ini-kc.atras{background:#fffafa}.vermelho{color:#dc2626!important;font-weight:700}
+@media (max-width:700px){.ini-kan{grid-template-columns:repeat(6,78vw)}.ini-clis{grid-template-columns:minmax(0,1fr)}}

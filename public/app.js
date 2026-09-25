@@ -3653,8 +3653,9 @@ const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a =
 
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const [lista, setLista] = useState(null);
-  const [compacto, setCompacto] = useState(() => { try { return localStorage.getItem('osm_ini_compacto') !== '0'; } catch { return true; } });
-  useEffect(() => { try { localStorage.setItem('osm_ini_compacto', compacto ? '1' : '0'); } catch {} }, [compacto]);
+  const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_ini_vista') || 'compacto'; } catch { return 'compacto'; } });
+  useEffect(() => { try { localStorage.setItem('osm_ini_vista', vista); } catch {} }, [vista]);
+  const compacto = vista === 'compacto';
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState('');
   const [amb, setAmb] = useState('');
@@ -3681,21 +3682,68 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     (!amb || categoriasDaOS(o).includes(amb)) &&
     (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
-  const togg = html`<div class="seg-mini"><button class=${compacto ? 'on' : ''} onClick=${() => setCompacto(true)}>☰ Compacto</button><button class=${!compacto ? 'on' : ''} onClick=${() => setCompacto(false)}>▦ Detalhado</button></div>`;
-  if (compacto) return html`
-    <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
+  const togg = html`<div class="seg-mini ini-vistas">${[['compacto', '☰ Compacto'], ['cliente', '🎨 Por cliente'], ['kanban', '▥ Kanban'], ['detalhado', '▦ Detalhado']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}</div>`;
+  const PALETA_CLI = ['#6B4423', '#1E3A5F', '#1F4D3A', '#632B30', '#A85A44', '#4B5340', '#1C3144', '#7C3AED', '#B45309', '#0E7490', '#BE185D', '#374151'];
+  const corCli = (nome) => { let h = 0; for (const ch of norm(nome)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; };
+  const corOS = (o) => temCores(o) ? o.cores[0] : corCli(o.cliente?.nome || '');
+  const cabecalho = html`
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <b style=${{ fontSize: '17px' }}>Produção <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
-        <div class="row" style=${{ gap: '6px' }}>${togg}<button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button></div>
+        <button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button>
       </div>
+      ${togg}
       <div class="ini-fluxo">
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
-      <input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />`;
+  if (vista === 'cliente') {
+    const grupos = {};
+    filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
+    return html`
+    <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
+      ${cabecalho}
+      <div class="ini-clis">
+        ${Object.values(grupos).sort((a, b) => a.nome.localeCompare(b.nome)).map(g => { const c = corOS(g.oss[0]); const atr = g.oss.filter(atrasada).length; return html`
+          <div key=${g.nome} class="ini-cli" style=${{ '--cc': c }}>
+            <div class="ini-cli-top"><b>${g.nome}</b><span>${g.oss.length} ${g.oss.length === 1 ? 'OS' : 'OSs'}${atr ? html` · <em>⚠ ${atr}</em>` : ''}</span></div>
+            <div class="ini-cli-oss">
+              ${g.oss.map(o => { const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0]; return html`
+                <button key=${o.id} class=${'ini-cli-os' + (atrasada(o) ? ' atras' : '')} onClick=${() => abrirOS(o.id)}>
+                  <span class="mono">${numOS(o)}</span>
+                  <span class="nm">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo || '—'}</span>
+                  <span class=${x.c + ' mini'}>${x.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</span>
+                  ${o.prazoEntrega && html`<small>🚚 ${o.prazoEntrega.slice(0, 5)}</small>`}
+                </button>`; })}
+            </div>
+          </div>`; })}
+      </div>
+    </div>`;
+  }
+  if (vista === 'kanban') return html`
+    <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
+      ${cabecalho}
+      <div class="ini-kan">
+        ${STATUS_OS.map(col => { const itens = filtradas.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === col.v); return html`
+          <div key=${col.v} class=${'ini-kcol k-' + col.v}>
+            <div class="ini-kh"><b>${col.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</b><span>${itens.length}</span></div>
+            <div class="ini-kcards">
+              ${itens.map(o => html`<button key=${o.id} class=${'ini-kc' + (atrasada(o) ? ' atras' : '')} style=${{ borderLeftColor: corOS(o) }} onClick=${() => abrirOS(o.id)}>
+                <div class="row" style=${{ justifyContent: 'space-between', gap: '4px' }}><span class="mono">${numOS(o)}</span>${o.prazoEntrega && html`<small class=${atrasada(o) ? 'vermelho' : ''}>🚚 ${o.prazoEntrega.slice(0, 5)}</small>`}</div>
+                <b>${o.cliente?.nome || '—'}</b>
+                <small>${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ')}</small>
+              </button>`)}
+              ${!itens.length && html`<div class="dim" style=${{ fontSize: '12px', padding: '6px' }}>—</div>`}
+            </div>
+          </div>`; })}
+      </div>
+    </div>`;
+  if (compacto) return html`
+    <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
+      ${cabecalho}
       <div class="ini-lista">
         ${filtradas.length === 0 && lista !== null && html`<div class="vazio dim">Nenhuma OS.</div>`}
         ${filtradas.map(o => { const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0]; const at = atrasada(o); return html`
-          <button key=${o.id} class=${'ini-l' + (at ? ' atras' : '')} style=${temCores(o) ? { borderLeftColor: o.cores[0] } : undefined} onClick=${() => abrirOS(o.id)}>
+          <button key=${o.id} class=${'ini-l' + (at ? ' atras' : '')} style=${{ borderLeftColor: corOS(o) }} onClick=${() => abrirOS(o.id)}>
             <span class="ini-n">${numOS(o)}</span>
             <span class="ini-t"><b>${o.cliente?.nome || '—'}</b> <small>${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ')}</small></span>
             ${o.prazoEntrega && html`<span class=${'ini-p' + (at ? ' atras' : '')}>${o.prazoEntrega.slice(0, 5)}</span>`}
