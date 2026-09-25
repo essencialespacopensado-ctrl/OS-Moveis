@@ -67,8 +67,9 @@ const STATUS_OS = [
   { v: 'elaboracao', t: '1. Elaboração', c: 'chip' },
   { v: 'projetos', t: '2. Projetos', c: 'chip chip-azul' },
   { v: 'producao', t: '3. Produção', c: 'chip chip-teal' },
-  { v: 'montagem', t: '4. Montagem', c: 'chip chip-roxo' },
-  { v: 'concluida', t: '5. Concluída', c: 'chip chip-ok' },
+  { v: 'liberacao', t: '4. Aguard. liberação p/ entrega', c: 'chip chip-warn' },
+  { v: 'montagem', t: '5. Montagem', c: 'chip chip-roxo' },
+  { v: 'concluida', t: '6. Concluída', c: 'chip chip-ok' },
 ];
 const PAPEIS = [
   { v: 'admin', t: 'Administrador' },
@@ -1254,8 +1255,9 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
     { t: '1. Elaboração', n: cnt('elaboracao'), s: pf(cnt('elaboracao')), cls: '', f: 'elaboracao' },
     { t: '2. Projetos', n: cnt('projetos'), s: pf(cnt('projetos')), cls: 'tile-azul', f: 'projetos' },
     { t: '3. Produção', n: cnt('producao'), s: pf(cnt('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '4. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '5. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: '4. Aguard. liberação', n: cnt('liberacao'), s: pf(cnt('liberacao')), cls: 'tile-warn', f: 'liberacao' },
+    { t: '5. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '6. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
     { t: 'Vencidas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
 
@@ -1367,6 +1369,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
               </div>
               ${atrasada(o) && html`<span class="chip chip-danger">Vencida</span>`}
               ${nRev > 0 && html`<span class="chip chip-warn">${nRev} p/ revisar</span>`}
+              ${o.revisao?.em && o.revisao.em >= (o.atualizadoEm || '') ? html`<span class="chip chip-ok" title=${'Revisada por ' + o.revisao.por}>✅ Revisada</span>` : html`<span class="chip" title=${'Alterada por ' + (o.atualizadoPor || '')}>✏️ ${o.atualizadoPor || ''}</span>`}
               <span class=${x.c}>${x.t}</span>
             </div>`; })}
         </div>`}
@@ -1537,6 +1540,12 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
 
       <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
         <div>
+          ${(() => { const rev = os.revisao; const ok = rev?.em && (!os.atualizadoEm || rev.em >= os.atualizadoEm); return html`<div class="rev-linha">
+            <span>✏️ Última alteração: <b>${os.atualizadoPor || os.criadoPor || '—'}</b> · ${os.atualizadoEm ? new Date(os.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+            ${ok ? html`<span class="rev-ok">✅ Revisada por <b>${rev.por}</b> · ${new Date(rev.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>`
+              : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Marcar como revisada</button>`}
+            ${!ok && rev?.em && html`<small class="dim">(alterada depois da última revisão de ${rev.por})</small>`}
+          </div>`; })()}
           <div class="row" style=${{ gap: '8px' }}><span class="os-num num-badge">${numOS(os)}</span><span class=${(STATUS_OS[idxSt] || STATUS_OS[0]).c}>${(STATUS_OS[idxSt] || STATUS_OS[0]).t}</span>${os.numeroAntigo && html`<span class="chip">antiga: ${os.numeroAntigo}</span>`}</div>
           <h2 style=${{ fontSize: '24px', marginTop: '6px' }}>${os.cliente?.nome || 'Cliente não informado'}</h2>
           <div class="dim">Ambiente: <b>${(os.ambientes || []).map(x => x.nome).join(', ') || '—'}</b> • Obra: <b>${os.cliente?.obra || '—'}</b></div>
@@ -2028,9 +2037,10 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
     const etapas = { ...(o.execucao?.etapas || {}) };
     etapas[k] = { ...(etapas[k] || {}), status: 'pronto', concluidaEm: nowIso() };
     const i = ETAPAS_FAB.findIndex(e => e[0] === k), prox = ETAPAS_FAB[i + 1]?.[0];
-    if (prox && (etapas[prox]?.status || 'pendente') === 'pendente') etapas[prox] = { ...(etapas[prox] || {}), status: 'andamento' };
+    if (prox && prox !== 'montagem' && (etapas[prox]?.status || 'pendente') === 'pendente') etapas[prox] = { ...(etapas[prox] || {}), status: 'andamento' };
     const todas = ETAPAS_FAB.every(([x]) => etapas[x]?.status === 'pronto');
-    const status = todas ? 'concluida' : k === 'montagem' || etapas.montagem?.status === 'andamento' ? 'montagem' : 'producao';
+    const semMontagem = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => etapas[x]?.status === 'pronto');
+    const status = todas ? 'concluida' : etapas.montagem?.status === 'andamento' ? 'montagem' : semMontagem ? 'liberacao' : 'producao';
     salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: o.status === 'concluida' ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
   };
   const reab = (o, oque, motivo) => [...(o.reaberturas || []), { oque, motivo, quem: sessao.nome, quando: nowIso() }];
@@ -2080,6 +2090,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
           <div class="qg-top" onClick=${() => abrirOS(o.id)}>
             <b class="qg-num">${numOS(o)}</b>
             <div class="qg-cli"><b>${o.cliente?.nome || 'Cliente'}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}</small></div>
+            <span class=${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).c + ' qg-st'}>${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
             <div class=${'qg-prazo' + (atras ? ' atras' : '')}>${o.prazoEntrega ? (atras ? '⚠ ' : '🚚 ') + o.prazoEntrega.slice(0, 5) : '—'}</div>
           </div>
           <button class="qg-prod" onClick=${() => setSheet({ osId: o.id, tipo: 'prod' })}>
@@ -2101,6 +2112,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
 
             ${sheet.tipo === 'prod' && html`
               <div class="sheet-t">🏭 Produção na fábrica</div>
+              ${osSheet.status === 'liberacao' && html`<button class="btn btn-grande btn-verde btn-block" onClick=${() => { const et2 = { ...(osSheet.execucao?.etapas || {}) }; et2.montagem = { ...(et2.montagem || {}), status: 'andamento' }; salvar(osSheet, { status: 'montagem', execucao: { ...(osSheet.execucao || {}), etapas: et2 } }, 'Liberado para entrega/montagem'); }}>🚚 Liberar para entrega / montagem</button>`}
               ${ETAPAS_FAB.map(([k, t]) => { const e = osSheet.execucao?.etapas?.[k] || {}; const s = e.status || 'pendente'; return html`
                 <div key=${k} class=${'sheet-linha ' + s}>
                   <div><b>${t}</b><small>${s === 'pronto' ? '✓ Pronto' : s === 'andamento' ? 'Em andamento' : 'Pendente'}${e.onde === 'terceirizada' ? ' · terceirizado' : ''}${e.prazo ? ' · até ' + e.prazo : ''}</small></div>
@@ -2478,6 +2490,7 @@ function linhaDoTempo(os) {
   Object.entries(os.execucao?.etapas || {}).forEach(([k, e]) => { if (e.concluidaEm) ev.push({ q: e.concluidaEm, ic: '✅', t: 'Etapa concluída: ' + ((ETAPAS_FAB.find(x => x[0] === k) || [])[1] || k) }); });
   Object.entries(os.parceiros || {}).forEach(([k, pa]) => (pa.hist || []).forEach(h => ev.push({ q: h.em, ic: '🤝', t: ((TIPOS_PARC.find(x => x[0] === k) || [])[2] || k) + ': ' + infoSt(h.st)[2], d: h.motivo || '', p: h.quem })));
   (os.contrato?.arquivos || []).forEach(a => ev.push({ q: a.em, ic: '📑', t: 'Contrato anexado: ' + a.nome }));
+  (os.revisoes || []).forEach(r => ev.push({ q: r.em, ic: '☑️', t: 'Revisada', p: r.por }));
   if (os.restauradaEm) ev.push({ q: os.restauradaEm, ic: '♻️', t: 'OS restaurada', p: os.restauradaPor });
   if (os.atualizadoEm) ev.push({ q: os.atualizadoEm, ic: '💾', t: 'Última modificação', p: os.atualizadoPor, ultima: true });
   return ev.filter(e => e.q).sort((a, b) => String(b.q).localeCompare(String(a.q)));
@@ -2924,7 +2937,7 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
       const prox = ETAPAS_FAB[i + 1]?.[0];
       if (prox) o.execucao.etapas[prox] = { ...et(prox), ...(o.execucao.etapas[prox] || {}), status: 'andamento' };
       if (o.status === 'elaboracao' || o.status === 'projetos') o.status = 'producao';
-      if (prox === 'montagem' && o.status === 'producao') o.status = 'montagem';
+      if (prox === 'montagem' && (o.status === 'producao' || o.status === 'projetos' || o.status === 'elaboracao')) o.status = 'liberacao';
       if (!prox) o.status = 'concluida';
     });
   };
@@ -3558,8 +3571,9 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     { t: '1. Elaboração', n: st('elaboracao'), s: pct(st('elaboracao')), cls: '', f: 'elaboracao' },
     { t: '2. Projetos', n: st('projetos'), s: pct(st('projetos')), cls: 'tile-azul', f: 'projetos' },
     { t: '3. Produção', n: st('producao'), s: pct(st('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '4. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '5. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
+    { t: '4. Aguard. liberação', n: st('liberacao'), s: pct(st('liberacao')), cls: 'tile-warn', f: 'liberacao' },
+    { t: '5. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
+    { t: '6. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
     { t: 'Atrasadas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Tudo em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
   const filtradas = os.filter(o =>
