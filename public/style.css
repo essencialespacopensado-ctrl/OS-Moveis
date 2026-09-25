@@ -526,3 +526,22 @@ fieldset.trava[disabled]{opacity:.72}
 .po-rod{display:flex;justify-content:space-between;margin-top:14px;padding-top:5px;border-top:1px solid #eee;font-size:7.5pt;color:#a8a29e}
 .po-dots{background:#fff;border-radius:999px;padding:4px 6px;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .po-dots i{border-color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+
+/* v13 — contrato, ata e cronogramas */
+.drop-mini{border:1.5px dashed #d6d3d1;border-radius:10px;padding:10px;text-align:center;color:#8a8175;font-size:13px}
+.leg{width:12px;height:12px;border-radius:3px;display:inline-block}
+.gantt{display:flex;flex-direction:column;border:1px solid #eee;border-radius:10px;overflow:hidden}
+.g-row{display:grid;grid-template-columns:230px 1fr;border-bottom:1px solid #f0eeea;cursor:pointer;min-height:44px}
+.g-row:hover{background:#faf9f7}
+.g-head{cursor:default;background:#f7f5f1;font-size:11px;color:#8a8175;min-height:28px}
+.g-nome{padding:6px 10px;font-size:12.5px;border-right:1px solid #eee;overflow:hidden}
+.g-nome small{display:block;color:#8a8175;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-trilha{position:relative}
+.g-head .g-trilha span{position:absolute;top:7px;transform:translateX(2px)}
+.g-bar{position:absolute;top:11px;height:22px;border-radius:6px;color:#fff;font-size:10.5px;font-style:normal;padding:3px 6px;overflow:hidden;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.g-bar.pendente{opacity:.45}
+.g-bar.pronto{outline:2px solid #15803d;outline-offset:1px}
+.g-hoje{position:absolute;top:0;bottom:0;width:2px;background:#dc2626}
+.g-entrega{position:absolute;top:10px;transform:translateX(-50%);font-size:18px}
+.g-vazio{position:absolute;top:13px;left:8px;font-size:12px}
+@media(max-width:700px){.g-row{grid-template-columns:120px 1fr}}

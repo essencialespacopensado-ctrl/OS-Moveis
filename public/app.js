@@ -1415,7 +1415,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], ata: os.ata || null, contrato: os.contrato || null, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1548,6 +1548,10 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         ${os.historico.map((h, i) => html`<div key=${i} class="item-lista"><span>${h.motivo}<br/><small class="dim">${h.quem} · ${fmtData(h.quando)}</small></span></div>`)}</details>`}
       <fieldset class="trava" disabled=${bloqueada}>
       ${etapa === 1 && html`
+        <div class="grid2" style=${{ alignItems: 'start' }}>
+          <${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
+          <${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
+        </div>
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between' }}>
             <div class="sec-title">Fluxo de andamento da marcenaria</div>
@@ -1658,6 +1662,217 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       <div class="dim" style=${{ textAlign: 'right' }}>Para excluir esta OS use a aba <b>🗑 Excluir OSs</b> (pede senha e motivo).</div>
       ${imprimir && ReactDOM.createPortal(html`<${ImpressaoOS} os=${os} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <datalist id="lista-fab-mdf">${fabricantesMDF.map(f => html`<option key=${f} value=${f} />`)}</datalist>
+    </div>`;
+}
+
+
+/* ---------- Preencher só o que está vazio ---------- */
+const vazio = (v) => v == null || v === '' || v === false || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.values(v).every(vazio));
+function preencherVazios(alvo, fonte, cont = { n: 0 }) {
+  if (!fonte || typeof fonte !== 'object') return cont;
+  for (const [k, v] of Object.entries(fonte)) {
+    if (vazio(v) || k === 'revisar' || k === 'id') continue;
+    const atual = alvo[k];
+    if (vazio(atual)) { alvo[k] = JSON.parse(JSON.stringify(v)); cont.n++; }
+    else if (!Array.isArray(v) && typeof v === 'object' && typeof atual === 'object' && !Array.isArray(atual)) preencherVazios(atual, v, cont);
+  }
+  return cont;
+}
+function mesclarOS(o, nova) {
+  const n = sanearOS(nova);
+  const cont = { n: 0 };
+  o.cliente = o.cliente || {};
+  preencherVazios(o.cliente, n.cliente, cont);
+  ['prazoEntrega', 'observacoesGerais', 'responsavel', 'arquiteto', 'ambienteResumo'].forEach(k => { if (vazio(o[k]) && !vazio(n[k])) { o[k] = n[k]; cont.n++; } });
+  if (n.tamponamento) { o.tamponamento = o.tamponamento || {}; preencherVazios(o.tamponamento, n.tamponamento, cont); }
+  if (n.padrao) { o.padrao = o.padrao || {}; preencherVazios(o.padrao, n.padrao, cont); }
+  o.ambientes = o.ambientes || [];
+  for (const a of n.ambientes) {
+    const ex = o.ambientes.find(x => norm(x.nome) === norm(a.nome));
+    if (!ex) { o.ambientes.push(a); cont.n += 1 + a.moveis.length; continue; }
+    ex.moveis = ex.moveis || [];
+    for (const m of a.moveis) {
+      const em = ex.moveis.find(x => norm(x.nome) === norm(m.nome));
+      if (!em) { ex.moveis.push(m); cont.n++; } else preencherVazios(em, m, cont);
+    }
+  }
+  return cont.n;
+}
+
+/* ---------- Contrato dentro da OS ---------- */
+function ContratoOS({ os, alterar, catalogo, toast }) {
+  const [rodando, setRodando] = useState('');
+  const [erro, setErro] = useState('');
+  const inp = useRef(null);
+  const c = os.contrato || {};
+  const setC = (k, v) => alterar(o => { o.contrato = { ...(o.contrato || {}), [k]: v }; });
+  const enviar = async (files) => {
+    if (!files?.length) return;
+    setErro('');
+    try {
+      let texto = '', imagens = [];
+      for (const f of files) {
+        setRodando('Lendo ' + f.name + '…');
+        const r = await extrairArquivo(f);
+        texto += `\n=== ${f.name} ===\n` + r.texto;
+        imagens = imagens.concat(r.imagens || []).slice(0, 12);
+      }
+      setRodando('A IA está extraindo o que importa…');
+      const res = await chamarIA('contrato_os', { texto, temImagens: imagens.length > 0, os: sanearOS(os), catalogo: resumoCatalogo(catalogo) }, imagens);
+      let n = 0;
+      alterar(o => {
+        n = mesclarOS(o, res);
+        const k = res.contrato || {};
+        o.contrato = { ...(o.contrato || {}) };
+        Object.entries(k).forEach(([kk, v]) => { if (vazio(o.contrato[kk]) && !vazio(v)) o.contrato[kk] = Array.isArray(v) ? v.join('\n') : String(v); });
+        o.contrato.arquivos = [...(o.contrato.arquivos || []), ...[...files].map(f => ({ nome: f.name, em: nowIso() }))];
+      });
+      toast(`Contrato lido: ${n} campos da OS preenchidos. Confira.`, 'ok');
+    } catch (e) { setErro(e.message); }
+    setRodando('');
+  };
+  return html`
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div><div class="sec-title">📑 Contrato & documentos</div><div class="dim">Coloque o contrato (PDF, Word, Excel ou foto). A IA preenche a OS só onde ainda está vazio.</div></div>
+        <button class="btn btn-marrom" disabled=${!!rodando} onClick=${() => inp.current?.click()}>${rodando ? '⏳ ' + rodando : '⬆ Colocar contrato'}</button>
+        <input ref=${inp} type="file" multiple hidden accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { enviar([...e.target.files]); e.target.value = ''; }} />
+      </div>
+      <div class="drop-mini" onDragOver=${e => e.preventDefault()} onDrop=${e => { e.preventDefault(); enviar([...e.dataTransfer.files]); }}>Ou arraste o contrato aqui</div>
+      ${erro && html`<div class="error-box">${erro}</div>`}
+      ${(c.arquivos || []).length > 0 && html`<div class="row" style=${{ gap: '5px' }}>${c.arquivos.map((a, i) => html`<span key=${i} class="chip">📄 ${a.nome}</span>`)}</div>`}
+      <div class="grid3">
+        ${[['numero', 'Nº do contrato'], ['dataAssinatura', 'Data de assinatura'], ['valorTotal', 'Valor total'], ['formaPagamento', 'Forma de pagamento'], ['prazoContratual', 'Prazo contratual'], ['garantia', 'Garantia']].map(([k, t]) => html`
+          <div key=${k} class="field"><span class="lbl">${t}</span><input class="inp" value=${c[k] || ''} onInput=${e => setC(k, e.target.value)} /></div>`)}
+      </div>
+      <div class="field"><span class="lbl">Cláusulas importantes (multas, o que não está incluso, condições de entrega)</span>
+        <textarea class="inp" rows="3" value=${c.clausulasImportantes || ''} onInput=${e => setC('clausulasImportantes', e.target.value)}></textarea></div>
+    </div>`;
+}
+
+/* ---------- Ata da reunião ao vivo dentro da OS ---------- */
+function AtaOS({ os, alterar, catalogo, toast }) {
+  const [trecho, setTrecho] = useState('');
+  const [interim, setInterim] = useState('');
+  const [status, setStatus] = useState('');
+  const pend = useRef('');
+  const rodando = useRef(false);
+  const osRef = useRef(os); osRef.current = os;
+  const ata = os.ata || {};
+  const processar = async (forcar) => {
+    const t = pend.current.trim();
+    if (rodando.current || (!forcar && t.length < 350) || !t) return;
+    rodando.current = true; pend.current = '';
+    try {
+      setStatus('IA escrevendo a ata…');
+      const nova = await chamarIA('ata', { ataAtual: osRef.current.ata || {}, trecho: t, catalogo: resumoCatalogo(catalogo) });
+      alterar(o => { o.ata = { ...nova, atualizadaEm: nowIso() }; });
+      setStatus('Preenchendo o que falta na OS…');
+      const res = await chamarIA('preencher_os', { ata: nova, os: { ...sanearOS(osRef.current), padrao: osRef.current.padrao || {}, tamponamento: osRef.current.tamponamento || {} }, catalogo: resumoCatalogo(catalogo) });
+      let n = 0; alterar(o => { n = mesclarOS(o, res); });
+      setStatus(n ? `✓ Ata atualizada · ${n} campos preenchidos` : '✓ Ata atualizada');
+    } catch (e) { pend.current = t + ' ' + pend.current; setStatus('⚠ ' + e.message); }
+    rodando.current = false;
+  };
+  const fala = useFala({
+    onFinal: (t) => { setTrecho(v => (v + ' ' + t).slice(-3000)); pend.current += ' ' + t; processar(false); },
+    onInterim: setInterim,
+  });
+  const parar = () => { fala.parar(); setTimeout(() => processar(true), 400); };
+  const setAta = (fn) => alterar(o => { o.ata = o.ata || {}; fn(o.ata); });
+  const linhas = (arr) => (arr || []).join('\n');
+  const deLinhas = (t) => t.split('\n').map(x => x.trim()).filter(Boolean);
+  return html`
+    <div class="card page-card stack" style=${{ borderColor: fala.ouvindo ? 'var(--danger)' : undefined }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div><div class="sec-title">🎙 Ata da reunião</div><div class="dim">Ligue durante a reunião: a IA escreve a ata por ambiente, ignora conversa paralela e preenche na OS só o que ainda está vazio.</div></div>
+        ${fala.ouvindo ? html`<button class="btn btn-mic-on pulse" onClick=${parar}>■ Parar reunião</button>`
+          : html`<button class="btn btn-teal" onClick=${fala.iniciar}>🎤 Iniciar reunião</button>`}
+      </div>
+      ${fala.erro && html`<div class="error-box">${fala.erro}</div>`}
+      ${(fala.ouvindo || trecho) && html`<div class="transcript" style=${{ maxHeight: '90px' }}>${trecho.slice(-600)}<span class="interim"> ${interim}</span></div>`}
+      ${status && html`<div class="dim">${status}</div>`}
+      <div class="row" style=${{ gap: '6px' }}>
+        <button class="btn btn-sm" disabled=${!os.ata} onClick=${async () => { pend.current = pend.current || ' '; setStatus('Preenchendo…'); try { const res = await chamarIA('preencher_os', { ata: os.ata, os: { ...sanearOS(os), padrao: os.padrao || {} }, catalogo: resumoCatalogo(catalogo) }); let n = 0; alterar(o => { n = mesclarOS(o, res); }); setStatus(`✓ ${n} campos preenchidos`); } catch (e) { setStatus('⚠ ' + e.message); } }}>✨ Preencher OS com a ata</button>
+        <span class="dim">Tudo abaixo pode ser editado à mão.</span>
+      </div>
+      <div class="field"><span class="lbl">Resumo</span><textarea class="inp" rows="2" value=${ata.resumo || ''} onInput=${e => setAta(a => { a.resumo = e.target.value; })}></textarea></div>
+      ${(ata.ambientes || []).map((a, i) => html`
+        <div key=${i} class="acab-box">
+          <input class="inp inp-sm" style=${{ fontWeight: 700 }} value=${a.nome || ''} onInput=${e => setAta(x => { x.ambientes[i].nome = e.target.value; })} />
+          <textarea class="inp" rows="2" placeholder="Pontos gerais do ambiente (um por linha)" value=${linhas(a.pontosGerais)} onInput=${e => setAta(x => { x.ambientes[i].pontosGerais = deLinhas(e.target.value); })}></textarea>
+          ${(a.moveis || []).map((m, j) => html`<div key=${j} class="field"><span class="lbl">${m.nome}</span><textarea class="inp" rows="2" value=${linhas(m.pontos)} onInput=${e => setAta(x => { x.ambientes[i].moveis[j].pontos = deLinhas(e.target.value); })}></textarea></div>`)}
+        </div>`)}
+      <button class="btn btn-sm btn-ghost" onClick=${() => setAta(a => { a.ambientes = [...(a.ambientes || []), { nome: 'Novo ambiente', pontosGerais: [], moveis: [] }]; })}>+ Ambiente na ata</button>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Decisões</span><textarea class="inp" rows="3" value=${linhas(ata.decisoes)} onInput=${e => setAta(a => { a.decisoes = deLinhas(e.target.value); })}></textarea></div>
+        <div class="field"><span class="lbl">Pendências</span><textarea class="inp" rows="3" value=${linhas(ata.pendencias)} onInput=${e => setAta(a => { a.pendencias = deLinhas(e.target.value); })}></textarea></div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Cronogramas de produção e entregas ---------- */
+function TelaCronograma({ sessao, abrirOS }) {
+  const [lista, setLista] = useState(null);
+  const [vista, setVista] = useState('producao');
+  const [semanas, setSemanas] = useState(8);
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+  }, []);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const ini = new Date(hoje); ini.setDate(ini.getDate() - ((ini.getDay() + 6) % 7));
+  const dias = semanas * 7;
+  const pos = (d) => d ? Math.max(0, Math.min(100, (d - ini) / 86400000 / dias * 100)) : null;
+  const ativas = (lista || []).filter(o => o.status !== 'concluida');
+  const cores = { corte: '#6B7280', fita: '#A16207', cavas: '#0E7490', pintura: '#BE185D', tapecaria: '#7C3AED', montagem: '#15803D' };
+  const entregas = (lista || []).filter(o => lerPrazo(o.prazoEntrega)).sort((a, b) => lerPrazo(a.prazoEntrega) - lerPrazo(b.prazoEntrega));
+  const semanaDe = (d) => { const s = new Date(d); s.setDate(s.getDate() - ((s.getDay() + 6) % 7)); return s; };
+  const grupos = {};
+  entregas.forEach(o => { const d = lerPrazo(o.prazoEntrega); const k = d < hoje && o.status !== 'concluida' ? 'Atrasadas' : 'Semana de ' + semanaDe(d).toLocaleDateString('pt-BR'); (grupos[k] = grupos[k] || []).push(o); });
+  return html`
+    <div class="fade-up stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div><h2>Cronogramas</h2><div class="dim">Produção por etapa da oficina e agenda de entregas.</div></div>
+        <div class="seg-mini"><button class=${vista === 'producao' ? 'on' : ''} onClick=${() => setVista('producao')}>🏭 Produção</button><button class=${vista === 'entregas' ? 'on' : ''} onClick=${() => setVista('entregas')}>🚚 Entregas</button></div>
+      </div>
+      ${lista === null ? html`<div class="card">Carregando…</div>` : vista === 'producao' ? html`
+        <div class="card page-card stack">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <div class="row" style=${{ gap: '8px' }}>${ETAPAS_FAB.map(([k, t]) => html`<span key=${k} class="row dim" style=${{ gap: '4px' }}><i class="leg" style=${{ background: cores[k] }}></i>${t}</span>`)}</div>
+            <select class="inp inp-sm" style=${{ width: 'auto' }} value=${semanas} onChange=${e => setSemanas(+e.target.value)}>${[4, 8, 12, 16].map(n => html`<option key=${n} value=${n}>${n} semanas</option>`)}</select>
+          </div>
+          <div class="gantt">
+            <div class="g-row g-head"><div class="g-nome">OS</div><div class="g-trilha">${Array.from({ length: semanas }, (_, i) => { const d = new Date(ini); d.setDate(d.getDate() + i * 7); return html`<span key=${i} style=${{ left: (i / semanas * 100) + '%' }}>${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>`; })}
+              <b class="g-hoje" style=${{ left: pos(hoje) + '%' }}></b></div></div>
+            ${ativas.map(o => {
+              const et = o.execucao?.etapas || {};
+              let ant = lerPrazo(o.criadoEm?.slice(0, 10).split('-').reverse().join('/')) || hoje;
+              const barras = ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const fim = lerPrazo(e.prazo); const r = fim ? { k, t, de: ant, ate: fim, st: e.status || 'pendente' } : null; if (fim) ant = fim; return r; }).filter(Boolean);
+              const entrega = lerPrazo(o.prazoEntrega);
+              return html`<div key=${o.id} class="g-row" onClick=${() => abrirOS(o.id)}>
+                <div class="g-nome"><b>${numOS(o)}</b> ${o.cliente?.nome || ''}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></div>
+                <div class="g-trilha">
+                  ${barras.map(b => html`<i key=${b.k} class=${'g-bar ' + b.st} title=${b.t + ' até ' + b.ate.toLocaleDateString('pt-BR')} style=${{ left: pos(b.de) + '%', width: Math.max(1.2, pos(b.ate) - pos(b.de)) + '%', background: cores[b.k] }}>${b.t}</i>`)}
+                  ${!barras.length && html`<span class="dim g-vazio">Defina os prazos das etapas na Etapa 3 da OS</span>`}
+                  ${entrega && html`<b class="g-entrega" title=${'Entrega ' + o.prazoEntrega} style=${{ left: pos(entrega) + '%' }}>🚚</b>`}
+                  <b class="g-hoje" style=${{ left: pos(hoje) + '%' }}></b>
+                </div></div>`; })}
+            ${!ativas.length && html`<div class="vazio dim">Nenhuma OS em andamento.</div>`}
+          </div>
+        </div>` : html`
+        <div class="stack">
+          ${Object.entries(grupos).map(([g, os]) => html`
+            <div key=${g} class="card page-card stack">
+              <div class="sec-title" style=${g === 'Atrasadas' ? { color: 'var(--danger)' } : undefined}>${g === 'Atrasadas' ? '⚠ ' : '📅 '}${g} <span class="chip">${os.length}</span></div>
+              ${os.map(o => html`<div key=${o.id} class="list-item" style=${pinta(o)} onClick=${() => abrirOS(o.id)}>
+                <div class="os-num">${numOS(o)}</div>
+                <div class="grow"><div class="title">${o.cliente?.nome || '—'}</div><div class="dim">${(o.ambientes || []).map(a => a.nome).join(', ')} · ${o.cliente?.endereco || o.cliente?.obra || ''}</div></div>
+                <b>${o.prazoEntrega}</b><span class=${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).c}>${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t}</span>
+              </div>`)}
+            </div>`)}
+          ${!entregas.length && html`<div class="card vazio dim">Nenhuma OS com prazo de entrega definido.</div>`}
+        </div>`}
     </div>`;
 }
 
@@ -2819,6 +3034,7 @@ function Principal({ sessao, toast }) {
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
+    { v: 'cronograma', t: 'Cronogramas', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
   ];
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
@@ -2855,6 +3071,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
