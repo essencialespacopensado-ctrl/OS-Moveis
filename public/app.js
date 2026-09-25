@@ -1812,6 +1812,19 @@ function AtaOS({ os, alterar, catalogo, toast }) {
 }
 
 /* ---------- Aba Contratos: lê o contrato e cria/atualiza as OSs ---------- */
+// Ordem das OSs: primeiro as áreas com pedra — banheiros/lavabo, lavanderia, cozinhas — depois as demais.
+const temPedra = (a) => /pedra|granito|marmore|quartzo|silestone|dekton|porcelanato|bancada|marmoraria|cuba/.test(norm(JSON.stringify(a)));
+function ordemAmb(a) {
+  const n = norm(a.nome);
+  if (/banh|bwc|wc|lavabo|toalete|sanitario|suite.*banho|sala de banho/.test(n)) return 0;
+  if (/lavanderia|area de servico|servico/.test(n)) return 1;
+  if (/cozinha|copa|gourmet|churrasq|espaco gourmet/.test(n)) return 2;
+  if (temPedra(a)) return 3;
+  return 4;
+}
+const ROTULO_ORDEM = ['🚿 Banheiro / lavabo', '🧺 Lavanderia', '🍳 Cozinha', '🪨 Com pedra', 'Demais'];
+const ordenarAmbs = (ambs) => ambs.map((a, i) => ({ a, i })).sort((x, y) => ordemAmb(x.a) - ordemAmb(y.a) || x.i - y.i).map(x => x.a);
+
 function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
   const [lista, setLista] = useState([]);
   const [oss, setOss] = useState([]);
@@ -1837,6 +1850,7 @@ function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
       setRodando('A IA está extraindo o contrato…');
       const r = await chamarIA('contrato_os', { texto, temImagens: imagens.length > 0, os: {}, catalogo: resumoCatalogo(catalogo) }, imagens);
       const os = sanearOS(r);
+      os.ambientes = ordenarAmbs(os.ambientes);
       setRes({ os, contrato: r.contrato || {}, arquivos: [...files].map(f => f.name) });
       setMarcados(Object.fromEntries(os.ambientes.map((_, i) => [i, true])));
       const mesmo = oss.find(o => norm(o.cliente?.nome) && norm(o.cliente?.nome) === norm(os.cliente.nome));
@@ -1904,7 +1918,8 @@ function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
           </div>
           ${txtC(C.clausulasImportantes) && html`<div class="dica"><b>Cláusulas importantes:</b><div style=${{ whiteSpace: 'pre-wrap' }}>${txtC(C.clausulasImportantes)}</div></div>`}
           <span class="lbl">Ambientes encontrados (${res.os.ambientes.length})</span>
-          ${res.os.ambientes.map((a, i) => html`<label key=${i} class="item-lista" style=${{ cursor: 'pointer' }}><span><input type="checkbox" checked=${!!marcados[i]} onChange=${e => setMarcados({ ...marcados, [i]: e.target.checked })} /> <b>${a.nome}</b> <span class="dim">· ${a.moveis.length} móveis</span></span></label>`)}
+          <div class="dim" style=${{ fontSize: '12px' }}>Cada ambiente vira uma OS, nesta ordem: banheiros/lavabo → lavanderia → cozinhas → demais áreas com pedra → resto.</div>
+          ${(() => { let k = 0; return res.os.ambientes.map((a, i) => { const o = ordemAmb(a); const nPrev = marcados[i] && destino === 'novas' ? ++k : null; return html`<label key=${i} class="item-lista" style=${{ cursor: 'pointer' }}><span><input type="checkbox" checked=${!!marcados[i]} onChange=${e => setMarcados({ ...marcados, [i]: e.target.checked })} /> ${nPrev ? html`<span class="chip chip-accent">${nPrev}ª OS</span> ` : ''}<b>${a.nome}</b> <span class="dim">· ${a.moveis.length} móveis</span></span><span class="chip">${ROTULO_ORDEM[o]}${o < 3 && temPedra(a) ? ' · 🪨' : ''}</span></label>`; }); })()}
           <div class="opcoes3" style=${{ gridTemplateColumns: '1fr 1fr' }}>
             <button class=${'opc' + (destino === 'novas' ? ' on' : '')} onClick=${() => setDestino('novas')}><b>Criar OSs novas</b><small>Uma OS para cada ambiente marcado</small></button>
             <button class=${'opc' + (destino === 'existente' ? ' on' : '')} onClick=${() => setDestino('existente')}><b>Completar OS existente</b><small>Preenche só o que estiver vazio</small></button>
