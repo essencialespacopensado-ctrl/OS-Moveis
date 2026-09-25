@@ -1415,7 +1415,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         if (outra) { setDup(outra); setSalvando(false); return; }
         setDup(null);
         const { updateDoc } = F().fsMod;
-        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], ata: os.ata || null, contrato: os.contrato || null, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+        await updateDoc(ref, { ...limpo, padrao: os.padrao || {}, execucao: os.execucao || {}, tamponamento: os.tamponamento || {}, responsavel: os.responsavel || '', arquiteto: os.arquiteto || '', modoExecucao: os.modoExecucao || 'interna', ambienteResumo: os.ambienteResumo || '', cores: temCores(os) ? os.cores : null, historico: os.historico || [], ata: os.ata || null, contrato: os.contrato || null, parceiros: os.parceiros || {}, status: os.status || 'elaboracao', fingerprint: fp, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
         if (versao.current === v) setSujo(false);
       } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
       setSalvando(false);
@@ -1808,6 +1808,152 @@ function AtaOS({ os, alterar, catalogo, toast }) {
         <div class="field"><span class="lbl">Decisões</span><textarea class="inp" rows="3" value=${linhas(ata.decisoes)} onInput=${e => setAta(a => { a.decisoes = deLinhas(e.target.value); })}></textarea></div>
         <div class="field"><span class="lbl">Pendências</span><textarea class="inp" rows="3" value=${linhas(ata.pendencias)} onInput=${e => setAta(a => { a.pendencias = deLinhas(e.target.value); })}></textarea></div>
       </div>
+    </div>`;
+}
+
+/* ---------- Quadro geral: andamento de cada cliente (celular, só botões) ---------- */
+const TIPOS_PARC = [
+  ['vidros', '🪟', 'Vidros & espelhos'], ['pintura', '🎨', 'Pintura / laca'], ['tapecaria', '🛋️', 'Tapeçaria'],
+  ['corte', '✂️', 'Corte terceirizado'], ['lamina', '🌳', 'Lâminas / esquadrias'], ['pedra', '🪨', 'Pedra / marmoraria'],
+  ['serralheria', '⚙️', 'Serralheria / metais'], ['outro', '📦', 'Outro parceiro'],
+];
+const ST_PARC = [
+  ['orcar', 'Pedir orçamento', 'A orçar', '#9ca3af'],
+  ['aguard_orc', 'Orçamento pedido', 'Aguard. orçamento', '#f59e0b'],
+  ['aguard_aprov', 'Orçamento chegou', 'Aguard. aprovação', '#ea580c'],
+  ['pedido', 'Aprovado / mandado fazer', 'Mandado fazer', '#2563eb'],
+  ['recebido', 'Recebido na fábrica', 'Recebido ✓', '#16a34a'],
+];
+function parceirosDaOS(o) {
+  const P = o.padrao || {}, et = o.execucao?.etapas || {}, salvo = o.parceiros || {};
+  const auto = {
+    vidros: !!P.vidros?.ativo,
+    pintura: P.acab?.interno?.tipo === 'laca' || P.acab?.externo?.tipo === 'laca' || et.pintura?.onde === 'terceirizada',
+    tapecaria: !!P.tec?.ativo || et.tapecaria?.onde === 'terceirizada',
+    corte: et.corte?.onde === 'terceirizada',
+    lamina: P.acab?.interno?.tipo === 'lamina' || P.acab?.externo?.tipo === 'lamina',
+  };
+  return TIPOS_PARC.filter(([k]) => (auto[k] || salvo[k]) && salvo[k]?.st !== 'nao')
+    .map(([k, ic, t]) => ({ k, ic, t, ...(salvo[k] || {}), st: salvo[k]?.st || 'orcar' }));
+}
+const infoSt = (st) => ST_PARC.find(x => x[0] === st) || ST_PARC[0];
+
+function QuadroGeral({ sessao, abrirOS, toast }) {
+  const [lista, setLista] = useState(null);
+  const [filtro, setFiltro] = useState('todas');
+  const [busca, setBusca] = useState('');
+  const [sheet, setSheet] = useState(null); // {osId, tipo:'parc'|'prod'|'add', k}
+  useEffect(() => {
+    const { onSnapshot, query, orderBy } = F().fsMod;
+    return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+  }, []);
+  const salvar = async (o, patch, msg) => {
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ...patch, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); if (msg) toast(msg, 'ok'); }
+    catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+  };
+  const setParc = (o, k, patch, msg) => {
+    const atual = (o.parceiros || {})[k] || {};
+    const hist = patch.st && patch.st !== atual.st ? [...(atual.hist || []), { st: patch.st, quem: sessao.nome, em: nowIso() }] : (atual.hist || []);
+    salvar(o, { parceiros: { ...(o.parceiros || {}), [k]: { ...atual, st: atual.st || 'orcar', ...patch, hist } } }, msg);
+  };
+  const concluirEtapa = (o, k) => {
+    const etapas = { ...(o.execucao?.etapas || {}) };
+    etapas[k] = { ...(etapas[k] || {}), status: 'pronto', concluidaEm: nowIso() };
+    const i = ETAPAS_FAB.findIndex(e => e[0] === k), prox = ETAPAS_FAB[i + 1]?.[0];
+    if (prox && (etapas[prox]?.status || 'pendente') === 'pendente') etapas[prox] = { ...(etapas[prox] || {}), status: 'andamento' };
+    const todas = ETAPAS_FAB.every(([x]) => etapas[x]?.status === 'pronto');
+    const status = todas ? 'concluida' : k === 'montagem' || etapas.montagem?.status === 'andamento' ? 'montagem' : 'producao';
+    salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: o.status === 'concluida' ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
+  };
+  const voltarEtapa = (o, k) => {
+    const etapas = { ...(o.execucao?.etapas || {}) };
+    etapas[k] = { ...(etapas[k] || {}), status: 'andamento' };
+    salvar(o, { execucao: { ...(o.execucao || {}), etapas } }, 'Etapa reaberta');
+  };
+  const ativas = (lista || []).filter(o => o.status !== 'concluida');
+  const cards = ativas.map(o => {
+    const parc = parceirosDaOS(o);
+    const et = o.execucao?.etapas || {};
+    const feitas = ETAPAS_FAB.filter(([k]) => et[k]?.status === 'pronto').length;
+    const pendParc = parc.filter(p => p.st !== 'recebido');
+    return { o, parc, et, feitas, pendParc, atras: atrasada(o), aprov: parc.some(p => p.st === 'aguard_aprov') };
+  }).filter(c => {
+    if (busca && !norm(numOS(c.o) + ' ' + (c.o.cliente?.nome || '') + ' ' + (c.o.ambientes || []).map(a => a.nome).join(' ')).includes(norm(busca))) return false;
+    if (filtro === 'parceiros') return c.pendParc.length > 0;
+    if (filtro === 'aprovacao') return c.aprov;
+    if (filtro === 'atrasadas') return c.atras;
+    return true;
+  });
+  const cont = { parceiros: ativas.filter(o => parceirosDaOS(o).some(p => p.st !== 'recebido')).length, aprovacao: ativas.filter(o => parceirosDaOS(o).some(p => p.st === 'aguard_aprov')).length, atrasadas: ativas.filter(atrasada).length };
+  const osSheet = sheet && (lista || []).find(x => x.id === sheet.osId);
+  const pSheet = osSheet && sheet.tipo === 'parc' ? parceirosDaOS(osSheet).find(p => p.k === sheet.k) || { k: sheet.k, st: 'orcar', ...(TIPOS_PARC.find(t => t[0] === sheet.k) ? { ic: TIPOS_PARC.find(t => t[0] === sheet.k)[1], t: TIPOS_PARC.find(t => t[0] === sheet.k)[2] } : {}) } : null;
+
+  return html`
+    <div class="fade-up stack qg">
+      <div><h2>Quadro geral</h2><div class="dim">Toque em um item para avançar. Produção da fábrica e parceiros de cada cliente.</div></div>
+      <div class="qg-filtros">
+        ${[['todas', 'Todas', ativas.length], ['parceiros', 'Pendências de parceiro', cont.parceiros], ['aprovacao', 'Aguard. aprovação', cont.aprovacao], ['atrasadas', 'Atrasadas', cont.atrasadas]].map(([v, t, n]) => html`
+          <button key=${v} class=${'qg-f' + (filtro === v ? ' on' : '') + (v === 'atrasadas' && n ? ' perigo' : '')} onClick=${() => setFiltro(v)}>${t} <b>${n}</b></button>`)}
+      </div>
+      <input class="inp" placeholder="🔍 Buscar cliente, OS ou ambiente" value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <div class="qg-leg">${ST_PARC.map(s => html`<span key=${s[0]}><i style=${{ background: s[3] }}></i>${s[2]}</span>`)}</div>
+      ${lista === null ? html`<div class="card">Carregando…</div>` : cards.length === 0 ? html`<div class="card vazio dim">Nada por aqui.</div>` : cards.map(({ o, parc, et, feitas, atras }) => html`
+        <div key=${o.id} class=${'qg-card' + (atras ? ' atras' : '')} style=${temCores(o) ? { borderLeftColor: o.cores[0] } : undefined}>
+          <div class="qg-top" onClick=${() => abrirOS(o.id)}>
+            <b class="qg-num">${numOS(o)}</b>
+            <div class="qg-cli"><b>${o.cliente?.nome || 'Cliente'}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}</small></div>
+            <div class=${'qg-prazo' + (atras ? ' atras' : '')}>${o.prazoEntrega ? (atras ? '⚠ ' : '🚚 ') + o.prazoEntrega.slice(0, 5) : '—'}</div>
+          </div>
+          <button class="qg-prod" onClick=${() => setSheet({ osId: o.id, tipo: 'prod' })}>
+            ${ETAPAS_FAB.map(([k, t]) => { const s = et[k]?.status || 'pendente'; return html`<span key=${k} class=${'qg-seg ' + s}><i></i><small>${t.split(' ')[0]}</small></span>`; })}
+            <em>${feitas}/6</em>
+          </button>
+          <div class="qg-parc">
+            ${parc.map(p => { const s = infoSt(p.st); return html`<button key=${p.k} class="qg-chip" style=${{ borderColor: s[3], background: s[3] + '1f' }} onClick=${() => setSheet({ osId: o.id, tipo: 'parc', k: p.k })}>
+              <span>${p.ic}</span><b style=${{ color: s[3] }}>${s[2]}</b>${p.previsao ? html`<small>${p.previsao.slice(0, 5)}</small>` : ''}</button>`; })}
+            <button class="qg-chip add" onClick=${() => setSheet({ osId: o.id, tipo: 'add' })}>＋ parceiro</button>
+          </div>
+        </div>`)}
+
+      ${osSheet && ReactDOM.createPortal(html`
+        <div class="sheet-fundo" onClick=${e => e.target === e.currentTarget && setSheet(null)}>
+          <div class="sheet">
+            <div class="sheet-alça"></div>
+            <div class="row" style=${{ justifyContent: 'space-between' }}><div><b>${numOS(osSheet)}</b> · ${osSheet.cliente?.nome}</div><button class="x-btn" onClick=${() => setSheet(null)}>✕</button></div>
+
+            ${sheet.tipo === 'prod' && html`
+              <div class="sheet-t">🏭 Produção na fábrica</div>
+              ${ETAPAS_FAB.map(([k, t]) => { const e = osSheet.execucao?.etapas?.[k] || {}; const s = e.status || 'pendente'; return html`
+                <div key=${k} class=${'sheet-linha ' + s}>
+                  <div><b>${t}</b><small>${s === 'pronto' ? '✓ Pronto' : s === 'andamento' ? 'Em andamento' : 'Pendente'}${e.onde === 'terceirizada' ? ' · terceirizado' : ''}${e.prazo ? ' · até ' + e.prazo : ''}</small></div>
+                  ${s === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => voltarEtapa(osSheet, k)}>Reabrir</button>`
+                    : html`<button class="btn btn-grande btn-verde" onClick=${() => concluirEtapa(osSheet, k)}>✓ Concluir</button>`}
+                </div>`; })}`}
+
+            ${sheet.tipo === 'parc' && pSheet && html`
+              <div class="sheet-t">${pSheet.ic} ${pSheet.t}</div>
+              ${(() => { const i = ST_PARC.findIndex(x => x[0] === pSheet.st); const prox = ST_PARC[i + 1]; return prox
+                ? html`<button class="btn btn-grande btn-verde btn-block" onClick=${() => setParc(osSheet, pSheet.k, { st: prox[0] }, pSheet.t + ': ' + prox[2])}>✓ ${prox[1]}</button>`
+                : html`<div class="ok-box">✓ Recebido na fábrica</div>`; })()}
+              <div class="sheet-passos">
+                ${ST_PARC.map(([v, , t, c], i) => { const at = ST_PARC.findIndex(x => x[0] === pSheet.st); return html`
+                  <button key=${v} class=${'sheet-passo' + (i <= at ? ' feito' : '') + (i === at ? ' atual' : '')} style=${i <= at ? { background: c, borderColor: c } : undefined} onClick=${() => setParc(osSheet, pSheet.k, { st: v })}>${i < at ? '✓ ' : ''}${t}</button>`; })}
+              </div>
+              <div class="grid2">
+                <div class="field"><span class="lbl">Parceiro / fornecedor</span><input class="inp" value=${pSheet.parceiro || ''} placeholder="Ex: Projetta" onChange=${e => setParc(osSheet, pSheet.k, { parceiro: e.target.value })} /></div>
+                <div class="field"><span class="lbl">Previsão (dd/mm)</span><input class="inp" inputmode="numeric" value=${pSheet.previsao || ''} placeholder="Ex: 03/10" onChange=${e => setParc(osSheet, pSheet.k, { previsao: e.target.value })} /></div>
+              </div>
+              <div class="field"><span class="lbl">Valor / observação</span><input class="inp" value=${pSheet.obs || ''} placeholder="Ex: R$ 1.850 · 4 portas reflecta bronze" onChange=${e => setParc(osSheet, pSheet.k, { obs: e.target.value })} /></div>
+              ${(pSheet.hist || []).length > 0 && html`<details><summary class="dim">Histórico</summary>${pSheet.hist.slice().reverse().map((h, i) => html`<div key=${i} class="dim" style=${{ fontSize: '12px' }}>${infoSt(h.st)[2]} · ${h.quem} · ${fmtData(h.em)}</div>`)}</details>`}
+              <button class="btn btn-sm btn-ghost" onClick=${() => { setParc(osSheet, pSheet.k, { st: 'nao' }, 'Removido do quadro'); setSheet(null); }}>Não precisa deste parceiro nesta OS</button>`}
+
+            ${sheet.tipo === 'add' && html`
+              <div class="sheet-t">Adicionar parceiro nesta OS</div>
+              <div class="sheet-grade">
+                ${TIPOS_PARC.map(([k, ic, t]) => html`<button key=${k} class="btn btn-grande" onClick=${() => { setParc(osSheet, k, { st: 'orcar' }, t + ' adicionado'); setSheet({ osId: osSheet.id, tipo: 'parc', k }); }}><span style=${{ fontSize: '22px' }}>${ic}</span><br/>${t}</button>`)}
+              </div>`}
+          </div>
+        </div>`, document.body)}
     </div>`;
 }
 
@@ -3263,6 +3409,7 @@ function Principal({ sessao, toast }) {
   const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
+    { v: 'quadro', t: 'Quadro geral', i: '📊' },
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
@@ -3305,6 +3452,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
