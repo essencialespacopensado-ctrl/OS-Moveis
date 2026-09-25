@@ -1811,10 +1811,232 @@ function AtaOS({ os, alterar, catalogo, toast }) {
     </div>`;
 }
 
+/* ---------- Cronogramas: agenda semanal (modelo Zonta), mês, produção e entregas ---------- */
+const DIAS_SEM = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+const GRADES = [
+  ['entregas', '🚚 Cronograma de entregas', 'Viagem'],
+  ['montagem', '🔧 Montagem', 'Equipe'],
+  ['producao', '🪵 Produção – vidros, madeira e ferros', 'Pessoa'],
+  ['terceirizados', '🤝 Produção – terceirizados', 'Parceiro'],
+  ['marceneiros', '🪚 Cronograma marceneiros', 'Marceneiro'],
+];
+const LISTAS = [
+  ['entregasObs', 'Entregas sem data / observações', '🚚'],
+  ['usinagens', 'Corte – usinagens e orgânicos', '✂️'], ['cortes', 'Corte – cortes', '✂️'],
+  ['fitaExtras', 'Fita – extras', '🎞️'], ['fitaLimpeza', 'Fita – fitar e limpeza', '🎞️'],
+  ['liberado', 'Liberado marceneiro', '✅'], ['prontoMontagem', 'Pronto para montagem', '📦'],
+];
+const agendaPadrao = (semana) => ({
+  semana, prioridades: '',
+  grades: {
+    entregas: [{ nome: 'Viagem 1', dias: ['', '', '', '', ''] }, { nome: 'Viagem 2', dias: ['', '', '', '', ''] }],
+    montagem: ['RICARDO + AJUDANTE', 'LUCAS + CLEITON', 'EQUIPE NOVA'].map(nome => ({ nome, dias: ['', '', '', '', ''] })),
+    producao: ['EDINHO', 'ROMILDO + ANTÔNIO'].map(nome => ({ nome, dias: ['', '', '', '', ''] })),
+    terceirizados: ['FERNANDO', 'PETER', 'CRIS', 'CRISTIANO'].map(nome => ({ nome, dias: ['', '', '', '', ''] })),
+    marceneiros: ['CRIS', 'CLEITON', 'HERMANN', 'CRISTIANO', 'MELK'].map(nome => ({ nome, dias: ['', '', '', '', ''] })),
+  },
+  listas: {},
+  fornecedores: ['PINTURA – LACA NOBRE', 'VIDROS – PROJETTA', 'PINTURA – EZEQUIEL', 'PINTURA – CELSO', 'ESQUADRIAS E LÂMINAS – ADEBLU', 'EDUARDO'].map(nome => ({ nome, itens: '' })),
+});
+const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const segundaDe = (d) => { const s = new Date(d); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() - ((s.getDay() + 6) % 7)); return s; };
+const deIso = (t) => { const [a, m, d] = t.split('-').map(Number); return new Date(a, m - 1, d); };
+const mesmoDia = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const linhaOS = (o) => `OS:${numOS(o)} – ${o.cliente?.nome || ''}${(o.ambientes || []).length ? ' – ' + o.ambientes.map(a => a.nome).join(', ') : ''}`;
+// O que as OSs cadastradas trazem sozinhas para cada dia (entrega e prazos das etapas).
+function eventosOS(lista, dia) {
+  const ev = [];
+  for (const o of lista || []) {
+    if (mesmoDia(lerPrazo(o.prazoEntrega), dia) && o.status !== 'concluida') ev.push({ o, t: 'entrega', txt: '🚚 Entrega' });
+    const et = o.execucao?.etapas || {};
+    for (const [k, t] of ETAPAS_FAB) if (et[k]?.prazo && mesmoDia(lerPrazo(et[k].prazo), dia) && et[k].status !== 'pronto') ev.push({ o, t: k, txt: t });
+  }
+  return ev;
+}
+
+function OSPicker({ lista, onPick }) {
+  const [q, setQ] = useState(''); const [ab, setAb] = useState(false);
+  const res = (lista || []).filter(o => !q || norm(linhaOS(o)).includes(norm(q))).slice(0, 12);
+  return html`<span class="opc-wrap"><button type="button" class="btn btn-ghost btn-sm" onClick=${() => setAb(!ab)}>+ OS</button>
+    ${ab && html`<div class="opc-pop" onMouseLeave=${() => setAb(false)}><input class="inp inp-sm" autoFocus placeholder="Buscar cliente, OS, ambiente…" value=${q} onInput=${e => setQ(e.target.value)} />
+      ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" onClick=${() => { onPick(linhaOS(o)); setAb(false); setQ(''); }}><span><b>${numOS(o)}</b> ${o.cliente?.nome}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></span></button>`)}</div>`}</span>`;
+}
+const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
+
+function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
+  const [doc, setDoc] = useState(undefined);
+  const [sujo, setSujo] = useState(false);
+  const [importando, setImportando] = useState('');
+  const inp = useRef(null);
+  const ref = docRef('empresas', sessao.empresaId, 'agenda', semana);
+  useEffect(() => {
+    setDoc(undefined); setSujo(false);
+    return F().fsMod.onSnapshot(ref, d => { if (!sujoRef.current) setDoc(d.exists() ? d.data() : null); });
+  }, [semana]);
+  const sujoRef = useRef(false); sujoRef.current = sujo;
+  useEffect(() => {
+    if (!sujo || !doc) return;
+    const t = setTimeout(async () => { try { await F().fsMod.setDoc(ref, { ...doc, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); setSujo(false); } catch (e) { toast('Não salvou a agenda: ' + e.message, 'erro'); } }, 900);
+    return () => clearTimeout(t);
+  }, [doc, sujo]);
+  const mudar = (fn) => { setDoc(d => { const n = JSON.parse(JSON.stringify(d)); fn(n); return n; }); setSujo(true); };
+  const seg = deIso(semana);
+  const diasD = DIAS_SEM.map((_, i) => { const d = new Date(seg); d.setDate(d.getDate() + i); return d; });
+  const mover = (n) => { const d = new Date(seg); d.setDate(d.getDate() + 7 * n); setSemana(iso(d)); };
+  const criar = async (copiar) => {
+    let base = agendaPadrao(semana);
+    if (copiar) {
+      const ant = new Date(seg); ant.setDate(ant.getDate() - 7);
+      const a = await F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(ant)));
+      if (a.exists()) { const x = a.data(); base = { ...base, grades: Object.fromEntries(Object.entries(x.grades || {}).map(([k, rows]) => [k, rows.map(r => ({ nome: r.nome, dias: ['', '', '', '', ''] }))])), fornecedores: (x.fornecedores || []).map(f => ({ nome: f.nome, itens: f.itens })), listas: { liberado: x.listas?.liberado || '', prontoMontagem: x.listas?.prontoMontagem || '' }, prioridades: x.prioridades || '' }; }
+      else toast('Não achei a semana anterior; criei no modelo padrão.');
+    }
+    setDoc(base); setSujo(true);
+  };
+  const importar = async (file) => {
+    if (!file) return;
+    try {
+      setImportando('Lendo ' + file.name + '…');
+      let r;
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        // Mantém as tabelas (dias da semana em colunas) para a IA entender.
+        const h = await mammoth.convertToHtml({ arrayBuffer: await lerArrayBuffer(file) });
+        const dv = document.createElement('div'); dv.innerHTML = h.value;
+        dv.querySelectorAll('table').forEach(t => { const txt = [...t.rows].map(tr => [...tr.cells].map(c => c.innerText.replace(/\s*\n\s*/g, ' / ').trim()).join(' | ')).join('\n'); const pre = document.createElement('p'); pre.textContent = '\n[TABELA]\n' + txt + '\n[/TABELA]\n'; t.replaceWith(pre); });
+        r = { texto: dv.innerText, imagens: [] };
+      } else r = await extrairArquivo(file);
+      setImportando('A IA está montando a agenda…');
+      const res = await chamarIA('agenda_semana', { texto: r.texto, temImagens: (r.imagens || []).length > 0, modelo: agendaPadrao(semana) }, r.imagens || []);
+      const n = { ...agendaPadrao(semana), ...res, semana };
+      Object.keys(n.grades || {}).forEach(k => { n.grades[k] = (n.grades[k] || []).map(x => ({ nome: String(x.nome || ''), dias: [0, 1, 2, 3, 4].map(i => String((x.dias || [])[i] || '')) })); });
+      n.fornecedores = (n.fornecedores || []).map(f => ({ nome: String(f.nome || ''), itens: Array.isArray(f.itens) ? f.itens.join('\n') : String(f.itens || '') }));
+      Object.keys(n.listas || {}).forEach(k => { if (Array.isArray(n.listas[k])) n.listas[k] = n.listas[k].join('\n'); });
+      if (Array.isArray(n.prioridades)) n.prioridades = n.prioridades.join('\n');
+      if (res.semanaDetectada && /^\d{4}-\d{2}-\d{2}$/.test(res.semanaDetectada) && res.semanaDetectada !== semana) toast('O arquivo parece ser da semana de ' + deIso(res.semanaDetectada).toLocaleDateString('pt-BR') + '. Troque a semana se quiser salvar lá.');
+      setDoc(n); setSujo(true); toast('Agenda importada. Confira.', 'ok');
+    } catch (e) { toast('Não importou: ' + e.message, 'erro'); }
+    setImportando('');
+  };
+  const autoDia = (i, filtro) => eventosOS(lista, diasD[i]).filter(filtro);
+  const tituloSemana = diasD[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' a ' + diasD[4].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return html`
+    <div class="stack">
+      <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class="btn btn-sm" onClick=${() => mover(-1)}>‹</button>
+          <b style=${{ fontSize: '17px' }}>Semana ${tituloSemana}</b>
+          <button class="btn btn-sm" onClick=${() => mover(1)}>›</button>
+          <button class="btn btn-sm btn-ghost" onClick=${() => setSemana(iso(segundaDe(new Date())))}>Hoje</button>
+          <span class="dim">${sujo ? 'Salvando…' : doc ? 'Salvo ✓' : ''}</span>
+        </div>
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class="btn btn-sm" disabled=${!!importando} onClick=${() => inp.current?.click()}>${importando || '⬆ Importar agenda (Word/PDF/foto)'}</button>
+          <input ref=${inp} type="file" hidden accept=".docx,.pdf,.xlsx,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
+          ${doc && html`<button class="btn btn-sm" onClick=${() => { document.body.classList.add('imp-agenda'); setTimeout(() => { window.print(); document.body.classList.remove('imp-agenda'); }, 100); }}>🖨 Imprimir</button>`}
+        </div>
+      </div>
+
+      ${doc === undefined ? html`<div class="card">Carregando…</div>` : doc === null ? html`
+        <div class="card page-card stack" style=${{ alignItems: 'center', textAlign: 'center' }}>
+          <b>Esta semana ainda não tem agenda.</b>
+          <div class="dim">As entregas e prazos das OSs cadastradas já aparecem sozinhos quando você criar.</div>
+          <div class="row"><button class="btn btn-marrom" onClick=${() => criar(true)}>Criar copiando equipes da semana anterior</button><button class="btn" onClick=${() => criar(false)}>Criar no modelo padrão</button></div>
+        </div>` : html`
+        <div class="agenda-print">
+          <div class="card page-card stack">
+            <div class="sec-title">⭐ Prioridades da semana</div>
+            <textarea class="inp" rows="2" placeholder="Uma por linha" value=${doc.prioridades || ''} onInput=${e => mudar(d => { d.prioridades = e.target.value; })}></textarea>
+          </div>
+          ${GRADES.map(([k, t, rot]) => html`
+            <div key=${k} class="card page-card stack">
+              <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${t}</div>
+                <button class="btn btn-sm btn-ghost" onClick=${() => mudar(d => { d.grades[k] = [...(d.grades[k] || []), { nome: '', dias: ['', '', '', '', ''] }]; })}>+ ${rot}</button></div>
+              <div class="ag-scroll"><table class="ag">
+                <thead><tr><th class="ag-nome"></th>${diasD.map((d, i) => html`<th key=${i} class=${mesmoDia(d, new Date()) ? 'hoje' : ''}>${DIAS_SEM[i].toUpperCase()} – ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</th>`)}</tr></thead>
+                <tbody>
+                  ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class="ag-chip" style=${temCores(e.o) ? { borderLeftColor: e.o.cores[0] } : undefined}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}</div>`)}</td>`)}</tr>`}
+                  ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
+                    <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
+                      <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
+                    ${r.dias.map((v, di) => html`<td key=${di}><textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
+                      <${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></td>`)}
+                  </tr>`)}
+                </tbody>
+              </table></div>
+            </div>`)}
+          <div class="grid2" style=${{ alignItems: 'start' }}>
+            ${LISTAS.map(([k, t, ic]) => {
+              const auto = k === 'cortes' ? 'corte' : k === 'fitaLimpeza' ? 'fita' : null;
+              const autos = auto ? diasD.flatMap(d => eventosOS(lista, d)).filter(e => e.t === auto) : [];
+              return html`<div key=${k} class="card page-card stack">
+                <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${ic} ${t}</div><${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.listas = d.listas || {}; d.listas[k] = addLinha(d.listas[k], l); })} /></div>
+                ${autos.map((e, j) => html`<div key=${j} class="ag-chip">📌 ${e.txt} até ${e.o.execucao.etapas[auto].prazo}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}</div>`)}
+                <textarea class="inp" rows="4" placeholder="Uma por linha" value=${doc.listas?.[k] || ''} onInput=${e => mudar(d => { d.listas = d.listas || {}; d.listas[k] = e.target.value; })}></textarea>
+              </div>`; })}
+          </div>
+          <div class="card page-card stack">
+            <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🏭 Fornecedores & parceiros (pintura, vidros, lâminas…)</div>
+              <button class="btn btn-sm btn-ghost" onClick=${() => mudar(d => { d.fornecedores = [...(d.fornecedores || []), { nome: '', itens: '' }]; })}>+ Fornecedor</button></div>
+            <div class="grid3" style=${{ alignItems: 'start' }}>
+              ${(doc.fornecedores || []).map((f, fi) => html`<div key=${fi} class="acab-box">
+                <div class="row" style=${{ flexWrap: 'nowrap', gap: '4px' }}><input class="ag-inp" style=${{ fontWeight: 700 }} value=${f.nome} placeholder="Fornecedor" onInput=${e => mudar(d => { d.fornecedores[fi].nome = e.target.value; })} />
+                  <${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.fornecedores[fi].itens = addLinha(d.fornecedores[fi].itens, l); })} />
+                  <button class="x-btn" onClick=${() => mudar(d => { d.fornecedores.splice(fi, 1); })}>×</button></div>
+                <textarea class="inp" rows="3" value=${f.itens} placeholder="O que está com este fornecedor e previsão" onInput=${e => mudar(d => { d.fornecedores[fi].itens = e.target.value; })}></textarea>
+              </div>`)}
+            </div>
+          </div>
+        </div>`}
+    </div>`;
+}
+
+function AgendaMes({ sessao, lista, setSemana, setVista }) {
+  const [mes, setMes] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
+  const [agendas, setAgendas] = useState({});
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'agenda'), s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); setAgendas(m); }, () => {}), []);
+  const ini = segundaDe(mes);
+  const semanas = [];
+  const fimMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
+  for (let d = new Date(ini); d <= fimMes && semanas.length < 6; d.setDate(d.getDate() + 7)) semanas.push(new Date(d));
+  const itensAgenda = (dia) => {
+    const s = agendas[iso(segundaDe(dia))]; if (!s) return [];
+    const i = (dia.getDay() + 6) % 7; if (i > 4) return [];
+    const out = [];
+    GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) out.push({ k, txt: (r.nome ? r.nome + ': ' : '') + v.split('\n')[0] }); }));
+    return out;
+  };
+  const cor = { entregas: '#0E7490', montagem: '#15803D', producao: '#A16207', terceirizados: '#7C3AED', marceneiros: '#B45309' };
+  const hoje = new Date();
+  return html`
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}>
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class="btn btn-sm" onClick=${() => setMes(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
+          <b style=${{ fontSize: '18px', textTransform: 'capitalize' }}>${mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</b>
+          <button class="btn btn-sm" onClick=${() => setMes(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>›</button>
+        </div>
+        <div class="row dim" style=${{ gap: '10px', fontSize: '12px' }}>${GRADES.map(([k, t]) => html`<span key=${k} class="row" style=${{ gap: '4px' }}><i class="leg" style=${{ background: cor[k] }}></i>${t.replace(/^\S+ /, '')}</span>`)}<span>🚚 entrega de OS · 📌 prazo de etapa</span></div>
+      </div>
+      <div class="mes">
+        ${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => html`<div key=${d} class="mes-h">${d}</div>`)}
+        ${semanas.flatMap(s => Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(d.getDate() + i); return d; })).map(d => {
+          const ev = eventosOS(lista, d); const ag = itensAgenda(d);
+          return html`<div key=${iso(d)} class=${'mes-d' + (d.getMonth() !== mes.getMonth() ? ' fora' : '') + (mesmoDia(d, hoje) ? ' hoje' : '')} onClick=${() => { setSemana(iso(segundaDe(d))); setVista('semana'); }}>
+            <b>${d.getDate()}</b>
+            ${ev.slice(0, 4).map((e, j) => html`<div key=${'e' + j} class=${'mes-ev ' + (e.t === 'entrega' ? 'ent' : '')} style=${temCores(e.o) ? { borderLeftColor: e.o.cores[0] } : undefined}>${e.t === 'entrega' ? '🚚' : '📌'} ${numOS(e.o)} ${e.o.cliente?.nome || ''}${e.t !== 'entrega' ? ' · ' + e.txt : ''}</div>`)}
+            ${ag.slice(0, 4).map((a, j) => html`<div key=${'a' + j} class="mes-ev" style=${{ borderLeftColor: cor[a.k] }}>${a.txt}</div>`)}
+            ${ev.length + ag.length > 8 && html`<small class="dim">+${ev.length + ag.length - 8} mais</small>`}
+          </div>`; })}
+      </div>
+    </div>`;
+}
+
 /* ---------- Cronogramas de produção e entregas ---------- */
-function TelaCronograma({ sessao, abrirOS }) {
+function TelaCronograma({ sessao, abrirOS, toast }) {
   const [lista, setLista] = useState(null);
-  const [vista, setVista] = useState('producao');
+  const [vista, setVista] = useState('semana');
+  const [semana, setSemana] = useState(() => iso(segundaDe(new Date())));
   const [semanas, setSemanas] = useState(8);
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
@@ -1833,10 +2055,13 @@ function TelaCronograma({ sessao, abrirOS }) {
   return html`
     <div class="fade-up stack">
       <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div><h2>Cronogramas</h2><div class="dim">Produção por etapa da oficina e agenda de entregas.</div></div>
-        <div class="seg-mini"><button class=${vista === 'producao' ? 'on' : ''} onClick=${() => setVista('producao')}>🏭 Produção</button><button class=${vista === 'entregas' ? 'on' : ''} onClick=${() => setVista('entregas')}>🚚 Entregas</button></div>
+        <div><h2>Cronogramas</h2><div class="dim">Agenda semanal da fábrica, visão do mês, produção por etapa e entregas. As OSs cadastradas aparecem sozinhas pelas datas.</div></div>
+        <div class="seg-mini">${[['semana', '📋 Semana'], ['mes', '🗓 Mês'], ['producao', '🏭 Produção'], ['entregas', '🚚 Entregas']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}</div>
       </div>
-      ${lista === null ? html`<div class="card">Carregando…</div>` : vista === 'producao' ? html`
+      ${lista === null ? html`<div class="card">Carregando…</div>`
+      : vista === 'semana' ? html`<${AgendaSemana} sessao=${sessao} lista=${lista} semana=${semana} setSemana=${setSemana} toast=${toast} />`
+      : vista === 'mes' ? html`<${AgendaMes} sessao=${sessao} lista=${lista} setSemana=${setSemana} setVista=${setVista} />`
+      : vista === 'producao' ? html`
         <div class="card page-card stack">
           <div class="row" style=${{ justifyContent: 'space-between' }}>
             <div class="row" style=${{ gap: '8px' }}>${ETAPAS_FAB.map(([k, t]) => html`<span key=${k} class="row dim" style=${{ gap: '4px' }}><i class="leg" style=${{ background: cores[k] }}></i>${t}</span>`)}</div>
@@ -3071,7 +3296,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} />`}
+        ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
