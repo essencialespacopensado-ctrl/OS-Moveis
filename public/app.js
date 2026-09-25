@@ -1910,7 +1910,7 @@ function QuadroGeral({ sessao, abrirOS, toast }) {
           </button>
           <div class="qg-parc">
             ${parc.map(p => { const s = infoSt(p.st); return html`<button key=${p.k} class="qg-chip" style=${{ borderColor: s[3], background: s[3] + '1f' }} onClick=${() => setSheet({ osId: o.id, tipo: 'parc', k: p.k })}>
-              <span>${p.ic}</span><b style=${{ color: s[3] }}>${s[2]}</b>${p.previsao ? html`<small>${p.previsao.slice(0, 5)}</small>` : ''}</button>`; })}
+              <span>${p.ic}</span>${p.t.split(/[ /]/)[0]}<b style=${{ color: s[3] }}>· ${s[2]}</b>${p.previsao ? html`<small>${p.previsao.slice(0, 5)}</small>` : ''}</button>`; })}
             <button class="qg-chip add" onClick=${() => setSheet({ osId: o.id, tipo: 'add' })}>＋ parceiro</button>
           </div>
         </div>`)}
