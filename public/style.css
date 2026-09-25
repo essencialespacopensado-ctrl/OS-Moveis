@@ -769,3 +769,47 @@ fieldset.trava[disabled]{opacity:.72}
 .btn-nova-versao{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important;animation:pulsa 1.6s infinite}
 @keyframes pulsa{0%{box-shadow:0 0 0 0 rgba(22,163,74,.6)}70%{box-shadow:0 0 0 10px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
 .faixa-versao{display:block;width:100%;border:0;background:#16a34a;color:#fff;padding:9px 12px;font:600 14px inherit;font-family:inherit;cursor:pointer;text-align:center;position:sticky;top:0;z-index:29}
+
+/* v30 — pedidos, tempos, folha de pendências */
+.qg-acoes{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.qg-acoes .qg-diario{text-align:center;padding:9px 4px}
+.qg-diario.tem-ped{border-style:solid;border-color:#93c5fd;background:#eff6ff;color:#1e40af}
+.tempos{display:flex;flex-direction:column;gap:3px}
+.tempos-top{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:#57534e}
+.tempos-barra{display:flex;height:6px;border-radius:3px;overflow:hidden;background:#eee}
+.tempos-barra i{display:block;height:100%}
+.ped-tipos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ped-tipo{display:flex;flex-direction:column;align-items:center;gap:1px;border:1.5px solid #e7e5e4;border-radius:12px;background:#fff;padding:9px 4px;font-family:inherit;cursor:pointer}
+.ped-tipo span{font-size:22px}.ped-tipo small{font-size:10.5px;color:#78716c}
+.ped-tipo.on{border-color:#1c1917;background:#1c1917;color:#fff}.ped-tipo.on small{color:#d6d3d1}
+.ped-itens{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.ped-item{display:flex;align-items:center;gap:5px;border:1.5px solid #e7e5e4;border-radius:10px;background:#fff;padding:8px 7px;font:600 12.5px inherit;font-family:inherit;cursor:pointer;min-height:42px}
+.ped-item span{font-size:17px}
+.ped-item.on{border-color:#b45309;background:#fffbeb}
+.ped-linha{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.stepper{display:flex;align-items:center;border:1.5px solid #e7e5e4;border-radius:10px;overflow:hidden;background:#fff}
+.stepper button{width:44px;height:42px;border:0;background:#f5f5f4;font-size:20px;cursor:pointer}
+.stepper b{min-width:40px;text-align:center;font-size:17px}
+.ped-peca{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;border:1px solid #eee;border-radius:12px;padding:10px;background:#faf9f7}
+.ped-desenho{display:flex;flex-direction:column;align-items:center;gap:4px}
+.ped-chapa{position:relative;width:170px;height:130px;background:repeating-linear-gradient(90deg,#e7d6b8,#e7d6b8 6px,#dcc8a6 6px,#dcc8a6 9px);border-radius:3px;margin:22px 30px 22px 10px}
+.ped-chapa .fita-l{position:absolute;border:0;background:#fff;cursor:pointer;opacity:.9}
+.ped-chapa .fita-l.on{background:#b45309}
+.fita-l.cima{left:0;right:0;top:-9px;height:9px}.fita-l.baixo{left:0;right:0;bottom:-9px;height:9px}
+.fita-l.esq{top:0;bottom:0;left:-9px;width:9px}.fita-l.dir{top:0;bottom:0;right:-9px;width:9px}
+.fita-l:not(.on){outline:1.5px dashed #a8a29e}
+.veio-marca{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;color:rgba(80,50,20,.55);pointer-events:none}
+.ped-chapa .med{position:absolute;width:62px;padding:3px 4px;border:1px solid #d6d3d1;border-radius:6px;font:600 12px inherit;text-align:center;background:#fff}
+.ped-chapa .med.larg{bottom:-38px;left:50%;transform:translateX(-50%)}
+.ped-chapa .med.alt{right:-78px;top:50%;transform:translateY(-50%)}
+.ped-check{display:flex;flex-wrap:wrap;gap:5px}
+.ped-check span{font-size:11.5px;border-radius:999px;padding:3px 9px;background:#f5f5f4;color:#a8a29e}
+.ped-check span.ok{background:#dcfce7;color:#166534}
+.ped-card{background:#fff;border:1px solid #eee;border-left:5px solid #999;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+.ped-st{color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.ped-res{font-size:13px;font-weight:600}
+.ped-trilho{display:flex;gap:3px}.ped-trilho i{flex:1;height:5px;border-radius:3px}
+.ped-cli{font-size:12px;color:#57534e;margin:4px 0 2px 4px;cursor:pointer}
+.caixa{display:inline-block;width:14px;height:14px;border:1.5px solid #555;border-radius:3px}
+.folha-fotos{display:flex;gap:4px;margin-top:4px}.folha-fotos img{width:70px;height:70px;object-fit:cover;border-radius:4px}
+@media (max-width:700px){.ped-peca{grid-template-columns:minmax(0,1fr)}.ped-itens{grid-template-columns:repeat(3,minmax(0,1fr))}.ped-chapa{margin:22px 80px 40px 10px}}
