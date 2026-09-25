@@ -319,6 +319,26 @@ ${cat}
 Devolva a OS completa neste formato:
 ${OS_SCHEMA}`;
 
+    case 'agenda_semana':
+      return `Você organiza a AGENDA SEMANAL de uma fábrica de móveis planejados.
+Leia o documento e preencha o modelo JSON abaixo, mantendo o texto original (OS, cliente, ambiente, observações).
+- "grades": cada seção tem linhas (pessoa/equipe/viagem) com 5 dias (segunda a sexta). Coloque o texto de cada célula no dia certo;
+  se a pessoa não existir no modelo, crie a linha; várias tarefas no mesmo dia vão separadas por quebra de linha "\\n".
+  entregas = cronograma de entregas/logística; montagem = equipes de montagem; producao = vidros, madeira e ferros;
+  terceirizados = produção terceirizada; marceneiros = cronograma dos marceneiros.
+- "listas": entregasObs, usinagens, cortes, fitaExtras, fitaLimpeza, liberado, prontoMontagem (texto, um item por linha).
+- "fornecedores": cada fornecedor/pintor/vidraçaria com seus itens (texto, um por linha).
+- "prioridades": texto, uma por linha.
+- "semanaDetectada": data da segunda-feira da semana do documento no formato AAAA-MM-DD (ano ${new Date().getFullYear()} se não houver ano).
+Responda SOMENTE com JSON válido.
+
+MODELO:
+${JSON.stringify(d.modelo || {}, null, 0)}
+
+DOCUMENTO:
+"""${String(d.texto || '').slice(0, 40000)}"""
+${d.temImagens ? 'As imagens são o documento; leia tudo.' : ''}`;
+
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
