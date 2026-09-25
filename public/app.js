@@ -1856,10 +1856,19 @@ function eventosOS(lista, dia) {
 
 function OSPicker({ lista, onPick }) {
   const [q, setQ] = useState(''); const [ab, setAb] = useState(false);
-  const res = (lista || []).filter(o => !q || norm(linhaOS(o)).includes(norm(q))).slice(0, 12);
-  return html`<span class="opc-wrap"><button type="button" class="btn btn-ghost btn-sm" onClick=${() => setAb(!ab)}>+ OS</button>
-    ${ab && html`<div class="opc-pop" onMouseLeave=${() => setAb(false)}><input class="inp inp-sm" autoFocus placeholder="Buscar cliente, OS, ambiente…" value=${q} onInput=${e => setQ(e.target.value)} />
-      ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" onClick=${() => { onPick(linhaOS(o)); setAb(false); setQ(''); }}><span><b>${numOS(o)}</b> ${o.cliente?.nome}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></span></button>`)}</div>`}</span>`;
+  const res = (lista || []).filter(o => !q || norm(linhaOS(o)).includes(norm(q))).slice(0, 40);
+  const fechar = () => { setAb(false); setQ(''); };
+  return html`<span class="opc-wrap"><button type="button" class="btn btn-ghost btn-sm" onClick=${() => setAb(true)}>+ OS</button>
+    ${ab && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
+      <div class="card modal-caixa stack os-picker">
+        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">Escolher OS</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+        <input class="inp" autoFocus placeholder="Buscar cliente, nº da OS ou ambiente…" value=${q} onInput=${e => setQ(e.target.value)} onKeyDown=${e => e.key === 'Escape' && fechar()} />
+        <div class="os-picker-lista">
+          ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" style=${temCores(o) ? { borderLeft: '4px solid ' + o.cores[0] } : undefined} onClick=${() => { onPick(linhaOS(o)); fechar(); }}>
+            <span><b>${numOS(o)}</b> — ${o.cliente?.nome || 'Cliente'}<small>${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'}${o.prazoEntrega ? ' · entrega ' + o.prazoEntrega : ''}</small></span></button>`)}
+          ${!res.length && html`<div class="dim">Nenhuma OS encontrada.</div>`}
+        </div>
+      </div></div>`, document.body)}</span>`;
 }
 const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 

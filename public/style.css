@@ -581,3 +581,7 @@ fieldset.trava[disabled]{opacity:.72}
   body.imp-agenda .card { box-shadow: none !important; break-inside: avoid; }
   body.imp-agenda .ag { min-width: 0; font-size: 10px; }
 }
+.os-picker{width:min(560px,100%)}
+.os-picker-lista{max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.os-picker-lista .opc-i{border:1px solid #eee;padding:9px 10px}
+.os-picker-lista .opc-i small{white-space:normal}
