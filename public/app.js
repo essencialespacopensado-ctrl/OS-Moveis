@@ -23,8 +23,26 @@ function useNovaVersao() {
   return nova;
 }
 // Cor fixa de cada cliente — a mesma em todas as telas.
-const PALETA_CLI = ['#6B4423', '#1E3A5F', '#1F4D3A', '#632B30', '#A85A44', '#4B5340', '#1C3144', '#7C3AED', '#B45309', '#0E7490', '#BE185D', '#374151', '#15803D', '#9D174D', '#1D4ED8', '#854D0E'];
-function corCliente(nome) { let h = 0; for (const ch of String(nome || '').split(/\s[-–]\s/)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; }
+const PALETA_CLI = ['#1E3A5F', '#B45309', '#15803D', '#9D174D', '#0E7490', '#6B4423', '#7C3AED', '#B91C1C', '#1D4ED8', '#4D7C0F', '#C2410C', '#0F766E', '#86198F', '#374151', '#A16207', '#BE185D', '#3730A3', '#166534', '#9A3412', '#155E75', '#6D28D9', '#854D0E', '#1F2937', '#047857', '#DB2777', '#2563EB', '#65A30D', '#EA580C', '#0891B2', '#7E22CE'];
+const chaveCli = (nome) => String(nome || '').split(/\s[-–]\s/)[0].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+function corCliente(nome) {
+  const k = chaveCli(nome);
+  const m = window.__CORES_CLI || {};
+  if (m[k]) return m[k];
+  let h = 0; for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length];
+}
+// Dá uma cor exclusiva para cada cliente novo e guarda na empresa (fica fixa para sempre).
+async function garantirCoresClientes(sessao, nomes) {
+  const m = { ...(window.__CORES_CLI || {}) };
+  const usadas = Object.values(m);
+  let mudou = false;
+  for (const n of [...new Set(nomes.map(chaveCli))].filter(Boolean).sort()) {
+    if (m[n]) continue;
+    const livre = PALETA_CLI.find(c => !usadas.includes(c)) || PALETA_CLI[usadas.length % PALETA_CLI.length];
+    m[n] = livre; usadas.push(livre); mudou = true;
+  }
+  if (mudou) { window.__CORES_CLI = m; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { coresClientes: m }); } catch {} }
+}
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const recarregarApp = async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); };
 
@@ -4435,7 +4453,8 @@ function Principal({ sessao, toast }) {
   const novaVersao = useNovaVersao();
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); setCfgV(v => v + 1); }, () => {}), []);
   const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
