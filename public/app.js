@@ -1225,8 +1225,8 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
   const [nomeCli, setNomeCli] = useState('');
   const [execucao, setExecucao] = useState('');
   const [soPrazo, setSoPrazo] = useState(false);
-  const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_vista') || 'grade'; } catch { return 'grade'; } });
-  useEffect(() => { try { localStorage.setItem('osm_vista', vista); } catch {} }, [vista]);
+  const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_vista2') || 'cliente'; } catch { return 'cliente'; } });
+  useEffect(() => { try { localStorage.setItem('osm_vista2', vista); } catch {} }, [vista]);
   const [vozInterim, setVozInterim] = useState('');
   const voz = useFala({ onFinal: t => { setBusca(t.replace(/^(buscar|procurar|abrir)\s+/i, '').replace(/^os\s+/i, '').replace(/[.!?]$/, '')); }, onInterim: setVozInterim });
 
@@ -1341,7 +1341,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
           ${[['', 'Todas'], ['interna', 'Interna'], ['terceirizada', 'Terceirizada'], ['mista', 'Mista']].map(([v, t]) => html`<button key=${t} class=${'pill' + (execucao === v ? ' on' : '')} onClick=${() => setExecucao(v)}>${t}</button>`)}
           <button class=${'pill' + (soPrazo ? ' on' : '')} onClick=${() => setSoPrazo(v => !v)}>📅 Prazos</button>
           <div class="pillnav" style=${{ marginLeft: 'auto' }}>
-            ${[['grade', '▦ Grade'], ['quadro', '▥ Quadro'], ['galeria', '▣ Galeria'], ['compacta', '☰ Compacta']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}
+            ${[['cliente', '👥 Por cliente'], ['grade', '▦ Grade'], ['quadro', '▥ Quadro'], ['galeria', '▣ Galeria'], ['compacta', '☰ Compacta']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}
           </div>
         </div>
         <div class="row dim" style=${{ gap: '6px', marginTop: '8px', fontSize: '12px' }}>
@@ -1350,6 +1350,33 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
       </div>
 
       ${filtradas.length === 0 ? html`<div class="vazio"><div style=${{ fontSize: '24px' }}>📄</div><b>Nenhuma ordem de serviço encontrada</b><div class="dim">${lista.length ? 'Nenhuma OS corresponde aos filtros.' : 'Crie a primeira OS, gere a partir de uma reunião ou importe as antigas.'}</div></div>`
+      : vista === 'cliente' ? (() => {
+        const g = {};
+        filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (g[k] = g[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
+        const avancar = async (o) => {
+          const i = STATUS_OS.findIndex(x => x.v === stOf(o)); const prox = STATUS_OS[i + 1]; if (!prox) return;
+          try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { status: prox.v, statusHist: [...(o.statusHist || []), { st: prox.v, em: nowIso(), quem: sessao.nome }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); toast(numOS(o) + ' → ' + prox.t.replace(/^\d\. /, ''), 'ok'); }
+          catch (e) { toast(e.message, 'erro'); }
+        };
+        const grupos = Object.values(g).map(x => ({ ...x, ini: x.oss.filter(o => stOf(o) !== 'elaboracao' && stOf(o) !== 'concluida').length }))
+          .sort((a, b) => (b.ini > 0) - (a.ini > 0) || a.nome.localeCompare(b.nome));
+        return html`<div class="os-clis">${grupos.map(x => html`
+          <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')}>
+            <div class="os-cli-top"><b>${x.nome}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
+            ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
+              const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i];
+              const iniciada = st !== 'elaboracao' && st !== 'concluida';
+              return html`<div key=${o.id} class=${'os-cli-os st-bg-' + st + (iniciada ? ' iniciada' : '') + (atrasada(o) ? ' atras' : '')}>
+                <button class="os-cli-info" onClick=${() => setOsAberta(o.id)}>
+                  <span class="mono">${numOS(o)}${bolinhas(o)}</span>
+                  <span class="nm"><b>${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo || '—'}</b>
+                    <small>${o.prazoEntrega ? '🚚 ' + o.prazoEntrega : ''}${atrasada(o) ? ' ⚠ atrasada' : ''}</small></span>
+                  <span class="os-trilho">${STATUS_OS.map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j < i ? 'f' : j === i ? 'a' : ''}></i>`)}</span>
+                  <span class=${x2.c + ' mini'}>${x2.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
+                </button>
+                ${prox ? html`<button class="btn-avancar" title=${'Avançar para ' + prox.t} onClick=${() => avancar(o)}>▶<small>${prox.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</small></button>` : html`<span class="btn-avancar ok">✓</span>`}
+              </div>`; })}
+          </div>`)}</div>`; })()
       : vista === 'quadro' ? html`
         <div class="kanban">
           ${STATUS_OS.map(col => html`
@@ -2089,7 +2116,7 @@ function DiarioOS({ sessao, os, toast }) {
 
 /* ---------- Pedidos (peças extras, terceiros e compras) ---------- */
 const PED_TIPOS = [['interno', '🪵', 'Peça extra', 'Produção interna'], ['terceiro', '🤝', 'Terceirizado', 'Parceiro faz'], ['compra', '🛒', 'Compra', 'Comprar material']];
-const PED_ITENS = [['peca', '🟫', 'Peça MDF'], ['cabideiro', '➖', 'Cabideiro'], ['tapafuro', '⚪', 'Tapa-furo'], ['dobradica', '🔩', 'Acab. dobradiça'], ['tinta', '🎨', 'Tinta p/ retoque'], ['puxador', '🔘', 'Puxador'], ['ferragem', '⚙️', 'Ferragem'], ['vidro', '🪟', 'Vidro/espelho'], ['outro', '📦', 'Outro']];
+const PED_ITENS = [['peca', '🟫', 'Peça MDF'], ['cabideiro', '➖', 'Cabideiro'], ['tapafuro', '⚪', 'Tapa-furo'], ['dobradica', '🔩', 'Acab. dobradiça'], ['tinta', '🎨', 'Tinta p/ retoque'], ['frente', '🚪', 'Porta / frente'], ['gaveta', '🗄️', 'Gaveta'], ['prateleira', '📚', 'Prateleira'], ['outro', '📦', 'Outra peça']];
 const PED_ST = {
   interno: [['solicitado', 'Solicitado', '#9ca3af'], ['producao', 'Em produção', '#f59e0b'], ['pronto', 'Pronto na fábrica', '#2563eb'], ['entregue', 'Entregue na obra', '#16a34a']],
   terceiro: [['orcar', 'A orçar', '#9ca3af'], ['aguard_orc', 'Aguard. orçamento', '#f59e0b'], ['aguard_aprov', 'Aguard. aprovação', '#ea580c'], ['pedido', 'Pedido feito', '#2563eb'], ['recebido', 'Recebido', '#0d9488'], ['entregue', 'Entregue na obra', '#16a34a']],
@@ -2105,7 +2132,7 @@ function NovoPedido({ sessao, os, toast, fechar, catalogo }) {
   const cam = useRef(null);
   const set = (k, v) => setP(x => ({ ...x, [k]: v }));
   const fala = useFala({ onFinal: (t) => setP(x => ({ ...x, obs: (x.obs ? x.obs + ' ' : '') + t })) });
-  const ehPeca = p.item === 'peca';
+  const ehPeca = ['peca', 'frente', 'gaveta', 'prateleira'].includes(p.item);
   const ck = [['Qtd', p.qtd > 0], ['Cor', !!p.cor], ['Tamanho', !ehPeca || (p.larg && p.alt)], ['Espessura', !ehPeca || !!p.esp], ['Fita', !ehPeca || Object.values(p.fita).some(Boolean) || p.semFita], ['Veio', !ehPeca || !!p.veio], ['Prazo', !!p.prazo]];
   const salvar = async () => {
     setSalvando(true);
@@ -2117,9 +2144,8 @@ function NovoPedido({ sessao, os, toast, fechar, catalogo }) {
     setSalvando(false);
   };
   return html`
-    <div class="sheet-t">📦 Novo pedido</div>
+    <div class="sheet-t">🪵 Pedir peça extra</div>
     <div class="dim" style=${{ marginTop: '-6px' }}>${numOS(os)} · ${os.cliente?.nome} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div>
-    <div class="ped-tipos">${PED_TIPOS.map(([k, ic, t, d]) => html`<button key=${k} class=${'ped-tipo' + (p.tipo === k ? ' on' : '')} onClick=${() => set('tipo', k)}><span>${ic}</span><b>${t}</b><small>${d}</small></button>`)}</div>
     <span class="lbl">O que precisa?</span>
     <div class="ped-itens">${PED_ITENS.map(([k, ic, t]) => html`<button key=${k} class=${'ped-item' + (p.item === k ? ' on' : '')} onClick=${() => set('item', k)}><span>${ic}</span>${t}</button>`)}</div>
     <div class="ped-linha">
@@ -2143,7 +2169,6 @@ function NovoPedido({ sessao, os, toast, fechar, catalogo }) {
           <label class="row dim" style=${{ gap: '5px' }}><input type="checkbox" checked=${!!p.semFita} onChange=${e => setP(x => ({ ...x, semFita: e.target.checked, fita: e.target.checked ? { cima: false, baixo: false, esq: false, dir: false } : x.fita }))} /> Sem fita de borda</label>
         </div>
       </div>`}
-    ${p.tipo !== 'interno' && html`<div class="field"><span class="lbl">Fornecedor / parceiro</span><input class="inp" placeholder="Ex: Projetta, Leo Madeiras…" value=${p.parceiro} onInput=${e => set('parceiro', e.target.value)} /></div>`}
     <div class="ped-linha">
       <div class="field"><span class="lbl">Precisa até</span><input class="inp" type="date" value=${p.prazo} onInput=${e => set('prazo', e.target.value)} /></div>
       <div class="field" style=${{ flex: 1 }}><span class="lbl">Observação</span><div class="row" style=${{ flexWrap: 'nowrap', gap: '4px' }}><input class="inp" placeholder="Ex: porta do aéreo riscou na montagem" value=${p.obs} onInput=${e => set('obs', e.target.value)} />
@@ -2194,8 +2219,8 @@ function PedidosOS({ sessao, os, toast, catalogo }) {
   }, [os.id]);
   if (novo) return html`<${NovoPedido} sessao=${sessao} os=${os} toast=${toast} catalogo=${catalogo} fechar=${() => setNovo(false)} />`;
   return html`
-    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">📦 Pedidos do ambiente</div><button class="btn btn-verde" onClick=${() => setNovo(true)}>＋ Novo pedido</button></div>
-    ${lista === null ? html`<div class="dim">Carregando…</div>` : lista.length === 0 ? html`<div class="vazio dim">Nenhum pedido. Toque em “Novo pedido” para pedir peça extra, terceiro ou compra.</div>` : lista.map(p => html`<${CartaoPedido} key=${p.id} p=${p} sessao=${sessao} toast=${toast} pedirSenha=${(t, fn) => setConf({ t, fn })} />`)}
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🪵 Peças extras</div><button class="btn btn-verde" onClick=${() => setNovo(true)}>＋ Pedir peça</button></div>
+    ${lista === null ? html`<div class="dim">Carregando…</div>` : lista.length === 0 ? html`<div class="vazio dim">Nenhuma peça pedida. O marceneiro toca em “Pedir peça” quando precisar de algo na obra.</div>` : lista.map(p => html`<${CartaoPedido} key=${p.id} p=${p} sessao=${sessao} toast=${toast} pedirSenha=${(t, fn) => setConf({ t, fn })} />`)}
     ${conf && html`<${SenhaMotivo} titulo=${conf.t} texto="Voltar uma etapa pede motivo e senha." botao="Voltar" onOk=${conf.fn} fechar=${() => setConf(null)} />`}`;
 }
 
@@ -2209,14 +2234,12 @@ function TelaPedidos({ sessao, toast, abrirOS }) {
     const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'pedidos'), orderBy('em', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
   }, []);
-  const l = (lista || []).filter(p => (filtro === 'todos' || pedAberto(p)) && (!tipo || p.tipo === tipo) && (!busca || norm([p.cliente, p.osCod, p.ambiente, resumoPed(p), p.obs].join(' ')).includes(norm(busca))));
+  const l = (lista || []).filter(p => (p.tipo || 'interno') === 'interno' && (filtro === 'todos' || pedAberto(p)) && (!tipo || p.tipo === tipo) && (!busca || norm([p.cliente, p.osCod, p.ambiente, resumoPed(p), p.obs].join(' ')).includes(norm(busca))));
   const cont = (t) => (lista || []).filter(p => pedAberto(p) && (!t || p.tipo === t)).length;
   return html`
     <div class="fade-up stack qg">
-      <div><h2>Pedidos</h2><div class="dim">Peças extras, terceirizados e compras pedidos pelas obras. Para pedir, abra o cliente no Quadro geral → ambiente → 📦 Pedidos.</div></div>
-      <div class="qg-filtros">
-        ${[['', 'Todos', cont('')], ...PED_TIPOS.map(([k, ic, t]) => [k, ic + ' ' + t, cont(k)])].map(([k, t, n]) => html`<button key=${k || 'todos'} class=${'qg-f' + (tipo === k ? ' on' : '')} onClick=${() => setTipo(k)}>${t} <b>${n}</b></button>`)}
-      </div>
+      <div><h2>Peças extras</h2><div class="dim">Peças que os marceneiros pediram na obra. Para pedir: Quadro geral → cliente → ambiente → 🪵 Peças extras.</div></div>
+      <div class="qg-filtros">${(PED_ST.interno).map(([k, t, c]) => html`<span key=${k} class="qg-f" style=${{ borderColor: c }}>${t} <b>${(lista || []).filter(p => (p.st || 'solicitado') === k).length}</b></span>`)}</div>
       <div class="row" style=${{ gap: '6px' }}><input class="inp" style=${{ flex: 1 }} placeholder="🔍 Buscar cliente, OS, peça…" value=${busca} onInput=${e => setBusca(e.target.value)} />
         <div class="seg-mini"><button class=${filtro === 'abertos' ? 'on' : ''} onClick=${() => setFiltro('abertos')}>Em aberto</button><button class=${filtro === 'todos' ? 'on' : ''} onClick=${() => setFiltro('todos')}>Todos</button></div></div>
       ${lista === null ? html`<div class="card">Carregando…</div>` : l.length === 0 ? html`<div class="card vazio dim">Nenhum pedido.</div>` : l.map(p => html`<div key=${p.id}><div class="ped-cli" onClick=${() => abrirOS(p.osId)}><b>${p.cliente}</b> · ${p.osCod} ${p.ambiente}</div><${CartaoPedido} p=${p} sessao=${sessao} toast=${toast} pedirSenha=${(t, fn) => setConf({ t, fn })} /></div>`)}
@@ -2284,6 +2307,10 @@ function ImpressaoFolha({ dados, empresa }) {
 }
 
 /* ---------- Folha de compras padrão (importada do PCP Dinabox) ---------- */
+const PARC_PADRAO = [
+  { nome: 'Laca Nobre', esp: 'Pintura / laca' }, { nome: 'Projetta', esp: 'Vidros' }, { nome: 'Adeblu', esp: 'Esquadrias e lâminas' },
+  { nome: 'Pintura Ezequiel', esp: 'Pintura' }, { nome: 'Pintura Celso', esp: 'Pintura' }, { nome: 'Eduardo', esp: '' }, { nome: 'Marmoraria Itália', esp: 'Pedras' },
+];
 const CAT_COMPRA = ['Chapas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Acessórios', 'Químicos', 'Outros'];
 const ICO_CAT = { 'Chapas': '🟫', 'Fitas de borda': '🎞️', 'Ferragens': '🔩', 'Puxadores': '🔘', 'Perfis': '📏', 'Iluminação': '💡', 'Vidros': '🪟', 'Acessórios': '🧩', 'Químicos': '🧪', 'Outros': '📦' };
 function ComprasOS({ sessao, os, toast }) {
@@ -2292,8 +2319,14 @@ function ComprasOS({ sessao, os, toast }) {
   const [prev, setPrev] = useState(null);
   const [novo, setNovo] = useState({ categoria: 'Ferragens', descricao: '', qtd: '', unidade: 'un' });
   const [imprimir, setImprimir] = useState(false);
+  const [modo, setModo] = useState('categoria');
+  const [escolher, setEscolher] = useState(null); // {ids:[...]} para escolher parceiro
+  const [parceiros, setParceiros] = useState([]);
+  const [novoParc, setNovoParc] = useState('');
   const inp = useRef(null);
   const ref = docRef('empresas', sessao.empresaId, 'compras', os.id);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => setParceiros(d.data()?.parceirosLista || PARC_PADRAO), () => {}), []);
+  const salvarParceiros = async (l) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: l }); } catch (e) { toast(e.message, 'erro'); } };
   useEffect(() => F().fsMod.onSnapshot(ref, d => setDoc(d.exists() ? d.data() : null), () => setDoc(null)), [os.id]);
   const itens = doc?.itens || [];
   const gravar = async (novos, extra = {}) => { try { await F().fsMod.setDoc(ref, { osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', itens: novos, atualizadoEm: nowIso(), atualizadoPor: sessao.nome, ...extra }, { merge: true }); } catch (e) { toast(e.message, 'erro'); } };
@@ -2315,7 +2348,9 @@ function ComprasOS({ sessao, os, toast }) {
   };
   const marcar = (id) => gravar(itens.map(i => i.id === id ? { ...i, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i));
   const remover = (id) => gravar(itens.filter(i => i.id !== id));
-  const grupos = CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length);
+  const grupos = modo === 'parceiro'
+    ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
+    : CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length);
   const feitos = itens.filter(i => i.comprado).length;
   if (prev) return html`
     <div class="sheet-t">📥 Conferir importação</div>
@@ -2331,10 +2366,18 @@ function ComprasOS({ sessao, os, toast }) {
     <small class="dim">No Dinabox, exporte a folha de compras do PCP (PDF ou Excel) e escolha o arquivo aqui.</small>
     ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="vazio dim">Nenhum item ainda.</div>` : html`
       <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados</span></div>
-      ${grupos.map(([c, l]) => html`<div key=${c}><div class="compra-cat">${ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></div>
+      <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
+        <div class="seg-mini"><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
+      </div>
+      ${grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
+          <span class="row" style=${{ gap: '4px' }}>
+            <button class="btn btn-sm btn-ghost" onClick=${() => setEscolher({ ids: l.map(i => i.id) })}>🤝 ${modo === 'parceiro' ? 'Trocar' : 'Parceiro p/ todos'}</button>
+            ${modo === 'parceiro' && parcNome && html`<button class="btn btn-sm" onClick=${() => { setImprimir(parcNome); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Pedido p/ ${parcNome}</button>`}
+          </span></div>
         <div class="compras-lista">${l.map(i => html`<div key=${i.id} class=${'compra-i' + (i.comprado ? ' feito' : '')}>
           <button class="compra-ck" onClick=${() => marcar(i.id)}>${i.comprado ? '✓' : ''}</button>
           <span class="grow"><b>${i.descricao}</b><small>${[i.codigo, i.marca, i.obs, i.comprado ? 'comprado por ' + i.compradoPor : ''].filter(Boolean).join(' · ')}</small></span>
+          <button class=${'parc-chip' + (i.parceiro ? ' tem' : '')} onClick=${() => setEscolher({ ids: [i.id] })}>${i.parceiro ? '🤝 ' + i.parceiro : '＋ parceiro'}</button>
           <b class="compra-q">${i.qtd} ${i.unidade || ''}</b><button class="x-btn" onClick=${() => remover(i.id)}>✕</button></div>`)}</div></div>`)}`}
     <div class="compra-add">
       <select class="inp inp-sm" value=${novo.categoria} onChange=${e => setNovo({ ...novo, categoria: e.target.value })}>${CAT_COMPRA.map(c => html`<option key=${c}>${c}</option>`)}</select>
@@ -2342,19 +2385,35 @@ function ComprasOS({ sessao, os, toast }) {
       <input class="inp inp-sm" placeholder="Qtd" style=${{ width: '60px' }} value=${novo.qtd} onInput=${e => setNovo({ ...novo, qtd: e.target.value })} />
       <button class="btn btn-sm btn-primary" onClick=${() => { if (!novo.descricao) return; gravar([...itens, { ...novo, id: rand(6), comprado: false }]); setNovo({ ...novo, descricao: '', qtd: '' }); }}>＋</button>
     </div>
-    ${imprimir && ReactDOM.createPortal(html`<${ImpressaoCompras} os=${os} doc=${doc} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}`;
+    ${escolher && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEscolher(null)}>
+      <div class="card modal-caixa stack">
+        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🤝 Comprar de qual parceiro? <small class="dim">(${escolher.ids.length} ${escolher.ids.length === 1 ? 'item' : 'itens'})</small></div><button class="x-btn" onClick=${() => setEscolher(null)}>✕</button></div>
+        <div class="parc-grade">
+          ${parceiros.map((pa, k) => html`<button key=${k} class="parc-op" onClick=${() => { gravar(itens.map(i => escolher.ids.includes(i.id) ? { ...i, parceiro: pa.nome } : i)); setEscolher(null); }}><b>${pa.nome}</b><small>${pa.esp || ''}</small></button>`)}
+          <button class="parc-op sem" onClick=${() => { gravar(itens.map(i => escolher.ids.includes(i.id) ? { ...i, parceiro: '' } : i)); setEscolher(null); }}><b>Nenhum</b><small>limpar</small></button>
+        </div>
+        <div class="row" style=${{ gap: '5px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Novo parceiro / fornecedor" value=${novoParc} onInput=${e => setNovoParc(e.target.value)} />
+          <button class="btn btn-sm btn-primary" onClick=${() => { const n = novoParc.trim(); if (!n) return; salvarParceiros([...parceiros, { nome: n, esp: '' }]); setNovoParc(''); }}>＋ Cadastrar</button></div>
+        <details><summary class="dim">Gerenciar lista de parceiros</summary>
+          ${parceiros.map((pa, k) => html`<div key=${k} class="row" style=${{ gap: '5px', flexWrap: 'nowrap', marginTop: '4px' }}>
+            <input class="inp inp-sm" value=${pa.nome} onChange=${e => salvarParceiros(parceiros.map((x, j) => j === k ? { ...x, nome: e.target.value } : x))} />
+            <input class="inp inp-sm" placeholder="Especialidade" value=${pa.esp || ''} onChange=${e => salvarParceiros(parceiros.map((x, j) => j === k ? { ...x, esp: e.target.value } : x))} />
+            <button class="x-btn" onClick=${() => salvarParceiros(parceiros.filter((_, j) => j !== k))}>✕</button></div>`)}
+        </details>
+      </div></div>`, document.body)}
+    ${imprimir && ReactDOM.createPortal(html`<${ImpressaoCompras} os=${os} doc=${typeof imprimir === 'string' ? { ...doc, itens: itens.filter(i => i.parceiro === imprimir), parceiro: imprimir } : doc} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}`;
 }
 function LogoImp({ empresa }) { return window.__LOGO ? html`<img class="po-logo" src=${window.__LOGO} alt=${empresa || ''} />` : null; }
 function ImpressaoCompras({ os, doc, empresa }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const itens = doc?.itens || [];
   return html`<div class="po" style=${varsCores(cor)}>
-    <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">Folha de compras</div><div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div></div>
+    <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">${doc?.parceiro ? 'Pedido de compra' : 'Folha de compras'}</div>${doc?.parceiro ? html`<div class="po-sub">Fornecedor: <b>${doc.parceiro}</b></div>` : ''}<div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div></div>
       <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${new Date().toLocaleDateString('pt-BR')}${doc?.origem ? ' · ' + doc.origem : ''}</div></div></div>
     ${CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
       <div key=${c} class="po-amb"><div class="po-amb-t"><span>${l.length}</span>${c}</div>
         <table><thead><tr><th style=${{ width: '26px' }}>✓</th><th style=${{ width: '14%' }}>Código</th><th>Descrição</th><th style=${{ width: '14%' }}>Marca</th><th style=${{ width: '12%' }}>Qtd</th><th style=${{ width: '16%' }}>Fornecedor / valor</th></tr></thead>
-          <tbody>${l.map(i => html`<tr key=${i.id}><td>${i.comprado ? '✔' : html`<span class="caixa"></span>`}</td><td class="mono">${i.codigo || ''}</td><td><b>${i.descricao}</b>${i.obs ? html`<br/><small>${i.obs}</small>` : ''}</td><td>${i.marca || ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td></td></tr>`)}</tbody></table></div>`)}
+          <tbody>${l.map(i => html`<tr key=${i.id}><td>${i.comprado ? '✔' : html`<span class="caixa"></span>`}</td><td class="mono">${i.codigo || ''}</td><td><b>${i.descricao}</b>${i.obs ? html`<br/><small>${i.obs}</small>` : ''}</td><td>${i.marca || ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td>${i.parceiro || ''}</td></tr>`)}</tbody></table></div>`)}
     <div class="po-ass">${['Solicitado por', 'Compras', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
     <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
   </div>`;
@@ -2534,7 +2593,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
           <${BarraTempos} o=${o} />
           <div class="qg-acoes">
             <button class=${'qg-diario' + (o.pendAbertas ? ' tem' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'diario' })}>📓 Diário${o.pendAbertas ? html` · <b>${o.pendAbertas}</b>` : ''}</button>
-            <button class=${'qg-diario' + (pedAb[o.id] ? ' tem-ped' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'pedidos' })}>📦 Pedidos${pedAb[o.id] ? html` · <b>${pedAb[o.id]}</b>` : ''}</button>
+            <button class=${'qg-diario' + (pedAb[o.id] ? ' tem-ped' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'pedidos' })}>🪵 Peças${pedAb[o.id] ? html` · <b>${pedAb[o.id]}</b>` : ''}</button>
             <button class="qg-diario" onClick=${() => setSheet({ osId: o.id, tipo: 'compras' })}>🛒 Compras</button>
             <button class=${'qg-diario' + ((o.videos || []).length ? ' tem-vid' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'videos' })}>🎬 Vídeos${(o.videos || []).length ? html` · <b>${o.videos.length}</b>` : ''}</button>
             <button class="qg-diario" onClick=${() => imprimirFolha([o])}>🖨 Pendências</button>
@@ -4204,7 +4263,7 @@ function Principal({ sessao, toast }) {
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
     { v: 'quadro', t: 'Quadro geral', i: '📊' },
-    { v: 'pedidos', t: 'Pedidos', i: '📦' },
+    { v: 'pedidos', t: 'Peças extras', i: '🪵' },
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
     { v: 'contratos', t: 'Contratos', i: '📑' },
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },

@@ -839,3 +839,37 @@ fieldset.trava[disabled]{opacity:.72}
 .brand-logo{height:38px;max-width:120px;object-fit:contain}
 .po-logo{height:46px;max-width:130px;object-fit:contain;background:#fff;border-radius:8px;padding:4px}
 @media (max-width:700px){.brand-logo{height:30px;max-width:90px}}
+
+/* v33 — OS por cliente, parceiros nas compras */
+.os-clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:10px}
+.os-cli{background:#fff;border:1px solid #eee;border-radius:14px;overflow:hidden}
+.os-cli.ativo{border-color:#0d9488;box-shadow:0 3px 12px -6px rgba(13,148,136,.5)}
+.os-cli-top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;background:#f5f4f1}
+.os-cli.ativo .os-cli-top{background:linear-gradient(135deg,#0f766e,#115e59);color:#fff}
+.os-cli-top em{font-style:normal;font-weight:700}
+.os-cli-top span{font-size:12px;white-space:nowrap}
+.os-cli-os{display:flex;align-items:stretch;border-top:1px solid #f1efec}
+.os-cli-os.iniciada{background:#f0fdfa;border-left:5px solid #0d9488}
+.os-cli-os.iniciada.st-bg-liberacao{background:#fffbeb;border-left-color:#f59e0b}
+.os-cli-os.iniciada.st-bg-montagem{background:#f5f3ff;border-left-color:#7c3aed}
+.os-cli-os.iniciada.st-bg-projetos{background:#eff6ff;border-left-color:#3b82f6}
+.os-cli-os.st-bg-concluida{opacity:.6}
+.os-cli-os.atras .nm small{color:#dc2626;font-weight:700}
+.os-cli-info{flex:1;min-width:0;display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center;padding:8px 10px;border:0;background:transparent;text-align:left;font-family:inherit;cursor:pointer}
+.os-cli-info .mono{font:700 12px 'JetBrains Mono',monospace}
+.os-cli-info .nm{min-width:0}.os-cli-info .nm b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.os-cli-info .nm small{font-size:11px;color:#78716c}
+.os-cli-os.iniciada .nm b{font-size:14.5px}
+.os-trilho{grid-column:1/3;display:flex;gap:2px}.os-trilho i{flex:1;height:5px;border-radius:3px;background:#e7e5e4}.os-trilho i.f{background:#16a34a}.os-trilho i.a{background:#f59e0b}
+.btn-avancar{flex:none;width:74px;border:0;border-left:1px solid #eee;background:#16a34a;color:#fff;font-size:18px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-family:inherit}
+.btn-avancar small{font-size:9.5px;line-height:1.1;text-align:center}
+.btn-avancar:hover{background:#15803d}
+.btn-avancar.ok{background:#dcfce7;color:#16a34a;cursor:default}
+.os-cli-os:not(.iniciada) .btn-avancar{background:#e7e5e4;color:#44403c}
+.os-cli-os:not(.iniciada) .btn-avancar:hover{background:#16a34a;color:#fff}
+.parc-chip{border:1.5px dashed #a8a29e;background:#fff;border-radius:999px;padding:3px 9px;font:600 11.5px inherit;font-family:inherit;cursor:pointer;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.parc-chip.tem{border-style:solid;border-color:#0d9488;background:#f0fdfa;color:#115e59}
+.parc-grade{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.parc-op{display:flex;flex-direction:column;align-items:flex-start;border:1.5px solid #e7e5e4;border-radius:10px;background:#fff;padding:10px;font-family:inherit;cursor:pointer;text-align:left}
+.parc-op:hover{border-color:#0d9488;background:#f0fdfa}.parc-op small{color:#78716c;font-size:11px}
+.parc-op.sem{border-style:dashed}
+@media (max-width:700px){.os-clis{grid-template-columns:minmax(0,1fr)}.compra-i{flex-wrap:wrap}.compra-i .grow{flex-basis:60%}}
