@@ -1372,7 +1372,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
         const g = {};
         filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (g[k] = g[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
         const salvarEt = async (o, k, st, motivo) => {
-          const et = { ...(o.execucao?.etapas || {}) }; et[k] = { ...(et[k] || {}), status: st, ...(st === 'pronto' ? { concluidaEm: nowIso() } : {}) };
+          const et = { ...(o.execucao?.etapas || {}) }; et[k] = { ...(et[k] || {}), status: st, ...(st === 'pronto' ? { concluidaEm: nowIso(), concluidaPor: sessao.nome } : {}), ...(st === 'andamento' && !et[k]?.iniciadaEm ? { iniciadaEm: nowIso(), iniciadaPor: sessao.nome } : {}) };
           const patch = { execucao: { ...(o.execucao || {}), etapas: et }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome };
           if (motivo) patch.reaberturas = [...(o.reaberturas || []), { oque: 'Etapa ' + (ETAPAS_FAB.find(e => e[0] === k) || [])[1] + ' reaberta', motivo, quem: sessao.nome, quando: nowIso() }];
           const semMont = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => et[x]?.status === 'pronto');
@@ -1666,7 +1666,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             }}>✓ Concluir alteração e gerar pedido</button>
           </div>
         </div>`; })()}
-      <${LinhaDoTempo} os=${os} />
+      <${LinhaDoTempo} os=${os} sessao=${sessao} />
       ${(os.alteracoes || []).length > 0 && html`<details class="card page-card"><summary class="dim">📝 Pedidos de alteração (${os.alteracoes.length})</summary>
         ${os.alteracoes.slice().reverse().map(p => html`<div key=${p.n} class="item-lista" style=${{ alignItems: 'flex-start' }}><span><b>Nº ${p.n}</b> — ${p.motivo}<br/><small class="dim">${p.itens.length} itens · ${p.quem} · ${fmtData(p.quando)}</small>
           <div class="alt-lista mini">${p.itens.slice(0, 6).map((it, i) => html`<div key=${i} class="alt-item"><b>${it.campo}</b><span class="de">${it.de}</span><span class="seta">→</span><span class="para">${it.para}</span></div>`)}${p.itens.length > 6 ? html`<small class="dim">+${p.itens.length - 6}…</small>` : ''}</div></span>
@@ -2110,11 +2110,15 @@ function DiarioOS({ sessao, os, toast }) {
       if (tipo === 'final') await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { ultimoFinal: { em: doc.em, quem: sessao.nome, foto: fotos[0], texto: t } });
       await contar([{ id: r.id, ...doc }, ...(itens || [])]);
       setTexto(''); setInterim(''); setFotos([]);
+      registrar(sessao, os.id, tipo === 'pendencia' ? '⚠️' : tipo === 'final' ? '🌇' : '📓', tipo === 'pendencia' ? 'Pendência no diário de obra' : tipo === 'final' ? 'Foto do final do dia' : 'Registro no diário de obra', t.slice(0, 160));
       toast(tipo === 'pendencia' ? 'Pendência registrada.' : 'Registro salvo no diário.', 'ok');
     } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
     setSalvando(false);
   };
   const resolver = async (it, v) => {
+    let motivo = '';
+    if (!v) { motivo = await pedirMotivo('Reabrir pendência'); if (!motivo) return; }
+    registrar(sessao, os.id, v ? '✅' : '↺', v ? 'Pendência resolvida' : 'Pendência reaberta', (motivo ? motivo + ' — ' : '') + String(it.texto || '').slice(0, 120));
     await F().fsMod.updateDoc(docRef(...base, it.id), { resolvida: v, resolvidaPor: v ? sessao.nome : '', resolvidaEm: v ? nowIso() : '' });
     await contar((itens || []).map(x => x.id === it.id ? { ...x, resolvida: v } : x));
   };
@@ -2172,6 +2176,7 @@ function NovoPedido({ sessao, os, toast, fechar, catalogo }) {
     setSalvando(true);
     try {
       const st = (PED_ST[p.tipo] || PED_ST.interno)[0][0];
+      registrar(sessao, os.id, '🪵', 'Pedido de peça extra', (p.obs || '').slice(0, 120));
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'pedidos'), { ...p, st, osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', ambiente: (os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || '', quem: sessao.nome, em: nowIso(), hist: [{ st, quem: sessao.nome, em: nowIso() }] });
       toast('Pedido enviado.', 'ok'); fechar();
     } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
@@ -2219,6 +2224,7 @@ function CartaoPedido({ p, sessao, toast, pedirSenha }) {
   const sts = PED_ST[p.tipo] || PED_ST.interno;
   const i = sts.findIndex(s => s[0] === p.st), prox = sts[i + 1], s = sts[i] || sts[0];
   const mudar = async (st, motivo) => {
+    registrar(sessao, p.osId, motivo ? '↺' : '🪵', 'Peça extra: ' + ((PED_ST[p.tipo] || PED_ST.interno).find(x => x[0] === st) || [, st])[1], motivo || '');
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'pedidos', p.id), { st, hist: [...(p.hist || []), { st, quem: sessao.nome, em: nowIso(), ...(motivo ? { motivo } : {}) }] }); }
     catch (e) { toast(e.message, 'erro'); }
   };
@@ -2363,7 +2369,7 @@ function ComprasOS({ sessao, os, toast }) {
   const salvarParceiros = async (l) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: l }); } catch (e) { toast(e.message, 'erro'); } };
   useEffect(() => F().fsMod.onSnapshot(ref, d => setDoc(d.exists() ? d.data() : null), () => setDoc(null)), [os.id]);
   const itens = doc?.itens || [];
-  const gravar = async (novos, extra = {}) => { try { await F().fsMod.setDoc(ref, { osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', itens: novos, atualizadoEm: nowIso(), atualizadoPor: sessao.nome, ...extra }, { merge: true }); } catch (e) { toast(e.message, 'erro'); } };
+  const gravar = async (novos, extra = {}) => { if (extra.__log) { registrar(sessao, os.id, '🛒', extra.__log); delete extra.__log; } try { await F().fsMod.setDoc(ref, { osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', itens: novos, atualizadoEm: nowIso(), atualizadoPor: sessao.nome, ...extra }, { merge: true }); } catch (e) { toast(e.message, 'erro'); } };
   const importar = async (file) => {
     if (!file) return;
     try {
@@ -2377,10 +2383,10 @@ function ComprasOS({ sessao, os, toast }) {
   };
   const confirmar = async () => {
     const add = prev.itens.filter(i => i.ok).map(({ ok, ...i }) => ({ ...i, id: rand(6), comprado: false }));
-    await gravar([...itens, ...add], { origem: 'Dinabox PCP · ' + prev.arquivo });
+    await gravar([...itens, ...add], { origem: 'Dinabox PCP · ' + prev.arquivo, __log: 'Folha de compras importada (' + add.length + ' itens)' });
     toast(add.length + ' itens na folha de compras.', 'ok'); setPrev(null);
   };
-  const marcar = (id) => gravar(itens.map(i => i.id === id ? { ...i, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i));
+  const marcar = async (id) => { const it = itens.find(i => i.id === id); let mot = ''; if (it?.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; } registrar(sessao, os.id, it?.comprado ? '↺' : '🛒', (it?.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + (it?.descricao || '') + (it?.parceiro ? ' · ' + it.parceiro : ''), mot); return gravar(itens.map(i => i.id === id ? { ...i, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i)); };
   const remover = (id) => gravar(itens.filter(i => i.id !== id));
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
@@ -2423,7 +2429,7 @@ function ComprasOS({ sessao, os, toast }) {
       <div class="card modal-caixa stack">
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🤝 Comprar de qual parceiro? <small class="dim">(${escolher.ids.length} ${escolher.ids.length === 1 ? 'item' : 'itens'})</small></div><button class="x-btn" onClick=${() => setEscolher(null)}>✕</button></div>
         <div class="parc-grade">
-          ${parceiros.map((pa, k) => html`<button key=${k} class="parc-op" onClick=${() => { gravar(itens.map(i => escolher.ids.includes(i.id) ? { ...i, parceiro: pa.nome } : i)); setEscolher(null); }}><b>${pa.nome}</b><small>${pa.esp || ''}</small></button>`)}
+          ${parceiros.map((pa, k) => html`<button key=${k} class="parc-op" onClick=${() => { registrar(sessao, os.id, '🤝', 'Compra com parceiro: ' + pa.nome, itens.filter(i => escolher.ids.includes(i.id)).map(i => i.descricao).join(', ').slice(0, 160)); gravar(itens.map(i => escolher.ids.includes(i.id) ? { ...i, parceiro: pa.nome } : i)); setEscolher(null); }}><b>${pa.nome}</b><small>${pa.esp || ''}</small></button>`)}
           <button class="parc-op sem" onClick=${() => { gravar(itens.map(i => escolher.ids.includes(i.id) ? { ...i, parceiro: '' } : i)); setEscolher(null); }}><b>Nenhum</b><small>limpar</small></button>
         </div>
         <div class="row" style=${{ gap: '5px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Novo parceiro / fornecedor" value=${novoParc} onInput=${e => setNovoParc(e.target.value)} />
@@ -2525,6 +2531,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   }, []);
   const salvar = async (o, patch, msg) => {
     if (patch.status && patch.status !== o.status) patch = { ...patch, statusHist: [...(o.statusHist || []), { st: patch.status, em: nowIso(), quem: sessao.nome }] };
+    if (patch.execucao?.etapas) { const et = { ...patch.execucao.etapas }; Object.keys(et).forEach(k => { if (et[k]?.status === 'andamento' && !et[k].iniciadaEm) et[k] = { ...et[k], iniciadaEm: nowIso(), iniciadaPor: sessao.nome }; }); patch = { ...patch, execucao: { ...patch.execucao, etapas: et } }; }
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ...patch, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); if (msg) toast(msg, 'ok'); }
     catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
   };
@@ -2797,6 +2804,7 @@ function NovaTarefa({ sessao, lista, pessoa, grade, inicio, fechar, toast }) {
     if (fim < ini) return toast('O prazo final não pode ser antes do início.');
     try {
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
+      if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa, dm(ini) + ' a ' + dm(fim) + (texto.trim() ? ' — ' + texto.trim() : ''));
       toast('Tarefa lançada no cronograma de ' + pessoa + '.', 'ok'); fechar();
     } catch (e) { toast(e.message, 'erro'); }
   };
@@ -2822,7 +2830,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
   const [modo, setModo] = useState('');
   const hoje = isoD(new Date());
   const atrasada = t.status !== 'concluida' && t.fim < hoje;
-  const concluir = async (v) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } registrar(sessao, t.osId, v ? '✅' : '↺', (v ? 'Tarefa concluída: ' : 'Tarefa reaberta: ') + t.pessoa, mot || t.texto || ''); try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
   const excluir = async () => { try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); fechar(); } catch (e) { toast(e.message, 'erro'); } };
   const prorrogar = async () => {
     if (motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
@@ -2835,6 +2843,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
     // empurra as tarefas seguintes da mesma pessoa
     const seguintes = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim);
     seguintes.forEach(x => b.update(docRef('empresas', sessao.empresaId, 'tarefas', x.id), { inicio: somaUteis(x.inicio, n), fim: somaUteis(x.fim, n), prorrogacoes: [...(x.prorrogacoes || []), { dias: n, motivo: 'Ajuste automático: ' + (t.cliente || t.texto) + ' atrasou (' + motivo.trim() + ')', quem: sessao.nome, em: nowIso(), fimAntes: x.fim, fimDepois: somaUteis(x.fim, n), auto: true }] }));
+    registrar(sessao, t.osId, '⏳', `Prazo prorrogado +${n}d (${t.pessoa}): ${dm(t.fim)} → ${dm(novoFim)}`, motivo.trim()); seguintes.forEach(x => registrar(sessao, x.osId, '⏳', `Prazo ajustado +${n}d (${x.pessoa})`, 'Atraso em ' + (t.cliente || t.texto)));
     try { await b.commit(); toast(`+${n} ${n === 1 ? 'dia' : 'dias'}. ${seguintes.length ? seguintes.length + ' tarefa(s) seguinte(s) de ' + t.pessoa + ' ajustada(s).' : ''}`, 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
   };
   const seguintesPrev = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim && x.inicio >= t.inicio);
@@ -2876,9 +2885,23 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
     return F().fsMod.onSnapshot(ref, d => { if (!sujoRef.current) setDoc(d.exists() ? d.data() : null); });
   }, [semana]);
   const sujoRef = useRef(false); sujoRef.current = sujo;
+  const salvoRef = useRef(null);
+  useEffect(() => { if (!sujo && doc) salvoRef.current = doc; }, [doc, sujo]);
+  const logCitacoes = (antes, depois) => {
+    try {
+      GRADES.forEach(([k, tit]) => (depois?.grades?.[k] || []).forEach((r, ri) => (r.dias || []).forEach((v, di) => {
+        if (!String(v || '').trim()) return;
+        const velho = antes?.grades?.[k]?.[ri]?.dias?.[di] || '';
+        const ja = new Set(osCitadas(velho, lista).map(o => o.id));
+        const novas = osCitadas(v, lista).filter(o => !ja.has(o.id));
+        const d = new Date(deIso(semana)); d.setDate(d.getDate() + di);
+        registrarVarias(sessao, novas, '📅', 'Entrou no cronograma: ' + String(tit).replace(/^\S+ /, '') + (r.nome ? ' · ' + r.nome : '') + ' · ' + dm(isoD(d)), String(v).split('\n')[0].slice(0, 120));
+      })));
+    } catch {}
+  };
   useEffect(() => {
     if (!sujo || !doc) return;
-    const t = setTimeout(async () => { try { await F().fsMod.setDoc(ref, { ...doc, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); setSujo(false); } catch (e) { toast('Não salvou a agenda: ' + e.message, 'erro'); } }, 900);
+    const t = setTimeout(async () => { try { await F().fsMod.setDoc(ref, { ...doc, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); logCitacoes(salvoRef.current, doc); salvoRef.current = doc; setSujo(false); } catch (e) { toast('Não salvou a agenda: ' + e.message, 'erro'); } }, 900);
     return () => clearTimeout(t);
   }, [doc, sujo]);
   const mudar = (fn) => { setDoc(d => { const n = JSON.parse(JSON.stringify(d)); fn(n); return n; }); setSujo(true); };
@@ -2960,7 +2983,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                 <thead><tr><th class="ag-nome"></th>${diasD.map((d, i) => html`<th key=${i} class=${mesmoDia(d, new Date()) ? 'hoje' : ''}>${DIAS_SEM[i].toUpperCase()} – ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</th>`)}</tr></thead>
                 <tbody>
                   ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class=${'ag-chip' + (e.o.entregaFeita ? ' feito' : '')} style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '14' }}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}
-                        <button class=${'cel-ok' + (e.o.entregaFeita ? ' on' : '')} onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', e.o.id), { entregaFeita: e.o.entregaFeita ? null : { por: sessao.nome, em: nowIso() } }); } catch (er) { toast(er.message, 'erro'); } }}>${e.o.entregaFeita ? '✓ Entregue' : '✓ Concluir'}</button></div>`)}</td>`)}</tr>`}
+                        <button class=${'cel-ok' + (e.o.entregaFeita ? ' on' : '')} onClick=${async () => { let mot = ''; if (e.o.entregaFeita) { mot = await pedirMotivo('Reabrir entrega', 'A entrega já foi marcada como feita. Informe o motivo.'); if (!mot) return; } registrar(sessao, e.o.id, e.o.entregaFeita ? '↺' : '🚚', e.o.entregaFeita ? 'Entrega reaberta' : 'Entrega concluída', mot); try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', e.o.id), { entregaFeita: e.o.entregaFeita ? null : { por: sessao.nome, em: nowIso() } }); } catch (er) { toast(er.message, 'erro'); } }}>${e.o.entregaFeita ? '✓ Entregue' : '✓ Concluir'}</button></div>`)}</td>`)}</tr>`}
                   ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
                     <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
                       <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
@@ -2968,8 +2991,8 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                       ${tsk.map(t => { const c = t.cliente ? corCliente(t.cliente) : '#57534e'; const atr = t.status !== 'concluida' && t.fim < isoD(new Date()); const ult = t.fim === dISO; return html`<button key=${t.id} class=${'tar-bar' + (t.status === 'concluida' ? ' ok' : '') + (atr ? ' atr' : '') + (t.inicio === dISO ? ' ini' : '') + (ult ? ' fim' : '')} style=${{ '--cc': c }} onClick=${() => setVerT(t)} title=${(t.cliente || '') + ' ' + (t.texto || '')}>
                         ${t.inicio === dISO || di === 0 ? html`<b>${(t.cliente || t.texto || '').split(/\s[-–]\s/)[0]}</b> <small>${t.ambiente || t.texto}</small>` : html`<small>…</small>`}
                         ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>
-                        ${ult && t.status !== 'concluida' ? html`<button class="cel-ok tar-ok" onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); toast('Tarefa concluída.', 'ok'); } catch (er) { toast(er.message, 'erro'); } }}>✓ Concluir tarefa</button>` : ''}`; })}
-                      ${tagsOS(v, lista)}${(() => { const fk = k + '|' + norm(r.nome) + '|' + di; const fe = doc.feitos?.[fk]; return v.trim() ? html`<button class=${'cel-ok' + (fe ? ' on' : '')} title=${fe ? 'Concluído por ' + fe.por + ' — toque para desfazer' : 'Marcar como concluído'} onClick=${() => mudar(d => { d.feitos = d.feitos || {}; if (d.feitos[fk]) delete d.feitos[fk]; else d.feitos[fk] = { por: sessao.nome, em: nowIso() }; })}>${fe ? '✓ Concluído · ' + fe.por.split(' ')[0] : '✓ Concluir'}</button>` : null; })()}<textarea class=${'ag-cel' + (doc.feitos?.[k + '|' + norm(r.nome) + '|' + di] ? ' feito' : '')} rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
+                        ${ult && t.status !== 'concluida' ? html`<button class="cel-ok tar-ok" onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); registrar(sessao, t.osId, '✅', 'Tarefa concluída: ' + t.pessoa, t.texto || ''); toast('Tarefa concluída.', 'ok'); } catch (er) { toast(er.message, 'erro'); } }}>✓ Concluir tarefa</button>` : ''}`; })}
+                      ${tagsOS(v, lista)}${(() => { const fk = k + '|' + norm(r.nome) + '|' + di; const fe = doc.feitos?.[fk]; return v.trim() ? html`<button class=${'cel-ok' + (fe ? ' on' : '')} title=${fe ? 'Concluído por ' + fe.por + ' — toque para desfazer' : 'Marcar como concluído'} onClick=${async () => { let mot = ''; if (fe) { mot = await pedirMotivo('Reabrir no cronograma', 'Já estava concluído. Informe o motivo para reabrir.'); if (!mot) return; } registrarVarias(sessao, osCitadas(v, lista), fe ? '↺' : '✅', (fe ? 'Reaberto no cronograma: ' : 'Concluído no cronograma: ') + (r.nome || '') + ' · ' + dm(isoD(diasD[di])), mot || v.split('\n')[0]); mudar(d => { d.feitos = d.feitos || {}; if (d.feitos[fk]) { d.reaberturas = [...(d.reaberturas || []), { fk, motivo: mot, quem: sessao.nome, em: nowIso() }]; delete d.feitos[fk]; } else d.feitos[fk] = { por: sessao.nome, em: nowIso() }; }); }}>${fe ? '✓ Concluído · ' + fe.por.split(' ')[0] : '✓ Concluir'}</button>` : null; })()}<textarea class=${'ag-cel' + (doc.feitos?.[k + '|' + norm(r.nome) + '|' + di] ? ' feito' : '')} rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
                       <span class="cel-acoes"><button class="btn btn-ghost btn-sm" title="Tarefa com prazo" onClick=${() => setNovaT({ pessoa: r.nome, grade: k, inicio: dISO })}>📅</button><${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></span></td>`; })}
                   </tr>`)}
                 </tbody>
@@ -3145,7 +3168,34 @@ function diffOS(a, b, caminho = [], out = []) {
   if (String(na) !== String(nb)) out.push({ campo: caminho.join(' › '), de: valTxt(a), para: valTxt(b) });
   return out;
 }
-function linhaDoTempo(os) {
+/* ---------- Registro de eventos na linha do tempo da OS ---------- */
+function registrar(sessao, osId, ic, t, d) {
+  if (!osId || !sessao?.empresaId) return Promise.resolve();
+  return F().fsMod.addDoc(col('empresas', sessao.empresaId, 'os', osId, 'eventos'), { q: nowIso(), ic, t, d: d || '', p: sessao.nome || '' }).catch(() => {});
+}
+function registrarVarias(sessao, oss, ic, t, d) { const vis = new Set(); (oss || []).forEach(o => { if (o && !vis.has(o.id)) { vis.add(o.id); registrar(sessao, o.id, ic, t, d); } }); }
+/* Pede só o motivo (sem senha) — usado no cronograma */
+function pedirMotivo(titulo, texto) {
+  return new Promise(res => {
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = ReactDOM.createRoot(el);
+    const fim = (v) => { root.unmount(); el.remove(); res(v); };
+    function M() {
+      const [m, setM] = useState('');
+      return html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fim(null)}>
+        <div class="card modal-caixa stack" style=${{ width: 'min(460px,100%)' }}>
+          <div class="sec-title">↺ ${titulo}</div>
+          <div class="dim">${texto || 'Isso já foi salvo. Informe o motivo para reabrir.'}</div>
+          <textarea class="inp" rows="3" autoFocus placeholder="Motivo (obrigatório)" value=${m} onInput=${e => setM(e.target.value)}></textarea>
+          <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => fim(null)}>Cancelar</button>
+            <button class="btn btn-grande btn-marrom" style=${{ flex: 1 }} onClick=${() => m.trim().length < 5 ? alertaMin() : fim(m.trim())}>Confirmar</button></div>
+        </div></div>`;
+    }
+    const alertaMin = () => { const t = el.querySelector('textarea'); if (t) { t.style.borderColor = '#dc2626'; t.placeholder = 'Escreva o motivo (mín. 5 letras)'; t.focus(); } };
+    root.render(html`<${M} />`);
+  });
+}
+function linhaDoTempo(os, extras) {
   const ev = [];
   if (os.criadoEm) ev.push({ q: os.criadoEm, ic: '🆕', t: 'OS criada', d: (os.origem ? 'origem: ' + os.origem : ''), p: os.criadoPor });
   (os.historico || []).forEach(h => ev.push({ q: h.quando, ic: '🔓', t: 'Desbloqueada para edição', d: h.motivo, p: h.quem }));
@@ -3156,11 +3206,16 @@ function linhaDoTempo(os) {
   (os.contrato?.arquivos || []).forEach(a => ev.push({ q: a.em, ic: '📑', t: 'Contrato anexado: ' + a.nome }));
   (os.revisoes || []).forEach(r => ev.push({ q: r.em, ic: '☑️', t: 'Revisada', p: r.por }));
   if (os.restauradaEm) ev.push({ q: os.restauradaEm, ic: '♻️', t: 'OS restaurada', p: os.restauradaPor });
+  (os.statusHist || []).forEach(h => ev.push({ q: h.em, ic: '➡️', t: 'Etapa da OS: ' + ((STATUS_OS.find(x => x.v === h.st) || {}).t || h.st).replace(/^\d+\. /, ''), p: h.quem }));
+  Object.entries(os.execucao?.etapas || {}).forEach(([k, e]) => { if (e.iniciadaEm) ev.push({ q: e.iniciadaEm, ic: '▶️', t: 'Iniciou: ' + ((ETAPAS_FAB.find(x => x[0] === k) || [])[1] || k), p: e.iniciadaPor }); });
+  (extras || []).forEach(e => ev.push(e));
   if (os.atualizadoEm) ev.push({ q: os.atualizadoEm, ic: '💾', t: 'Última modificação', p: os.atualizadoPor, ultima: true });
   return ev.filter(e => e.q).sort((a, b) => String(b.q).localeCompare(String(a.q)));
 }
-function LinhaDoTempo({ os }) {
-  const ev = linhaDoTempo(os);
+function LinhaDoTempo({ os, sessao }) {
+  const [extras, setExtras] = useState([]);
+  useEffect(() => { if (!os?.id || !sessao?.empresaId) return; return F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os', os.id, 'eventos'), s => setExtras(s.docs.map(d => d.data())), () => setExtras([])); }, [os?.id]);
+  const ev = linhaDoTempo(os, extras);
   return html`<details class="card page-card"><summary><b>🕒 Linha do tempo — datas das modificações</b> <span class="chip">${ev.length}</span></summary>
     <div class="tl">${ev.map((e, i) => html`<div key=${i} class=${'tl-i' + (e.ultima ? ' ult' : '')}><span class="tl-ic">${e.ic}</span>
       <div><div class="tl-d">${new Date(e.q).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}${e.p ? ' · ' + e.p : ''}</div><b>${e.t}</b>${e.d ? html`<div class="dim">${e.d}</div>` : ''}</div></div>`)}</div></details>`;
