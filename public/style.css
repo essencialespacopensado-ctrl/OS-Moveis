@@ -814,3 +814,28 @@ fieldset.trava[disabled]{opacity:.72}
 .folha-fotos{display:flex;gap:4px;margin-top:4px}.folha-fotos img{width:70px;height:70px;object-fit:cover;border-radius:4px}
 @media (max-width:700px){.ped-peca{grid-template-columns:minmax(0,1fr)}.ped-itens{grid-template-columns:repeat(3,minmax(0,1fr))}.ped-chapa{margin:22px 80px 40px 10px}}
 .ped-desenho > small{margin-top:14px;text-align:center}
+
+/* v32 — compras, vídeos, final do dia, logo */
+.qg-acoes{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+@media (max-width:700px){.qg-acoes{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+.qg-diario.tem-vid{border-style:solid;border-color:#fda4af;background:#fff1f2;color:#9f1239}
+.final-dia{display:flex;align-items:center;gap:8px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;padding:5px;font:12px inherit;font-family:inherit;cursor:pointer;text-align:left}
+.final-dia img{width:46px;height:46px;object-fit:cover;border-radius:7px}
+.compras-lista{display:flex;flex-direction:column;gap:4px}
+.compra-i{display:flex;align-items:center;gap:8px;border:1px solid #eee;border-radius:9px;padding:7px 9px;background:#fff;cursor:pointer}
+.compra-i.off{opacity:.45}
+.compra-i .grow{flex:1;min-width:0}.compra-i small{display:block;color:#78716c;font-size:11px}
+.compra-i.feito{background:#f0fdf4;border-color:#bbf7d0}.compra-i.feito b{text-decoration:line-through;color:#57534e}
+.compra-q{white-space:nowrap;font-size:13px}
+.compra-ck{width:30px;height:30px;border-radius:8px;border:2px solid #a8a29e;background:#fff;font-size:17px;color:#fff;cursor:pointer;flex:none}
+.compra-i.feito .compra-ck{background:#16a34a;border-color:#16a34a}
+.compra-cat{font:700 13px 'Outfit',sans-serif;margin:8px 0 4px}.compra-cat small{color:#78716c;font-weight:400}
+.compras-prog{position:relative;height:22px;border-radius:11px;background:#eee;overflow:hidden}
+.compras-prog i{position:absolute;inset:0 auto 0 0;background:#16a34a}
+.compras-prog span{position:relative;display:block;text-align:center;font:600 12px/22px inherit;color:#1c1917}
+.compra-add{display:grid;grid-template-columns:auto 1fr auto auto;gap:5px;margin-top:6px}
+.video-card{border:1px solid #eee;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.video-card iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:8px;background:#000}
+.brand-logo{height:38px;max-width:120px;object-fit:contain}
+.po-logo{height:46px;max-width:130px;object-fit:contain;background:#fff;border-radius:8px;padding:4px}
+@media (max-width:700px){.brand-logo{height:30px;max-width:90px}}

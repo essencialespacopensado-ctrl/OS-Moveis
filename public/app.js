@@ -2044,7 +2044,9 @@ function DiarioOS({ sessao, os, toast }) {
     setSalvando(true);
     try {
       const doc = { tipo, texto: t, fotos, quem: sessao.nome, em: nowIso(), resolvida: false };
+      if (tipo === 'final' && !fotos.length) { setSalvando(false); return toast('Tire a foto do que foi montado hoje.'); }
       const r = await F().fsMod.addDoc(col(...base), doc);
+      if (tipo === 'final') await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { ultimoFinal: { em: doc.em, quem: sessao.nome, foto: fotos[0], texto: t } });
       await contar([{ id: r.id, ...doc }, ...(itens || [])]);
       setTexto(''); setInterim(''); setFotos([]);
       toast(tipo === 'pendencia' ? 'Pendência registrada.' : 'Registro salvo no diário.', 'ok');
@@ -2059,9 +2061,9 @@ function DiarioOS({ sessao, os, toast }) {
   return html`
     <div class="sheet-t">📓 Diário de obra</div>
     <div class="dim" style=${{ marginTop: '-6px' }}>${numOS(os)} · ${(os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || ''}</div>
-    <div class="seg-mini dia-tipo">${[['pendencia', '⚠ Pendência'], ['registro', '📝 Registro'], ['foto', '📷 Só foto']].map(([v, t]) => html`<button key=${v} class=${tipo === v ? 'on' : ''} onClick=${() => setTipo(v)}>${t}</button>`)}</div>
+    <div class="seg-mini dia-tipo">${[['pendencia', '⚠ Pendência'], ['registro', '📝 Registro'], ['final', '🌇 Final do dia'], ['foto', '📷 Só foto']].map(([v, t]) => html`<button key=${v} class=${tipo === v ? 'on' : ''} onClick=${() => setTipo(v)}>${t}</button>`)}</div>
     <div class="dia-box">
-      <textarea class="inp" rows="3" placeholder=${tipo === 'pendencia' ? 'Ex: falta 1 dobradiça na porta do balcão, puxador riscado…' : 'O que foi feito hoje / observação'} value=${texto + (interim ? ' ' + interim : '')} onInput=${e => { setTexto(e.target.value); setInterim(''); }}></textarea>
+      <textarea class="inp" rows="3" placeholder=${tipo === 'pendencia' ? 'Ex: falta 1 dobradiça na porta do balcão, puxador riscado…' : tipo === 'final' ? 'O que foi montado hoje (fale ou escreva) + tire a foto' : 'O que foi feito hoje / observação'} value=${texto + (interim ? ' ' + interim : '')} onInput=${e => { setTexto(e.target.value); setInterim(''); }}></textarea>
       <div class="dia-acoes">
         ${fala.ouvindo ? html`<button class="btn btn-grande btn-mic-on pulse" onClick=${fala.parar}>■ Parar</button>` : html`<button class="btn btn-grande btn-teal" onClick=${fala.iniciar}>🎤 Falar</button>`}
         <button class="btn btn-grande" onClick=${() => cam.current?.click()}>📷 Foto</button>
@@ -2076,7 +2078,7 @@ function DiarioOS({ sessao, os, toast }) {
     ${abertas.length > 0 && html`<div class="sheet-t" style=${{ fontSize: '15px' }}>⚠ Pendências em aberto (${abertas.length})</div>`}
     ${itens === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Nenhum registro ainda.</div>` : itens.map(it => html`
       <div key=${it.id} class=${'dia-item ' + it.tipo + (it.resolvida ? ' ok' : '')}>
-        <div class="dia-cab"><span>${it.tipo === 'pendencia' ? (it.resolvida ? '✅' : '⚠') : it.tipo === 'foto' ? '📷' : '📝'} <b>${new Date(it.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> · ${it.quem}</span>
+        <div class="dia-cab"><span>${it.tipo === 'pendencia' ? (it.resolvida ? '✅' : '⚠') : it.tipo === 'foto' ? '📷' : it.tipo === 'final' ? '🌇 Final do dia ·' : '📝'} <b>${new Date(it.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> · ${it.quem}</span>
           ${it.tipo === 'pendencia' && (it.resolvida ? html`<button class="btn btn-sm" onClick=${() => resolver(it, false)}>Reabrir</button>` : html`<button class="btn btn-sm btn-verde" onClick=${() => resolver(it, true)}>✓ Resolvida</button>`)}</div>
         ${it.texto && html`<div class="dia-txt">${it.texto}</div>`}
         ${(it.fotos || []).length > 0 && html`<div class="dia-fotos">${it.fotos.map((f, i) => html`<span key=${i}><img src=${f} onClick=${() => setVerFoto(f)} /></span>`)}</div>`}
@@ -2264,7 +2266,7 @@ function ImpressaoFolha({ dados, empresa }) {
   const cor = temCores(dados[0]?.o) ? dados[0].o.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const nP = dados.reduce((n, x) => n + x.pend.length + x.peds.length, 0);
   return html`<div class="po" style=${varsCores(cor)}>
-    <div class="po-topo"><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">Pendências de finalização</div><div class="po-sub">${cli} · ${dados.length} ${dados.length === 1 ? 'ambiente' : 'ambientes'}</div></div>
+    <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">Pendências de finalização</div><div class="po-sub">${cli} · ${dados.length} ${dados.length === 1 ? 'ambiente' : 'ambientes'}</div></div></div>
       <div class="po-num"><div class="po-cod">${nP}</div><div class="po-meta">itens em aberto · ${new Date().toLocaleDateString('pt-BR')}</div></div></div>
     ${dados.map(({ o, pend, peds }) => html`
       <div key=${o.id} class="po-amb">
@@ -2279,6 +2281,111 @@ function ImpressaoFolha({ dados, empresa }) {
     <div class="po-ass">${['Montador', 'Responsável técnico', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
     <div class="po-rod"><span>${empresa || ''} · ${cli}</span><span>Gerado pelo Gestão Pró</span></div>
   </div>`;
+}
+
+/* ---------- Folha de compras padrão (importada do PCP Dinabox) ---------- */
+const CAT_COMPRA = ['Chapas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Acessórios', 'Químicos', 'Outros'];
+const ICO_CAT = { 'Chapas': '🟫', 'Fitas de borda': '🎞️', 'Ferragens': '🔩', 'Puxadores': '🔘', 'Perfis': '📏', 'Iluminação': '💡', 'Vidros': '🪟', 'Acessórios': '🧩', 'Químicos': '🧪', 'Outros': '📦' };
+function ComprasOS({ sessao, os, toast }) {
+  const [doc, setDoc] = useState(undefined);
+  const [lendo, setLendo] = useState('');
+  const [prev, setPrev] = useState(null);
+  const [novo, setNovo] = useState({ categoria: 'Ferragens', descricao: '', qtd: '', unidade: 'un' });
+  const [imprimir, setImprimir] = useState(false);
+  const inp = useRef(null);
+  const ref = docRef('empresas', sessao.empresaId, 'compras', os.id);
+  useEffect(() => F().fsMod.onSnapshot(ref, d => setDoc(d.exists() ? d.data() : null), () => setDoc(null)), [os.id]);
+  const itens = doc?.itens || [];
+  const gravar = async (novos, extra = {}) => { try { await F().fsMod.setDoc(ref, { osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', itens: novos, atualizadoEm: nowIso(), atualizadoPor: sessao.nome, ...extra }, { merge: true }); } catch (e) { toast(e.message, 'erro'); } };
+  const importar = async (file) => {
+    if (!file) return;
+    try {
+      setLendo('Lendo ' + file.name + '…');
+      const r = await extrairArquivo(file);
+      setLendo('A IA está montando a folha…');
+      const res = await chamarIA('compras_dinabox', { texto: r.texto, temImagens: (r.imagens || []).length > 0 }, r.imagens || []);
+      setPrev({ arquivo: file.name, itens: (res.itens || []).map(i => ({ ...i, categoria: CAT_COMPRA.includes(i.categoria) ? i.categoria : 'Outros', ok: true })) });
+    } catch (e) { toast('Não importou: ' + e.message, 'erro'); }
+    setLendo('');
+  };
+  const confirmar = async () => {
+    const add = prev.itens.filter(i => i.ok).map(({ ok, ...i }) => ({ ...i, id: rand(6), comprado: false }));
+    await gravar([...itens, ...add], { origem: 'Dinabox PCP · ' + prev.arquivo });
+    toast(add.length + ' itens na folha de compras.', 'ok'); setPrev(null);
+  };
+  const marcar = (id) => gravar(itens.map(i => i.id === id ? { ...i, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i));
+  const remover = (id) => gravar(itens.filter(i => i.id !== id));
+  const grupos = CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length);
+  const feitos = itens.filter(i => i.comprado).length;
+  if (prev) return html`
+    <div class="sheet-t">📥 Conferir importação</div>
+    <div class="dim">${prev.arquivo} · ${prev.itens.length} itens encontrados. Desmarque o que não for comprar.</div>
+    <div class="compras-lista">${prev.itens.map((i, k) => html`<label key=${k} class=${'compra-i' + (i.ok ? '' : ' off')}><input type="checkbox" checked=${i.ok} onChange=${e => setPrev(p => ({ ...p, itens: p.itens.map((x, j) => j === k ? { ...x, ok: e.target.checked } : x) }))} />
+      <span>${ICO_CAT[i.categoria]}</span><span class="grow"><b>${i.descricao}</b><small>${[i.codigo, i.marca, i.categoria].filter(Boolean).join(' · ')}</small></span><b class="compra-q">${i.qtd} ${i.unidade || ''}</b></label>`)}</div>
+    <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setPrev(null)}>Cancelar</button><button class="btn btn-verde" style=${{ flex: 1 }} onClick=${confirmar}>✓ Colocar ${prev.itens.filter(i => i.ok).length} itens na folha</button></div>`;
+  return html`
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🛒 Folha de compras</div>
+      ${itens.length > 0 && html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
+    <button class="btn btn-grande btn-block" disabled=${!!lendo} onClick=${() => inp.current?.click()}>${lendo || '📥 Importar folha de compras do PCP (Dinabox)'}</button>
+    <input ref=${inp} type="file" hidden accept=".pdf,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
+    <small class="dim">No Dinabox, exporte a folha de compras do PCP (PDF ou Excel) e escolha o arquivo aqui.</small>
+    ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="vazio dim">Nenhum item ainda.</div>` : html`
+      <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados</span></div>
+      ${grupos.map(([c, l]) => html`<div key=${c}><div class="compra-cat">${ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></div>
+        <div class="compras-lista">${l.map(i => html`<div key=${i.id} class=${'compra-i' + (i.comprado ? ' feito' : '')}>
+          <button class="compra-ck" onClick=${() => marcar(i.id)}>${i.comprado ? '✓' : ''}</button>
+          <span class="grow"><b>${i.descricao}</b><small>${[i.codigo, i.marca, i.obs, i.comprado ? 'comprado por ' + i.compradoPor : ''].filter(Boolean).join(' · ')}</small></span>
+          <b class="compra-q">${i.qtd} ${i.unidade || ''}</b><button class="x-btn" onClick=${() => remover(i.id)}>✕</button></div>`)}</div></div>`)}`}
+    <div class="compra-add">
+      <select class="inp inp-sm" value=${novo.categoria} onChange=${e => setNovo({ ...novo, categoria: e.target.value })}>${CAT_COMPRA.map(c => html`<option key=${c}>${c}</option>`)}</select>
+      <input class="inp inp-sm" placeholder="Item" value=${novo.descricao} onInput=${e => setNovo({ ...novo, descricao: e.target.value })} />
+      <input class="inp inp-sm" placeholder="Qtd" style=${{ width: '60px' }} value=${novo.qtd} onInput=${e => setNovo({ ...novo, qtd: e.target.value })} />
+      <button class="btn btn-sm btn-primary" onClick=${() => { if (!novo.descricao) return; gravar([...itens, { ...novo, id: rand(6), comprado: false }]); setNovo({ ...novo, descricao: '', qtd: '' }); }}>＋</button>
+    </div>
+    ${imprimir && ReactDOM.createPortal(html`<${ImpressaoCompras} os=${os} doc=${doc} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}`;
+}
+function LogoImp({ empresa }) { return window.__LOGO ? html`<img class="po-logo" src=${window.__LOGO} alt=${empresa || ''} />` : null; }
+function ImpressaoCompras({ os, doc, empresa }) {
+  const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
+  const itens = doc?.itens || [];
+  return html`<div class="po" style=${varsCores(cor)}>
+    <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">Folha de compras</div><div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div></div>
+      <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${new Date().toLocaleDateString('pt-BR')}${doc?.origem ? ' · ' + doc.origem : ''}</div></div></div>
+    ${CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
+      <div key=${c} class="po-amb"><div class="po-amb-t"><span>${l.length}</span>${c}</div>
+        <table><thead><tr><th style=${{ width: '26px' }}>✓</th><th style=${{ width: '14%' }}>Código</th><th>Descrição</th><th style=${{ width: '14%' }}>Marca</th><th style=${{ width: '12%' }}>Qtd</th><th style=${{ width: '16%' }}>Fornecedor / valor</th></tr></thead>
+          <tbody>${l.map(i => html`<tr key=${i.id}><td>${i.comprado ? '✔' : html`<span class="caixa"></span>`}</td><td class="mono">${i.codigo || ''}</td><td><b>${i.descricao}</b>${i.obs ? html`<br/><small>${i.obs}</small>` : ''}</td><td>${i.marca || ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td></td></tr>`)}</tbody></table></div>`)}
+    <div class="po-ass">${['Solicitado por', 'Compras', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+    <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
+  </div>`;
+}
+
+/* ---------- Vídeos do móvel montado na marcenaria (para o montador) ---------- */
+function embedVideo(url) {
+  const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{6,})/);
+  if (yt) return 'https://www.youtube.com/embed/' + yt[1];
+  const dr = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (dr) return 'https://drive.google.com/file/d/' + dr[1] + '/preview';
+  return null;
+}
+function VideosOS({ sessao, os, toast }) {
+  const [url, setUrl] = useState(''); const [tit, setTit] = useState('');
+  const vids = os.videos || [];
+  const salvar = async (lista) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { videos: lista }); } catch (e) { toast(e.message, 'erro'); } };
+  return html`
+    <div class="sheet-t">🎬 Vídeos do móvel montado</div>
+    <div class="dim" style=${{ marginTop: '-6px' }}>Grave o móvel montado na marcenaria e cole o link (YouTube ou Google Drive) — o montador assiste aqui antes de montar na obra.</div>
+    <div class="dia-box">
+      <input class="inp" placeholder="Título (ex: Balcão da pia montado)" value=${tit} onInput=${e => setTit(e.target.value)} />
+      <input class="inp" placeholder="Cole o link do vídeo (YouTube / Google Drive)" value=${url} onInput=${e => setUrl(e.target.value)} />
+      <button class="btn btn-grande btn-verde btn-block" disabled=${!/^https?:\/\//.test(url.trim())} onClick=${() => { salvar([{ url: url.trim(), titulo: tit.trim() || 'Vídeo de montagem', quem: sessao.nome, em: nowIso() }, ...vids]); setUrl(''); setTit(''); toast('Vídeo adicionado.', 'ok'); }}>＋ Adicionar vídeo</button>
+    </div>
+    ${vids.length === 0 ? html`<div class="vazio dim">Nenhum vídeo ainda.</div>` : vids.map((v, i) => { const e = embedVideo(v.url); return html`
+      <div key=${i} class="video-card">
+        <div class="row" style=${{ justifyContent: 'space-between' }}><b>🎬 ${v.titulo}</b><button class="x-btn" onClick=${() => salvar(vids.filter((_, j) => j !== i))}>✕</button></div>
+        ${e ? html`<iframe src=${e} allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>` : html`<a class="btn btn-block" href=${v.url} target="_blank" rel="noopener">▶ Abrir vídeo</a>`}
+        <small class="dim">${v.quem} · ${fmtData(v.em)}</small>
+      </div>`; })}`;
 }
 
 /* ---------- Quadro geral: andamento de cada cliente (celular, só botões) ---------- */
@@ -2428,8 +2535,11 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
           <div class="qg-acoes">
             <button class=${'qg-diario' + (o.pendAbertas ? ' tem' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'diario' })}>📓 Diário${o.pendAbertas ? html` · <b>${o.pendAbertas}</b>` : ''}</button>
             <button class=${'qg-diario' + (pedAb[o.id] ? ' tem-ped' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'pedidos' })}>📦 Pedidos${pedAb[o.id] ? html` · <b>${pedAb[o.id]}</b>` : ''}</button>
+            <button class="qg-diario" onClick=${() => setSheet({ osId: o.id, tipo: 'compras' })}>🛒 Compras</button>
+            <button class=${'qg-diario' + ((o.videos || []).length ? ' tem-vid' : '')} onClick=${() => setSheet({ osId: o.id, tipo: 'videos' })}>🎬 Vídeos${(o.videos || []).length ? html` · <b>${o.videos.length}</b>` : ''}</button>
             <button class="qg-diario" onClick=${() => imprimirFolha([o])}>🖨 Pendências</button>
           </div>
+          ${o.ultimoFinal?.foto && html`<button class="final-dia" onClick=${() => setSheet({ osId: o.id, tipo: 'diario' })}><img src=${o.ultimoFinal.foto} /><span>🌇 Final do dia · ${new Date(o.ultimoFinal.em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}${o.ultimoFinal.quem ? ' · ' + o.ultimoFinal.quem : ''}</span></button>`}
         </div>`)}`}
 
       ${osSheet && ReactDOM.createPortal(html`
@@ -2466,6 +2576,8 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
               <button class="btn btn-sm btn-ghost" onClick=${() => { setParc(osSheet, pSheet.k, { st: 'nao' }, 'Removido do quadro'); setSheet(null); }}>Não precisa deste parceiro nesta OS</button>`}
 
             ${sheet.tipo === 'diario' && html`<${DiarioOS} sessao=${sessao} os=${osSheet} toast=${toast} />`}
+            ${sheet.tipo === 'compras' && html`<${ComprasOS} sessao=${sessao} os=${osSheet} toast=${toast} />`}
+            ${sheet.tipo === 'videos' && html`<${VideosOS} sessao=${sessao} os=${osSheet} toast=${toast} />`}
             ${sheet.tipo === 'pedidos' && html`<${PedidosOS} sessao=${sessao} os=${osSheet} toast=${toast} catalogo=${catalogo} />`}
             ${sheet.tipo === 'add' && html`
               <div class="sheet-t">Adicionar parceiro nesta OS</div>
@@ -3487,11 +3599,11 @@ function ImpressaoOS({ os, empresa }) {
   return html`
     <div class="po" style=${varsCores(cor)}>
       <div class="po-topo">
-        <div>
+        <div class="row" style=${{ gap: '12px', flexWrap: 'nowrap', alignItems: 'center' }}><${LogoImp} empresa=${empresa} /><div>
           <div class="po-emp">${empresa || 'Gestão Pró'}</div>
           <div class="po-tit">Ordem de Serviço</div>
           <div class="po-sub">${(os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo || ''}</div>
-        </div>
+        </div></div>
         <div class="po-num">
           <div class="po-cod">${numOS(os)}</div>
           <div class="po-dots">${cor.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</div>
@@ -3709,6 +3821,15 @@ function TelaEquipe({ sessao, toast }) {
   return html`
     <div class="fade-up">
       <div class="page-head"><div><h2>Equipe</h2><div class="dim">Quem pode entrar no sistema desta empresa</div></div></div>
+      <div class="card stack" style=${{ marginBottom: '14px' }}>
+        <div class="sec-title">🏷️ Logo da empresa</div>
+        <div class="dim">Aparece no topo do app e em todas as impressões (OS, folha de compras, pendências, pedidos de alteração).</div>
+        <div class="row" style=${{ gap: '10px' }}>
+          ${window.__LOGO ? html`<img src=${window.__LOGO} style=${{ height: '56px', maxWidth: '200px', objectFit: 'contain', background: '#f5f5f4', borderRadius: '8px', padding: '4px' }} />` : html`<span class="dim">Nenhuma logo ainda.</span>`}
+          <label class="btn btn-primary">⬆ ${window.__LOGO ? 'Trocar logo' : 'Enviar logo'}<input type="file" accept="image/*" hidden onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { const url = URL.createObjectURL(f); const img = await new Promise((r, j) => { const i = new Image(); i.onload = () => r(i); i.onerror = j; i.src = url; }); const k = Math.min(1, 500 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); const png = c.toDataURL('image/png'); await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { logo: png.length < 300000 ? png : c.toDataURL('image/jpeg', 0.85) }); toast('Logo salva.', 'ok'); } catch (er) { toast('Não salvou a logo: ' + er.message, 'erro'); } }} /></label>
+          ${window.__LOGO && html`<button class="btn btn-ghost" onClick=${async () => { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { logo: '' }); toast('Logo removida.'); }}>Remover</button>`}
+        </div>
+      </div>
       <form class="card stack" onSubmit=${adicionar} style=${{ marginBottom: '14px' }}>
         <div class="section-label">Novo acesso</div>
         ${erro && html`<div class="error-box">${erro}</div>`}
@@ -4067,6 +4188,8 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
 
 function Principal({ sessao, toast }) {
   const novaVersao = useNovaVersao();
+  const [logo, setLogo] = useState(window.__LOGO || '');
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const l = d.data()?.logo || ''; window.__LOGO = l; setLogo(l); }, () => {}), []);
   const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
@@ -4098,7 +4221,7 @@ function Principal({ sessao, toast }) {
       <header class="topo">
         <div class="topo-in">
           <div class="brand-mini">
-            <div class="brand-mark">GP</div>
+            ${logo ? html`<img class="brand-logo" src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}
             <div>
               <div class="row" style=${{ gap: '6px' }}><b style=${{ fontFamily: 'var(--font-display)', fontSize: '16px' }}>Gestão Pró</b><span class="tag txt-desk">GESTÃO</span></div>
               <div class="dim topo-emp" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
