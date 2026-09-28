@@ -24,7 +24,7 @@ function useNovaVersao() {
 }
 // Cor fixa de cada cliente — a mesma em todas as telas.
 const PALETA_CLI = ['#6B4423', '#1E3A5F', '#1F4D3A', '#632B30', '#A85A44', '#4B5340', '#1C3144', '#7C3AED', '#B45309', '#0E7490', '#BE185D', '#374151', '#15803D', '#9D174D', '#1D4ED8', '#854D0E'];
-function corCliente(nome) { let h = 0; for (const ch of String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; }
+function corCliente(nome) { let h = 0; for (const ch of String(nome || '').split(/\s[-–]\s/)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const recarregarApp = async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); };
 
@@ -1279,12 +1279,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
   const nAtr = lista.filter(atrasada).length;
   const tiles = [
     { t: 'Total de OSs', n: lista.length, s: '100% da carteira', cls: '' },
-    { t: '1. Elaboração', n: cnt('elaboracao'), s: pf(cnt('elaboracao')), cls: '', f: 'elaboracao' },
-    { t: '2. Projetos', n: cnt('projetos'), s: pf(cnt('projetos')), cls: 'tile-azul', f: 'projetos' },
-    { t: '3. Produção', n: cnt('producao'), s: pf(cnt('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '4. Aguard. liberação', n: cnt('liberacao'), s: pf(cnt('liberacao')), cls: 'tile-warn', f: 'liberacao' },
-    { t: '5. Montagem', n: cnt('montagem'), s: pf(cnt('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '6. Concluída', n: cnt('concluida'), s: pf(cnt('concluida')), cls: 'tile-ok', f: 'concluida' },
+    ...STATUS_OS.map(x => ({ t: x.t, n: cnt(x.v), s: pf(cnt(x.v)), cls: ({ elaboracao: '', projetos: 'tile-azul', producao: 'tile-teal', liberacao: 'tile-warn', montagem: 'tile-roxo', concluida: 'tile-ok' })[x.v] || 'tile-cust', f: x.v, cor: x.cor })),
     { t: 'Vencidas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
 
@@ -1375,7 +1370,11 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
         };
         const grupos = Object.values(g).map(x => ({ ...x, ini: x.oss.filter(o => stOf(o) !== 'elaboracao' && stOf(o) !== 'concluida').length }))
           .sort((a, b) => (b.ini > 0) - (a.ini > 0) || a.nome.localeCompare(b.nome));
-        return html`${reab && html`<${SenhaMotivo} titulo=${'Reabrir etapa: ' + reab.t} texto="Esta etapa já foi concluída. Informe o motivo e a senha." botao="Reabrir" onOk=${(m) => salvarEt(reab.o, reab.k, 'andamento', m)} fechar=${() => setReab(null)} />`}<div class="os-clis">${grupos.map(x => html`
+        const voltar = async (o, alvo, motivo) => {
+          try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { status: alvo.v, statusHist: [...(o.statusHist || []), { st: alvo.v, em: nowIso(), quem: sessao.nome }], reaberturas: [...(o.reaberturas || []), { oque: 'Status: ' + (STATUS_OS.find(x => x.v === stOf(o)) || {}).t + ' → ' + alvo.t, motivo, quem: sessao.nome, quando: nowIso() }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); toast(numOS(o) + ' voltou para ' + alvo.t.replace(/^\d+\. /, ''), 'ok'); }
+          catch (e) { toast(e.message, 'erro'); }
+        };
+        return html`${reab && html`<${SenhaMotivo} titulo=${numOS(reab.o) + ': voltar para ' + reab.volta.t.replace(/^\d+\. /, '')} texto="Voltar uma etapa pede motivo e senha." botao="Voltar" onOk=${(m) => voltar(reab.o, reab.volta, m)} fechar=${() => setReab(null)} />`}<div class="os-clis">${grupos.map(x => html`
           <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')} style=${{ '--cc': corCliente(x.nome) }}>
             <div class="os-cli-top"><b>${x.nome}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
             ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
@@ -1389,9 +1388,10 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
                   <span class="os-trilho">${STATUS_OS.map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j < i ? 'f' : j === i ? 'a' : ''}></i>`)}</span>
                   <span class=${x2.c + ' mini'}>${x2.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
                 </button>
+                ${i > 0 && html`<button class="btn-voltar" title=${'Voltar para ' + STATUS_OS[i - 1].t} onClick=${(ev) => { ev.stopPropagation(); setReab({ o, volta: STATUS_OS[i - 1] }); }}>◀</button>`}
                 ${prox ? html`<button class="btn-avancar" title=${'Avançar para ' + prox.t} onClick=${(ev) => { ev.stopPropagation(); avancar(o); }}>▶<small>${prox.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</small></button>` : html`<span class="btn-avancar ok">✓</span>`}
               </div>
-              ${iniciada && html`<div class="os-etapas">${ETAPAS_FAB.map(([k, t]) => { const e = o.execucao?.etapas?.[k]?.status || 'pendente'; return html`<button key=${k} class=${'os-et ' + e} title=${t} onClick=${(ev) => { ev.stopPropagation(); e === 'pronto' ? setReab({ o, k, t }) : salvarEt(o, k, 'pronto'); }}>${e === 'pronto' ? '✓' : e === 'andamento' ? '▶' : '○'} ${t.split(' ')[0]}</button>`; })}</div>`}`; })}
+`; })}
           </div>`)}</div>`; })()
       : vista === 'quadro' ? html`
         <div class="kanban">
@@ -2741,14 +2741,16 @@ function osCitadas(txt, lista) {
     const vistos = new Set();
     for (const o of lista) {
       const nome = o.cliente?.nome || ''; const k = norm(nome); if (!k || vistos.has(k)) continue; vistos.add(k);
-      const chaves = [k, norm(nome.split(/\s[-–]\s/)[0])].filter(c => c.length >= 2);
+      const primeiro = norm(nome).split(' ')[0];
+      const unico = primeiro.length >= 4 && !['casa', 'apto', 'apartamento', 'escritorio', 'loja', 'sala'].includes(primeiro) && lista.filter(x => norm(x.cliente?.nome).split(' ')[0] === primeiro && norm(x.cliente?.nome) !== k).length === 0;
+      const chaves = [k, norm(nome.split(/\s[-–]\s/)[0]), unico ? primeiro : ''].filter(c => c.length >= 2);
       if (chaves.some(c => new RegExp('(^|[^a-z0-9])' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(t))) achadas.push(o);
     }
   }
   return achadas;
 }
 const corCelula = (txt, lista) => { const o = osCitadas(txt, lista)[0]; return o ? { background: corOS(o) + '1c', boxShadow: 'inset 4px 0 0 ' + corOS(o) } : undefined; };
-const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); const vis = new Set(); const uni = os.filter(o => { const k = norm(o.cliente?.nome); if (vis.has(k)) return false; vis.add(k); return true; }); return uni.length ? html`<div class="ag-tags">${uni.map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</span>`)}</div>` : null; };
+const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); const vis = new Set(); const uni = os.filter(o => { const k = norm((o.cliente?.nome || '').split(/\s[-–]\s/)[0]); if (vis.has(k)) return false; vis.add(k); return true; }); return uni.length ? html`<div class="ag-tags">${uni.map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</span>`)}</div>` : null; };
 const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 
 /* ---------- Tarefas com prazo final (cronograma do marceneiro) ---------- */
@@ -4221,12 +4223,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const nAtr = os.filter(atrasada).length;
   const tiles = [
     { t: 'Total', n: os.length, s: '100% da carteira', cls: '' },
-    { t: '1. Elaboração', n: st('elaboracao'), s: pct(st('elaboracao')), cls: '', f: 'elaboracao' },
-    { t: '2. Projetos', n: st('projetos'), s: pct(st('projetos')), cls: 'tile-azul', f: 'projetos' },
-    { t: '3. Produção', n: st('producao'), s: pct(st('producao')), cls: 'tile-teal', f: 'producao' },
-    { t: '4. Aguard. liberação', n: st('liberacao'), s: pct(st('liberacao')), cls: 'tile-warn', f: 'liberacao' },
-    { t: '5. Montagem', n: st('montagem'), s: pct(st('montagem')), cls: 'tile-roxo', f: 'montagem' },
-    { t: '6. Concluída', n: st('concluida'), s: pct(st('concluida')), cls: 'tile-ok', f: 'concluida' },
+    ...STATUS_OS.map(x => ({ t: x.t, n: st(x.v), s: pct(st(x.v)), cls: ({ elaboracao: '', projetos: 'tile-azul', producao: 'tile-teal', liberacao: 'tile-warn', montagem: 'tile-roxo', concluida: 'tile-ok' })[x.v] || 'tile-cust', f: x.v, cor: x.cor })),
     { t: 'Atrasadas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Tudo em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
   const filtradas = os.filter(o =>
@@ -4381,10 +4378,63 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     </div>`;
 }
 
+/* ---------- Configurações: etapas do processo (OS) e da produção (oficina) ---------- */
+const STATUS_PADRAO = STATUS_OS.map(x => ({ ...x }));
+const FAB_PADRAO = ETAPAS_FAB.map(x => [...x]);
+const CHIP_CLS = { elaboracao: 'chip', projetos: 'chip chip-azul', producao: 'chip chip-teal', liberacao: 'chip chip-warn', montagem: 'chip chip-roxo', concluida: 'chip chip-ok' };
+function aplicarEtapas(cfg) {
+  const st = Array.isArray(cfg?.etapasOS) && cfg.etapasOS.length >= 2 ? cfg.etapasOS : STATUS_PADRAO.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] }));
+  STATUS_OS.splice(0, STATUS_OS.length, ...st.map((x, i) => ({ v: x.v, t: (i + 1) + '. ' + x.nome, c: CHIP_CLS[x.v] || 'chip', cor: x.cor })));
+  st.forEach(x => { if (x.cor) COR_ST[x.v] = x.cor; });
+  const fab = Array.isArray(cfg?.etapasFab) && cfg.etapasFab.length ? cfg.etapasFab.map(x => [x.k, x.nome, x.desc || '']) : FAB_PADRAO;
+  ETAPAS_FAB.splice(0, ETAPAS_FAB.length, ...fab);
+}
+function TelaConfig({ sessao, toast }) {
+  const [os, setOs] = useState(() => STATUS_OS.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] || '#78716c' })));
+  const [fab, setFab] = useState(() => ETAPAS_FAB.map(([k, nome, desc]) => ({ k, nome, desc })));
+  const [salvando, setSalvando] = useState(false);
+  const mover = (arr, set, i, d) => { const a = [...arr]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set(a); };
+  const salvar = async () => {
+    if (os.some(x => !x.nome.trim()) || fab.some(x => !x.nome.trim())) return toast('Todas as etapas precisam de nome.');
+    setSalvando(true);
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { etapasOS: os.map(x => ({ ...x, nome: x.nome.trim() })), etapasFab: fab.map(x => ({ ...x, nome: x.nome.trim() })) }); toast('Etapas salvas. Já valem para todo o app.', 'ok'); }
+    catch (e) { toast(e.message, 'erro'); }
+    setSalvando(false);
+  };
+  const linha = (x, i, arr, set, campo) => html`<div key=${x.v || x.k} class="cfg-linha" style=${{ '--cc': x.cor || '#78716c' }}>
+    <span class="cfg-n">${i + 1}</span>
+    ${campo === 'os' && html`<input type="color" class="cfg-cor" value=${x.cor || '#78716c'} onInput=${e => set(arr.map((y, j) => j === i ? { ...y, cor: e.target.value } : y))} />`}
+    <input class="inp" value=${x.nome} onInput=${e => set(arr.map((y, j) => j === i ? { ...y, nome: e.target.value } : y))} />
+    <button class="btn btn-sm btn-ghost" onClick=${() => mover(arr, set, i, -1)} disabled=${i === 0}>▲</button>
+    <button class="btn btn-sm btn-ghost" onClick=${() => mover(arr, set, i, 1)} disabled=${i === arr.length - 1}>▼</button>
+    <button class="x-btn" title="Remover" onClick=${() => arr.length > 2 ? set(arr.filter((_, j) => j !== i)) : toast('Precisa de pelo menos 2 etapas.')}>✕</button>
+  </div>`;
+  return html`<div class="fade-up stack">
+    <div><h2>⚙ Configurações</h2><div class="dim">Etapas do processo da sua empresa. Renomeie, reordene, mude a cor, acrescente ou tire etapas.</div></div>
+    <div class="card page-card stack">
+      <div class="sec-title">📋 Etapas da OS (andamento geral)</div>
+      <div class="dim">São as etapas dos botões ◀ ▶ das Ordens de Serviço, do Início, do Kanban e dos cronogramas. A última é a de "concluída".</div>
+      ${os.map((x, i) => linha(x, i, os, setOs, 'os'))}
+      <button class="btn btn-sm" onClick=${() => setOs([...os.slice(0, -1), { v: 'et_' + rand(5), nome: 'Nova etapa', cor: '#0e7490' }, os[os.length - 1]])}>＋ Etapa</button>
+    </div>
+    <div class="card page-card stack">
+      <div class="sec-title">🏭 Etapas da produção (oficina)</div>
+      <div class="dim">Aparecem na esteira de produção da OS, no Quadro geral e no cronograma de produção.</div>
+      ${fab.map((x, i) => linha(x, i, fab, setFab, 'fab'))}
+      <button class="btn btn-sm" onClick=${() => setFab([...fab, { k: 'fab_' + rand(5), nome: 'Nova etapa', desc: '' }])}>＋ Etapa</button>
+    </div>
+    <div class="row" style=${{ gap: '6px', justifyContent: 'flex-end' }}>
+      <button class="btn" onClick=${() => { setOs(STATUS_PADRAO.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] }))); setFab(FAB_PADRAO.map(([k, nome, desc]) => ({ k, nome, desc }))); }}>Voltar ao padrão</button>
+      <button class="btn btn-verde" disabled=${salvando} onClick=${salvar}>${salvando ? 'Salvando…' : '✓ Salvar etapas'}</button>
+    </div>
+  </div>`;
+}
+
 function Principal({ sessao, toast }) {
   const novaVersao = useNovaVersao();
   const [logo, setLogo] = useState(window.__LOGO || '');
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const l = d.data()?.logo || ''; window.__LOGO = l; setLogo(l); }, () => {}), []);
+  const [, setCfgV] = useState(0);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); setCfgV(v => v + 1); }, () => {}), []);
   const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
@@ -4408,6 +4458,7 @@ function Principal({ sessao, toast }) {
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
     { v: 'cronograma', t: 'Cronogramas', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
+    ...(sessao.papel === 'admin' ? [{ v: 'config', t: 'Configurações', i: '⚙' }] : []),
   ];
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -4449,6 +4500,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'pedidos' && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
         ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
+        ${aba === 'config' && sessao.papel === 'admin' && html`<${TelaConfig} key=${STATUS_OS.map(x => x.v + x.t).join()} sessao=${sessao} toast=${toast} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
