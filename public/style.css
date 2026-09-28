@@ -873,3 +873,29 @@ fieldset.trava[disabled]{opacity:.72}
 .parc-op:hover{border-color:#0d9488;background:#f0fdfa}.parc-op small{color:#78716c;font-size:11px}
 .parc-op.sem{border-style:dashed}
 @media (max-width:700px){.os-clis{grid-template-columns:minmax(0,1fr)}.compra-i{flex-wrap:wrap}.compra-i .grow{flex-basis:60%}}
+
+/* v34 — cor fixa do cliente em tudo */
+.qg-cliente{border-left:0!important;padding:0!important;overflow:hidden;background:#fff}
+.qg-cliente .qg-cli{background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 70%,#000));color:#fff;padding:10px 12px}
+.qg-cliente .qg-cli b{color:#fff;font-size:15px}.qg-cliente .qg-cli small{color:rgba(255,255,255,.85)}
+.qg-cliente .qg-barra{margin:8px 12px 0;background:color-mix(in srgb,var(--cc) 15%,#eee)}
+.qg-cliente .qg-barra i{background:var(--cc)}
+.qg-cliente .qg-badges{padding:6px 12px 10px}
+.qg-cliente.atras{box-shadow:0 0 0 2px #dc2626}
+.qg-card{border-left:6px solid var(--cc)!important;background:linear-gradient(90deg,color-mix(in srgb,var(--cc) 9%,#fff),#fff 45%)}
+.qg-card .qg-num{background:var(--cc);color:#fff}
+.qg-cli-nome{font-size:17px;color:var(--cc);border-bottom:3px solid var(--cc)}
+.os-cli{border-color:color-mix(in srgb,var(--cc) 35%,#eee)!important}
+.os-cli .os-cli-top{background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 70%,#000))!important;color:#fff}
+.os-cli.ativo{box-shadow:0 4px 14px -6px var(--cc)!important}
+.os-cli-info .mono{color:var(--cc)}
+.os-etapas{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:0 8px 8px 13px;background:inherit}
+.os-et{border:1.5px solid #e7e5e4;background:#fff;border-radius:8px;padding:6px 2px;font:600 11px inherit;font-family:inherit;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:34px}
+.os-et.andamento{border-color:#f59e0b;background:#fffbeb;color:#92400e}
+.os-et.pronto{border-color:#16a34a;background:#16a34a;color:#fff}
+.os-et:hover{border-color:var(--cc)}
+.g-row{box-shadow:inset 5px 0 0 var(--cc)}
+.g-row .g-nome b{color:var(--cc)}
+.ag-tags{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:2px}
+.ag-tags span{color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px}
+@media (max-width:700px){.os-etapas{grid-template-columns:repeat(3,minmax(0,1fr))}}

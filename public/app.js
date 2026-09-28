@@ -22,6 +22,10 @@ function useNovaVersao() {
   }, []);
   return nova;
 }
+// Cor fixa de cada cliente — a mesma em todas as telas.
+const PALETA_CLI = ['#6B4423', '#1E3A5F', '#1F4D3A', '#632B30', '#A85A44', '#4B5340', '#1C3144', '#7C3AED', '#B45309', '#0E7490', '#BE185D', '#374151', '#15803D', '#9D174D', '#1D4ED8', '#854D0E'];
+function corCliente(nome) { let h = 0; for (const ch of String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; }
+const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const recarregarApp = async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); };
 
 if (window.pdfjsLib) {
@@ -1216,6 +1220,7 @@ function AtaAoVivo({ base, ata, catalogo, toast }) {
    Ordens de serviço: lista e editor
    ========================================================= */
 function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
+  const [reab, setReab] = useState(null);
   const [lista, setLista] = useState([]);
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState('');
@@ -1353,6 +1358,16 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
       : vista === 'cliente' ? (() => {
         const g = {};
         filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (g[k] = g[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
+        const salvarEt = async (o, k, st, motivo) => {
+          const et = { ...(o.execucao?.etapas || {}) }; et[k] = { ...(et[k] || {}), status: st, ...(st === 'pronto' ? { concluidaEm: nowIso() } : {}) };
+          const patch = { execucao: { ...(o.execucao || {}), etapas: et }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome };
+          if (motivo) patch.reaberturas = [...(o.reaberturas || []), { oque: 'Etapa ' + (ETAPAS_FAB.find(e => e[0] === k) || [])[1] + ' reaberta', motivo, quem: sessao.nome, quando: nowIso() }];
+          const semMont = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => et[x]?.status === 'pronto');
+          if (st === 'pronto' && ['elaboracao', 'projetos'].includes(stOf(o))) { patch.status = 'producao'; patch.statusHist = [...(o.statusHist || []), { st: 'producao', em: nowIso(), quem: sessao.nome }]; }
+          if (st === 'pronto' && semMont && stOf(o) === 'producao') { patch.status = 'liberacao'; patch.statusHist = [...(o.statusHist || []), { st: 'liberacao', em: nowIso(), quem: sessao.nome }]; }
+          if (st === 'pronto' && k === 'montagem' && ETAPAS_FAB.every(([x]) => et[x]?.status === 'pronto')) { patch.status = 'concluida'; patch.statusHist = [...(o.statusHist || []), { st: 'concluida', em: nowIso(), quem: sessao.nome }]; }
+          try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), patch); toast((ETAPAS_FAB.find(e => e[0] === k) || [])[1] + (st === 'pronto' ? ' concluída' : ' reaberta'), 'ok'); } catch (e) { toast(e.message, 'erro'); }
+        };
         const avancar = async (o) => {
           const i = STATUS_OS.findIndex(x => x.v === stOf(o)); const prox = STATUS_OS[i + 1]; if (!prox) return;
           try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { status: prox.v, statusHist: [...(o.statusHist || []), { st: prox.v, em: nowIso(), quem: sessao.nome }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); toast(numOS(o) + ' → ' + prox.t.replace(/^\d\. /, ''), 'ok'); }
@@ -1360,8 +1375,8 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
         };
         const grupos = Object.values(g).map(x => ({ ...x, ini: x.oss.filter(o => stOf(o) !== 'elaboracao' && stOf(o) !== 'concluida').length }))
           .sort((a, b) => (b.ini > 0) - (a.ini > 0) || a.nome.localeCompare(b.nome));
-        return html`<div class="os-clis">${grupos.map(x => html`
-          <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')}>
+        return html`${reab && html`<${SenhaMotivo} titulo=${'Reabrir etapa: ' + reab.t} texto="Esta etapa já foi concluída. Informe o motivo e a senha." botao="Reabrir" onOk=${(m) => salvarEt(reab.o, reab.k, 'andamento', m)} fechar=${() => setReab(null)} />`}<div class="os-clis">${grupos.map(x => html`
+          <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')} style=${{ '--cc': corCliente(x.nome) }}>
             <div class="os-cli-top"><b>${x.nome}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
             ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
               const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i];
@@ -1374,8 +1389,9 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
                   <span class="os-trilho">${STATUS_OS.map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j < i ? 'f' : j === i ? 'a' : ''}></i>`)}</span>
                   <span class=${x2.c + ' mini'}>${x2.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
                 </button>
-                ${prox ? html`<button class="btn-avancar" title=${'Avançar para ' + prox.t} onClick=${() => avancar(o)}>▶<small>${prox.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</small></button>` : html`<span class="btn-avancar ok">✓</span>`}
-              </div>`; })}
+                ${prox ? html`<button class="btn-avancar" title=${'Avançar para ' + prox.t} onClick=${(ev) => { ev.stopPropagation(); avancar(o); }}>▶<small>${prox.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</small></button>` : html`<span class="btn-avancar ok">✓</span>`}
+              </div>
+              ${iniciada && html`<div class="os-etapas">${ETAPAS_FAB.map(([k, t]) => { const e = o.execucao?.etapas?.[k]?.status || 'pendente'; return html`<button key=${k} class=${'os-et ' + e} title=${t} onClick=${(ev) => { ev.stopPropagation(); e === 'pronto' ? setReab({ o, k, t }) : salvarEt(o, k, 'pronto'); }}>${e === 'pronto' ? '✓' : e === 'andamento' ? '▶' : '○'} ${t.split(' ')[0]}</button>`; })}</div>`}`; })}
           </div>`)}</div>`; })()
       : vista === 'quadro' ? html`
         <div class="kanban">
@@ -2558,8 +2574,8 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
           const tot = g.cards.length * 6, feitas = g.cards.reduce((n, c) => n + c.feitas, 0);
           const pend = g.cards.reduce((n, c) => n + c.pendParc.length, 0), atr = g.cards.filter(c => c.atras).length, pendD = g.cards.reduce((n, c) => n + (c.o.pendAbertas || 0), 0);
           const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
-          const cor = g.cards.find(c => temCores(c.o))?.o.cores[0];
-          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${cor ? { borderLeftColor: cor } : undefined} onClick=${() => setCliSel(k)}>
+          const cor = corCliente(g.nome);
+          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor }} onClick=${() => setCliSel(k)}>
             <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
             <div class="qg-barra"><i style=${{ width: (tot ? feitas / tot * 100 : 0) + '%' }}></i></div>
             <div class="qg-badges">
@@ -2571,10 +2587,10 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
             </div>
           </button>`; });
       })() : html`
-        <div class="row" style=${{ gap: '8px', justifyContent: 'space-between' }}><span class="row" style=${{ gap: '8px' }}><button class="btn btn-sm" onClick=${() => setCliSel(null)}>← Clientes</button><b style=${{ fontSize: '17px' }}>${cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || ''}</b></span>
+        <div class="row" style=${{ gap: '8px', justifyContent: 'space-between' }}><span class="row" style=${{ gap: '8px' }}><button class="btn btn-sm" onClick=${() => setCliSel(null)}>← Clientes</button><b class="qg-cli-nome" style=${{ '--cc': corCliente(cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || '') }}>${cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || ''}</b></span>
           <button class="btn btn-sm" onClick=${() => imprimirFolha(cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(c => c.o))}>🖨 Folha de pendências</button></div>
         ${cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(({ o, parc, et, feitas, atras }) => html`
-        <div key=${o.id} class=${'qg-card' + (atras ? ' atras' : '')} style=${temCores(o) ? { borderLeftColor: o.cores[0] } : undefined}>
+        <div key=${o.id} class=${'qg-card' + (atras ? ' atras' : '')} style=${{ '--cc': corOS(o) }}>
           <div class="qg-top" onClick=${() => abrirOS(o.id)}>
             <b class="qg-num">${numOS(o)}</b>
             <div class="qg-cli"><b>${o.cliente?.nome || 'Cliente'}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}</small></div>
@@ -2703,12 +2719,16 @@ function OSPicker({ lista, onPick }) {
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">Escolher OS</div><button class="x-btn" onClick=${fechar}>✕</button></div>
         <input class="inp" autoFocus placeholder="Buscar cliente, nº da OS ou ambiente…" value=${q} onInput=${e => setQ(e.target.value)} onKeyDown=${e => e.key === 'Escape' && fechar()} />
         <div class="os-picker-lista">
-          ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" style=${temCores(o) ? { borderLeft: '4px solid ' + o.cores[0] } : undefined} onClick=${() => { onPick(linhaOS(o)); fechar(); }}>
+          ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" style=${{ borderLeft: '5px solid ' + corOS(o), background: corOS(o) + '10' }} onClick=${() => { onPick(linhaOS(o)); fechar(); }}>
             <span><b>${numOS(o)}</b> — ${o.cliente?.nome || 'Cliente'}<small>${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'}${o.prazoEntrega ? ' · entrega ' + o.prazoEntrega : ''}</small></span></button>`)}
           ${!res.length && html`<div class="dim">Nenhuma OS encontrada.</div>`}
         </div>
       </div></div>`, document.body)}</span>`;
 }
+// Encontra as OSs citadas num texto da agenda (OS:26.098) e devolve as cores dos clientes.
+function osCitadas(txt, lista) { const cods = [...String(txt || '').matchAll(/OS:?\s*(\d{2}\.\d{2,4})/gi)].map(m => m[1]); if (!cods.length) return []; const norm3 = (c) => c.split('.')[0] + '.' + c.split('.')[1].padStart(3, '0'); return cods.map(c => (lista || []).find(o => numOS(o) === norm3(c))).filter(Boolean); }
+const corCelula = (txt, lista) => { const o = osCitadas(txt, lista)[0]; return o ? { background: corOS(o) + '1c', boxShadow: 'inset 4px 0 0 ' + corOS(o) } : undefined; };
+const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); return os.length ? html`<div class="ag-tags">${[...new Set(os)].map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${o.cliente?.nome?.split(' ')[0] || ''}</span>`)}</div>` : null; };
 const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 
 function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
@@ -2803,11 +2823,11 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
               <div class="ag-scroll"><table class="ag">
                 <thead><tr><th class="ag-nome"></th>${diasD.map((d, i) => html`<th key=${i} class=${mesmoDia(d, new Date()) ? 'hoje' : ''}>${DIAS_SEM[i].toUpperCase()} – ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</th>`)}</tr></thead>
                 <tbody>
-                  ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class="ag-chip" style=${temCores(e.o) ? { borderLeftColor: e.o.cores[0] } : undefined}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}</div>`)}</td>`)}</tr>`}
+                  ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class="ag-chip" style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '14' }}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}</div>`)}</td>`)}</tr>`}
                   ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
                     <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
                       <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
-                    ${r.dias.map((v, di) => html`<td key=${di}><textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
+                    ${r.dias.map((v, di) => html`<td key=${di} style=${corCelula(v, lista)}>${tagsOS(v, lista)}<textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
                       <${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></td>`)}
                   </tr>`)}
                 </tbody>
@@ -2872,7 +2892,7 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
           const ev = eventosOS(lista, d); const ag = itensAgenda(d);
           return html`<div key=${iso(d)} class=${'mes-d' + (d.getMonth() !== mes.getMonth() ? ' fora' : '') + (mesmoDia(d, hoje) ? ' hoje' : '')} onClick=${() => { setSemana(iso(segundaDe(d))); setVista('semana'); }}>
             <b>${d.getDate()}</b>
-            ${ev.slice(0, 4).map((e, j) => html`<div key=${'e' + j} class=${'mes-ev ' + (e.t === 'entrega' ? 'ent' : '')} style=${temCores(e.o) ? { borderLeftColor: e.o.cores[0] } : undefined}>${e.t === 'entrega' ? '🚚' : '📌'} ${numOS(e.o)} ${e.o.cliente?.nome || ''}${e.t !== 'entrega' ? ' · ' + e.txt : ''}</div>`)}
+            ${ev.slice(0, 4).map((e, j) => html`<div key=${'e' + j} class=${'mes-ev ' + (e.t === 'entrega' ? 'ent' : '')} style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '1a' }}>${e.t === 'entrega' ? '🚚' : '📌'} ${numOS(e.o)} ${e.o.cliente?.nome || ''}${e.t !== 'entrega' ? ' · ' + e.txt : ''}</div>`)}
             ${ag.slice(0, 4).map((a, j) => html`<div key=${'a' + j} class="mes-ev" style=${{ borderLeftColor: cor[a.k] }}>${a.txt}</div>`)}
             ${ev.length + ag.length > 8 && html`<small class="dim">+${ev.length + ag.length - 8} mais</small>`}
           </div>`; })}
@@ -2923,7 +2943,7 @@ function TelaCronograma({ sessao, abrirOS, toast }) {
               let ant = lerPrazo(o.criadoEm?.slice(0, 10).split('-').reverse().join('/')) || hoje;
               const barras = ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const fim = lerPrazo(e.prazo); const r = fim ? { k, t, de: ant, ate: fim, st: e.status || 'pendente' } : null; if (fim) ant = fim; return r; }).filter(Boolean);
               const entrega = lerPrazo(o.prazoEntrega);
-              return html`<div key=${o.id} class="g-row" onClick=${() => abrirOS(o.id)}>
+              return html`<div key=${o.id} class="g-row" style=${{ '--cc': corOS(o) }} onClick=${() => abrirOS(o.id)}>
                 <div class="g-nome"><b>${numOS(o)}</b> ${o.cliente?.nome || ''}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></div>
                 <div class="g-trilha">
                   ${barras.map(b => html`<i key=${b.k} class=${'g-bar ' + b.st} title=${b.t + ' até ' + b.ate.toLocaleDateString('pt-BR')} style=${{ left: pos(b.de) + '%', width: Math.max(1.2, pos(b.ate) - pos(b.de)) + '%', background: cores[b.k] }}>${b.t}</i>`)}
@@ -3116,7 +3136,7 @@ const PALETAS = [
 ];
 const temCores = (o) => Array.isArray(o?.cores) && o.cores.length === 3;
 const varsCores = (c) => ({ '--c1': c[0], '--c2': c[1], '--c3': c[2] });
-const pinta = (o) => temCores(o) ? { borderLeft: '5px solid ' + o.cores[0], background: 'linear-gradient(90deg,' + o.cores[1] + '22,#fff 60%)' } : undefined;
+const pinta = (o) => { const c = corOS(o); return { borderLeft: '5px solid ' + c, background: 'linear-gradient(90deg,' + c + '14,#fff 60%)' }; };
 const bolinhas = (o) => temCores(o) ? html`<span class="bolinhas">${o.cores.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</span>` : null;
 
 function PaletaOS({ os, alterar, sessao, toast, travada }) {
@@ -4096,9 +4116,6 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
   const togg = html`<div class="seg-mini ini-vistas">${[['compacto', '☰ Compacto'], ['cliente', '🎨 Por cliente'], ['kanban', '▥ Kanban'], ['detalhado', '▦ Detalhado']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}</div>`;
-  const PALETA_CLI = ['#6B4423', '#1E3A5F', '#1F4D3A', '#632B30', '#A85A44', '#4B5340', '#1C3144', '#7C3AED', '#B45309', '#0E7490', '#BE185D', '#374151'];
-  const corCli = (nome) => { let h = 0; for (const ch of norm(nome)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETA_CLI[h % PALETA_CLI.length]; };
-  const corOS = (o) => temCores(o) ? o.cores[0] : corCli(o.cliente?.nome || '');
   const cabecalho = html`
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <b style=${{ fontSize: '17px' }}>Produção <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
