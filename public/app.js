@@ -2744,7 +2744,8 @@ function osCitadas(txt, lista) {
       const primeiro = norm(nome).split(' ')[0];
       const unico = primeiro.length >= 4 && !['casa', 'apto', 'apartamento', 'escritorio', 'loja', 'sala'].includes(primeiro) && lista.filter(x => norm(x.cliente?.nome).split(' ')[0] === primeiro && norm(x.cliente?.nome) !== k).length === 0;
       const chaves = [k, norm(nome.split(/\s[-–]\s/)[0]), unico ? primeiro : ''].filter(c => c.length >= 2);
-      if (chaves.some(c => new RegExp('(^|[^a-z0-9])' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(t))) achadas.push(o);
+      const esc = (c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (chaves.some(c => new RegExp('(^|[^a-z0-9])' + esc(c) + (c === primeiro && unico ? '' : '([^a-z0-9]|$)')).test(t))) achadas.push(o);
     }
   }
   return achadas;
