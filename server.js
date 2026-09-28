@@ -339,6 +339,17 @@ DOCUMENTO:
 """${String(d.texto || '').slice(0, 40000)}"""
 ${d.temImagens ? 'As imagens são o documento; leia tudo.' : ''}`;
 
+    case 'compras_dinabox':
+      return `Você lê a FOLHA DE COMPRAS / LISTA DE MATERIAIS exportada do PCP da Dinabox (marcenaria de móveis planejados).
+Extraia TODOS os itens a comprar, sem inventar nada, mantendo códigos e medidas.
+Classifique cada item em uma categoria: "Chapas", "Fitas de borda", "Ferragens", "Puxadores", "Perfis", "Iluminação", "Vidros", "Acessórios", "Químicos", "Outros".
+Responda SOMENTE com JSON:
+{"projeto": "nome do projeto/cliente se houver", "itens": [{"categoria": "", "codigo": "", "descricao": "", "marca": "", "qtd": "", "unidade": "un|m|m²|chapa|rolo|cx", "obs": ""}]}
+
+TEXTO:
+"""${String(d.texto || '').slice(0, 45000)}"""
+${d.temImagens ? 'As imagens são a folha; leia tudo.' : ''}`;
+
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
