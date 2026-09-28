@@ -2726,12 +2726,125 @@ function OSPicker({ lista, onPick }) {
       </div></div>`, document.body)}</span>`;
 }
 // Encontra as OSs citadas num texto da agenda (OS:26.098) e devolve as cores dos clientes.
-function osCitadas(txt, lista) { const cods = [...String(txt || '').matchAll(/OS:?\s*(\d{2}\.\d{2,4})/gi)].map(m => m[1]); if (!cods.length) return []; const norm3 = (c) => c.split('.')[0] + '.' + c.split('.')[1].padStart(3, '0'); return cods.map(c => (lista || []).find(o => numOS(o) === norm3(c))).filter(Boolean); }
+function osCitadas(txt, lista) {
+  const t = norm(txt); if (!t || !(lista || []).length) return [];
+  const achadas = [];
+  const soDig = (x) => String(x || '').replace(/\D/g, '');
+  // 1) números de OS (novo 26.098, antigo 26.92 / 2694)
+  for (const m of String(txt).matchAll(/(?:os\s*:?\s*)?(\d{2})\s*[.,]\s*(\d{1,4})|os\s*:?\s*(\d{3,6})/gi)) {
+    const cod = m[3] ? m[3] : m[1] + m[2];
+    const o = lista.find(o => soDig(o.numeroAntigo) === cod) || lista.find(o => soDig(numOS(o)) === (m[1] ? m[1] + m[2].padStart(3, '0') : cod));
+    if (o) achadas.push(o);
+  }
+  // 2) nome do cliente (inteiro ou a parte antes do " - ")
+  if (!achadas.length) {
+    const vistos = new Set();
+    for (const o of lista) {
+      const nome = o.cliente?.nome || ''; const k = norm(nome); if (!k || vistos.has(k)) continue; vistos.add(k);
+      const chaves = [k, norm(nome.split(/\s[-–]\s/)[0])].filter(c => c.length >= 2);
+      if (chaves.some(c => new RegExp('(^|[^a-z0-9])' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(t))) achadas.push(o);
+    }
+  }
+  return achadas;
+}
 const corCelula = (txt, lista) => { const o = osCitadas(txt, lista)[0]; return o ? { background: corOS(o) + '1c', boxShadow: 'inset 4px 0 0 ' + corOS(o) } : undefined; };
-const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); return os.length ? html`<div class="ag-tags">${[...new Set(os)].map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${o.cliente?.nome?.split(' ')[0] || ''}</span>`)}</div>` : null; };
+const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); const vis = new Set(); const uni = os.filter(o => { const k = norm(o.cliente?.nome); if (vis.has(k)) return false; vis.add(k); return true; }); return uni.length ? html`<div class="ag-tags">${uni.map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</span>`)}</div>` : null; };
 const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 
+/* ---------- Tarefas com prazo final (cronograma do marceneiro) ---------- */
+const isoD = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const deIsoD = (t) => { const [a, m, d] = String(t).split('-').map(Number); return new Date(a, m - 1, d); };
+const fimSemana = (d) => d.getDay() === 0 || d.getDay() === 6;
+function somaUteis(t, n) { const d = deIsoD(t); let k = Math.abs(n), s = Math.sign(n); while (k > 0) { d.setDate(d.getDate() + s); if (!fimSemana(d)) k--; } return isoD(d); }
+function uteisEntre(a, b) { if (b <= a) return 0; let n = 0; const d = deIsoD(a); while (isoD(d) < b) { d.setDate(d.getDate() + 1); if (!fimSemana(d)) n++; } return n; }
+const dm = (t) => t ? t.split('-').reverse().slice(0, 2).join('/') : '';
+
+function useTarefas(sessao) {
+  const [t, setT] = useState([]);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setT(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setT([])), []);
+  return t;
+}
+function NovaTarefa({ sessao, lista, pessoa, grade, inicio, fechar, toast }) {
+  const [osSel, setOsSel] = useState(null);
+  const [q, setQ] = useState('');
+  const [ini, setIni] = useState(inicio);
+  const [fim, setFim] = useState(inicio);
+  const [texto, setTexto] = useState('');
+  const res = (lista || []).filter(o => o.status !== 'concluida' && (!q || norm(linhaOS(o) + ' ' + (o.numeroAntigo || '')).includes(norm(q)))).slice(0, 30);
+  const salvar = async () => {
+    if (!osSel && !texto.trim()) return toast('Escolha a OS ou escreva a tarefa.');
+    if (fim < ini) return toast('O prazo final não pode ser antes do início.');
+    try {
+      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
+      toast('Tarefa lançada no cronograma de ' + pessoa + '.', 'ok'); fechar();
+    } catch (e) { toast(e.message, 'erro'); }
+  };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
+    <div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">📅 Nova tarefa · ${pessoa}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+      ${osSel ? html`<div class="tar-os" style=${{ '--cc': corOS(osSel) }}><b>${numOS(osSel)}</b> ${osSel.cliente?.nome} · ${(osSel.ambientes || []).map(a => a.nome).join(', ')} <button class="x-btn" onClick=${() => setOsSel(null)}>trocar</button></div>`
+        : html`<input class="inp" autoFocus placeholder="🔍 Buscar OS (nº novo ou antigo, cliente, ambiente)" value=${q} onInput=${e => setQ(e.target.value)} />
+          <div class="os-picker-lista" style=${{ maxHeight: '30vh' }}>${res.map(o => html`<button key=${o.id} class="opc-i" style=${{ borderLeft: '5px solid ' + corOS(o), background: corOS(o) + '10' }} onClick=${() => setOsSel(o)}><span><b>${numOS(o)}</b>${o.numeroAntigo ? html` <small style=${{ display: 'inline' }}>(antiga ${o.numeroAntigo})</small>` : ''} — ${o.cliente?.nome}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></span></button>`)}</div>`}
+      <div class="grid2">
+        <div class="field"><span class="lbl">Início</span><input class="inp" type="date" value=${ini} onInput=${e => { setIni(e.target.value); if (fim < e.target.value) setFim(e.target.value); }} /></div>
+        <div class="field"><span class="lbl">📅 Prazo final de execução</span><input class="inp" type="date" value=${fim} min=${ini} onInput=${e => setFim(e.target.value)} /></div>
+      </div>
+      <div class="row" style=${{ gap: '5px' }}><span class="dim">Duração:</span>${[1, 2, 3, 5, 10].map(n => html`<button key=${n} class=${'pill' + (uteisEntre(ini, fim) + 1 === n ? ' on' : '')} onClick=${() => setFim(somaUteis(ini, n - 1))}>${n} ${n === 1 ? 'dia' : 'dias'}</button>`)}<span class="dim">(dias úteis)</span></div>
+      <input class="inp" placeholder="O que vai ser feito (ex: produzir cristaleira, montar ilha)" value=${texto} onInput=${e => setTexto(e.target.value)} />
+      <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>✓ Lançar no cronograma</button>
+    </div></div>`, document.body);
+}
+function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
+  const [dias, setDias] = useState(1);
+  const [novaData, setNovaData] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [modo, setModo] = useState('');
+  const hoje = isoD(new Date());
+  const atrasada = t.status !== 'concluida' && t.fim < hoje;
+  const concluir = async (v) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const excluir = async () => { try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const prorrogar = async () => {
+    if (motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
+    const novoFim = novaData || somaUteis(t.fim, dias);
+    const n = uteisEntre(t.fim, novoFim);
+    if (n <= 0) return toast('Escolha uma data depois de ' + dm(t.fim) + '.');
+    const { writeBatch } = F().fsMod; const b = writeBatch(F().db);
+    const reg = { dias: n, motivo: motivo.trim(), quem: sessao.nome, em: nowIso(), fimAntes: t.fim, fimDepois: novoFim };
+    b.update(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { fim: novoFim, prorrogacoes: [...(t.prorrogacoes || []), reg] });
+    // empurra as tarefas seguintes da mesma pessoa
+    const seguintes = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim);
+    seguintes.forEach(x => b.update(docRef('empresas', sessao.empresaId, 'tarefas', x.id), { inicio: somaUteis(x.inicio, n), fim: somaUteis(x.fim, n), prorrogacoes: [...(x.prorrogacoes || []), { dias: n, motivo: 'Ajuste automático: ' + (t.cliente || t.texto) + ' atrasou (' + motivo.trim() + ')', quem: sessao.nome, em: nowIso(), fimAntes: x.fim, fimDepois: somaUteis(x.fim, n), auto: true }] }));
+    try { await b.commit(); toast(`+${n} ${n === 1 ? 'dia' : 'dias'}. ${seguintes.length ? seguintes.length + ' tarefa(s) seguinte(s) de ' + t.pessoa + ' ajustada(s).' : ''}`, 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
+  };
+  const seguintesPrev = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim && x.inicio >= t.inicio);
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
+    <div class="card modal-caixa stack" style=${{ width: 'min(520px,100%)', '--cc': t.cliente ? corCliente(t.cliente) : '#57534e' }}>
+      <div class="tar-cab"><div><b>${t.cliente || 'Tarefa'}</b><small>${[t.osCod, t.ambiente].filter(Boolean).join(' · ')}</small></div><button class="x-btn" style=${{ color: '#fff' }} onClick=${fechar}>✕</button></div>
+      ${t.texto && html`<div>${t.texto}</div>`}
+      <div class="tar-datas"><span>👷 <b>${t.pessoa}</b></span><span>▶ ${dm(t.inicio)}</span><span class=${atrasada ? 'vermelho' : ''}>📅 prazo <b>${dm(t.fim)}</b>${t.fimOriginal && t.fimOriginal !== t.fim ? html` <s class="dim">${dm(t.fimOriginal)}</s>` : ''}</span>
+        <span>${t.status === 'concluida' ? '✅ Concluída' : atrasada ? '⚠ Atrasada' : '⏳ Em execução'}</span></div>
+      ${t.status !== 'concluida' ? html`
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class="btn btn-grande btn-verde" style=${{ flex: 1 }} onClick=${() => concluir(true)}>✓ Concluída</button>
+          <button class=${'btn btn-grande' + (atrasada ? ' btn-marrom' : '')} style=${{ flex: 1 }} onClick=${() => setModo(modo ? '' : 'mais')}>＋ Mais dias</button>
+        </div>
+        ${modo === 'mais' && html`<div class="dia-box">
+          <span class="lbl">Quantos dias a mais? (dias úteis)</span>
+          <div class="row" style=${{ gap: '5px' }}>${[1, 2, 3, 5].map(n => html`<button key=${n} class=${'pill' + (!novaData && dias === n ? ' on' : '')} onClick=${() => { setDias(n); setNovaData(''); }}>+${n}</button>`)}
+            <span class="dim">ou nova data:</span><input class="inp inp-sm" style=${{ width: 'auto' }} type="date" min=${t.fim} value=${novaData} onInput=${e => setNovaData(e.target.value)} /></div>
+          <div class="dim">Novo prazo: <b>${dm(novaData || somaUteis(t.fim, dias))}</b>${seguintesPrev.length ? html` · também empurra <b>${seguintesPrev.length}</b> tarefa(s) seguinte(s) de ${t.pessoa}` : ''}</div>
+          <textarea class="inp" rows="2" placeholder="Motivo (obrigatório): ex. faltou chapa, retrabalho na pintura…" value=${motivo} onInput=${e => setMotivo(e.target.value)}></textarea>
+          <button class="btn btn-grande btn-marrom btn-block" onClick=${prorrogar}>Confirmar novo prazo</button>
+        </div>`}` : html`<button class="btn" onClick=${() => concluir(false)}>↺ Reabrir tarefa</button>`}
+      ${(t.prorrogacoes || []).length > 0 && html`<details open><summary class="dim">Prorrogações (${t.prorrogacoes.length})</summary>${t.prorrogacoes.map((p, i) => html`<div key=${i} class="tar-prorr">+${p.dias}d · ${dm(p.fimAntes)} → ${dm(p.fimDepois)} · ${p.motivo}<small>${p.quem} · ${fmtData(p.em)}</small></div>`)}</details>`}
+      <button class="btn btn-sm btn-ghost" onClick=${excluir}>Excluir tarefa</button>
+    </div></div>`, document.body);
+}
+
 function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
+  const tarefas = useTarefas(sessao);
+  const [novaT, setNovaT] = useState(null);
+  const [verT, setVerT] = useState(null);
   const [doc, setDoc] = useState(undefined);
   const [sujo, setSujo] = useState(false);
   const [importando, setImportando] = useState('');
@@ -2790,6 +2903,8 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
 
   return html`
     <div class="stack">
+      ${novaT && html`<${NovaTarefa} sessao=${sessao} lista=${lista} pessoa=${novaT.pessoa} grade=${novaT.grade} inicio=${novaT.inicio} toast=${toast} fechar=${() => setNovaT(null)} />`}
+      ${verT && html`<${DetalheTarefa} sessao=${sessao} t=${tarefas.find(x => x.id === verT.id) || verT} todas=${tarefas} toast=${toast} fechar=${() => setVerT(null)} />`}
       <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
         <div class="row" style=${{ gap: '6px' }}>
           <button class="btn btn-sm" onClick=${() => mover(-1)}>‹</button>
@@ -2827,8 +2942,12 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                   ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
                     <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
                       <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
-                    ${r.dias.map((v, di) => html`<td key=${di} style=${corCelula(v, lista)}>${tagsOS(v, lista)}<textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
-                      <${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></td>`)}
+                    ${r.dias.map((v, di) => { const dISO = isoD(diasD[di]); const tsk = tarefas.filter(t => norm(t.pessoa) === norm(r.nome) && t.inicio <= dISO && t.fim >= dISO); return html`<td key=${di} style=${corCelula(v, lista)}>
+                      ${tsk.map(t => { const c = t.cliente ? corCliente(t.cliente) : '#57534e'; const atr = t.status !== 'concluida' && t.fim < isoD(new Date()); const ult = t.fim === dISO; return html`<button key=${t.id} class=${'tar-bar' + (t.status === 'concluida' ? ' ok' : '') + (atr ? ' atr' : '') + (t.inicio === dISO ? ' ini' : '') + (ult ? ' fim' : '')} style=${{ '--cc': c }} onClick=${() => setVerT(t)} title=${(t.cliente || '') + ' ' + (t.texto || '')}>
+                        ${t.inicio === dISO || di === 0 ? html`<b>${(t.cliente || t.texto || '').split(/\s[-–]\s/)[0]}</b> <small>${t.ambiente || t.texto}</small>` : html`<small>…</small>`}
+                        ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>`; })}
+                      ${tagsOS(v, lista)}<textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
+                      <span class="cel-acoes"><button class="btn btn-ghost btn-sm" title="Tarefa com prazo" onClick=${() => setNovaT({ pessoa: r.nome, grade: k, inicio: dISO })}>📅</button><${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></span></td>`; })}
                   </tr>`)}
                 </tbody>
               </table></div>
