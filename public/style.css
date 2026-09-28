@@ -939,3 +939,12 @@ fieldset.trava[disabled]{opacity:.72}
 .acab-box{min-width:0}
 @media (max-width:1000px){.page-card .grid2:has(> .acab-box){grid-template-columns:minmax(0,1fr)!important}}
 @media (max-width:480px){.trilho-pt .bola{width:24px;height:24px;font-size:11px}.trilho-pt small{font-size:9.5px}.trilho-linha{top:11px}}
+
+/* v41 — concluir no cronograma */
+.cel-ok{display:inline-flex;align-items:center;gap:3px;border:1.5px solid #16a34a;background:#fff;color:#15803d;border-radius:999px;padding:2px 9px;font:700 11px inherit;font-family:inherit;cursor:pointer;margin:2px 0;min-height:24px}
+.cel-ok.on{background:#16a34a;color:#fff}
+.ag-cel.feito{text-decoration:line-through;color:#78716c;background:#f0fdf4!important}
+.ag-chip.feito{opacity:.7;text-decoration:line-through}
+.ag-chip.feito .cel-ok{text-decoration:none}
+.ag-chip .cel-ok{margin-left:6px}
+.tar-ok{width:100%;justify-content:center}

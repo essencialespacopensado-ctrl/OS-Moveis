@@ -2959,15 +2959,17 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
               <div class="ag-scroll"><table class="ag">
                 <thead><tr><th class="ag-nome"></th>${diasD.map((d, i) => html`<th key=${i} class=${mesmoDia(d, new Date()) ? 'hoje' : ''}>${DIAS_SEM[i].toUpperCase()} – ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</th>`)}</tr></thead>
                 <tbody>
-                  ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class="ag-chip" style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '14' }}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}</div>`)}</td>`)}</tr>`}
+                  ${(k === 'entregas' || k === 'montagem') && html`<tr class="ag-auto"><td class="ag-nome">📌 Das OSs</td>${diasD.map((_, i) => html`<td key=${i}>${autoDia(i, e => k === 'entregas' ? e.t === 'entrega' : e.t === 'montagem').map((e, j) => html`<div key=${j} class=${'ag-chip' + (e.o.entregaFeita ? ' feito' : '')} style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '14' }}>${e.txt}: <b>${numOS(e.o)}</b> ${e.o.cliente?.nome}
+                        <button class=${'cel-ok' + (e.o.entregaFeita ? ' on' : '')} onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', e.o.id), { entregaFeita: e.o.entregaFeita ? null : { por: sessao.nome, em: nowIso() } }); } catch (er) { toast(er.message, 'erro'); } }}>${e.o.entregaFeita ? '✓ Entregue' : '✓ Concluir'}</button></div>`)}</td>`)}</tr>`}
                   ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
                     <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
                       <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
                     ${r.dias.map((v, di) => { const dISO = isoD(diasD[di]); const tsk = tarefas.filter(t => norm(t.pessoa) === norm(r.nome) && t.inicio <= dISO && t.fim >= dISO); return html`<td key=${di} style=${corCelula(v, lista)}>
                       ${tsk.map(t => { const c = t.cliente ? corCliente(t.cliente) : '#57534e'; const atr = t.status !== 'concluida' && t.fim < isoD(new Date()); const ult = t.fim === dISO; return html`<button key=${t.id} class=${'tar-bar' + (t.status === 'concluida' ? ' ok' : '') + (atr ? ' atr' : '') + (t.inicio === dISO ? ' ini' : '') + (ult ? ' fim' : '')} style=${{ '--cc': c }} onClick=${() => setVerT(t)} title=${(t.cliente || '') + ' ' + (t.texto || '')}>
                         ${t.inicio === dISO || di === 0 ? html`<b>${(t.cliente || t.texto || '').split(/\s[-–]\s/)[0]}</b> <small>${t.ambiente || t.texto}</small>` : html`<small>…</small>`}
-                        ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>`; })}
-                      ${tagsOS(v, lista)}<textarea class="ag-cel" rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
+                        ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>
+                        ${ult && t.status !== 'concluida' ? html`<button class="cel-ok tar-ok" onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); toast('Tarefa concluída.', 'ok'); } catch (er) { toast(er.message, 'erro'); } }}>✓ Concluir tarefa</button>` : ''}`; })}
+                      ${tagsOS(v, lista)}${(() => { const fk = k + '|' + norm(r.nome) + '|' + di; const fe = doc.feitos?.[fk]; return v.trim() ? html`<button class=${'cel-ok' + (fe ? ' on' : '')} title=${fe ? 'Concluído por ' + fe.por + ' — toque para desfazer' : 'Marcar como concluído'} onClick=${() => mudar(d => { d.feitos = d.feitos || {}; if (d.feitos[fk]) delete d.feitos[fk]; else d.feitos[fk] = { por: sessao.nome, em: nowIso() }; })}>${fe ? '✓ Concluído · ' + fe.por.split(' ')[0] : '✓ Concluir'}</button>` : null; })()}<textarea class=${'ag-cel' + (doc.feitos?.[k + '|' + norm(r.nome) + '|' + di] ? ' feito' : '')} rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
                       <span class="cel-acoes"><button class="btn btn-ghost btn-sm" title="Tarefa com prazo" onClick=${() => setNovaT({ pessoa: r.nome, grade: k, inicio: dISO })}>📅</button><${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></span></td>`; })}
                   </tr>`)}
                 </tbody>
@@ -3011,7 +3013,7 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
     const s = agendas[iso(segundaDe(dia))]; if (!s) return [];
     const i = (dia.getDay() + 6) % 7; if (i > 4) return [];
     const out = [];
-    GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) out.push({ k, txt: (r.nome ? r.nome + ': ' : '') + v.split('\n')[0] }); }));
+    GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) out.push({ k, txt: (s.feitos?.[k + '|' + norm(r.nome) + '|' + i] ? '✓ ' : '') + (r.nome ? r.nome + ': ' : '') + v.split('\n')[0] }); }));
     return out;
   };
   const cor = { entregas: '#0E7490', montagem: '#15803D', producao: '#A16207', terceirizados: '#7C3AED', marceneiros: '#B45309' };
