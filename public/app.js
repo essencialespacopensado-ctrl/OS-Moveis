@@ -4501,6 +4501,7 @@ function Principal({ sessao, toast }) {
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
+            ${sessao.papel === 'admin' && html`<button class=${'btn btn-ghost btn-sm' + (aba === 'config' ? ' on-cfg' : '')} title="Configurações" onClick=${() => irPara('config')}>⚙<span class="txt-desk"> Configurações</span></button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>

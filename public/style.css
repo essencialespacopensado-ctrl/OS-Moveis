@@ -930,3 +930,12 @@ fieldset.trava[disabled]{opacity:.72}
 .ini-kan{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(170px,1fr)}
 @media (max-width:700px){.ini-kan{grid-auto-columns:78vw}}
 .tile-cust{border-color:var(--line)}
+.on-cfg{background:#1c1917!important;color:#fff!important}
+
+/* v39 — ajustes celular/tablet */
+.trilho-pt{min-width:0;flex:1}
+.trilho-pt small{font-size:11px;text-align:center;line-height:1.15;max-width:100%;overflow-wrap:anywhere}
+.opcoes5{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important}
+.acab-box{min-width:0}
+@media (max-width:1000px){.page-card .grid2:has(> .acab-box){grid-template-columns:minmax(0,1fr)!important}}
+@media (max-width:480px){.trilho-pt .bola{width:24px;height:24px;font-size:11px}.trilho-pt small{font-size:9.5px}.trilho-linha{top:11px}}
