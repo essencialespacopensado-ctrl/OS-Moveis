@@ -3137,7 +3137,7 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
 function TelaCronograma({ sessao, abrirOS, toast }) {
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState('semana');
-  const [semana, setSemana] = useState(() => iso(segundaDe(new Date())));
+  const [semana, setSemana] = useState(() => { const d = window.__semanaIr ? deIsoD(window.__semanaIr) : new Date(); window.__semanaIr = null; return iso(segundaDe(d)); });
   const [semanas, setSemanas] = useState(8);
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
@@ -3264,6 +3264,53 @@ function pedirMotivo(titulo, texto) {
   });
 }
 
+
+/* ---------- OS por temas (visual, colorido) ---------- */
+const TEMAS_COR = { cli: '#2563eb', acab: '#d97706', portas: '#7c3aed', pux: '#ca8a04', ferr: '#475569', fech: '#0d9488', par: '#92400e', amb: '#16a34a', obs: '#dc2626' };
+function VisaoTemas({ os }) {
+  const P = os.padrao || {}, Fe = P.ferragens || {};
+  const fl = (k) => Object.values(Fe[k] || {}).filter(Boolean).join(' · ');
+  const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
+  const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura + ' mm' : '') : '';
+  const temas = [
+    ['cli', '👤', 'Cliente & obra', [['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Endereço', os.cliente?.endereco], ['Prazo de entrega', os.prazoEntrega ? dm(os.prazoEntrega) + '/' + os.prazoEntrega.slice(0, 4) : ''], ['Arquiteto', os.arquiteto], ['Responsável', os.responsavel], ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']]]],
+    ['acab', '🎨', 'Acabamentos', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Outras', P.outras]]],
+    ['portas', '🚪', 'Portas & frentes', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs], ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')]]],
+    ['pux', '💡', 'Puxadores & iluminação', [['Puxadores', (P.puxadores || []).join('; ')], ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : '']]],
+    ['ferr', '🔩', 'Ferragens', [['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Portas de correr', fl('correr')], ['Portas de passagem', fl('passagem')]]],
+    ['fech', '🔒', 'Fechaduras, vidros & tecidos', [['Fechaduras', textoFech(P.fech) || (P.fechaduras || []).join('; ')], ['Vidros', textoVidro(P.vidros)], ['Tecidos', textoTec(P.tec) || (P.tecidos || []).join('; ')]]],
+    ['par', '🧱', 'Paredes / painéis', [['Parede inteira', P.parede?.ativo ? [P.parede.espec, P.parede.paginacao, P.parede.fixacao].filter(Boolean).join(' — ') : '']]],
+  ].map(([k, ic, t, l]) => [k, ic, t, l.filter(([, v]) => v)]).filter(([, , , l]) => l.length);
+  const tema = (k, ic, t, corpo, n) => html`<div key=${k} class="tema" style=${{ '--tc': TEMAS_COR[k] }}><div class="tema-t"><span>${ic}</span>${t}${n ? html`<em>${n}</em>` : ''}</div>${corpo}</div>`;
+  return html`<div class="temas">
+    ${temas.map(([k, ic, t, l]) => tema(k, ic, t, html`<div class="tema-kv">${l.map(([a, b]) => html`<div key=${a}><small>${a}</small><b>${b}</b></div>`)}</div>`))}
+    ${tema('amb', '📐', 'Ambientes & móveis', html`${(os.ambientes || []).map((a, ai) => html`<div key=${a.id || ai} class="tema-amb"><div class="tema-amb-t">${String(ai + 1).padStart(2, '0')} · ${a.nome || 'Ambiente'}</div>
+      ${(a.moveis || []).map(m => html`<div key=${m.id} class="tema-mov"><b>${m.quantidade > 1 ? m.quantidade + '× ' : ''}${m.nome}</b>
+        <span class="tm-med">${[m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ')} mm</span>
+        <div class="tm-chips">${[mdf(m.mdfCaixa) && '📦 ' + mdf(m.mdfCaixa), mdf(m.mdfFrente) && '🚪 ' + mdf(m.mdfFrente), m.fitaBorda && '🎞 ' + m.fitaBorda, m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas, m.puxador && '🔘 ' + m.puxador, m.iluminacao && '💡 ' + m.iluminacao, ...(m.ferragens || []).map(f => '🔩 ' + (f.quantidade ? f.quantidade + '× ' : '') + [f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' '))].filter(Boolean).map((c, i) => html`<span key=${i}>${c}</span>`)}</div>
+        ${m.observacoes && html`<div class="tm-obs">${m.observacoes}</div>`}</div>`)}
+      ${!(a.moveis || []).length && html`<div class="dim">Sem móveis cadastrados</div>`}</div>`)}`, (os.ambientes || []).length + ' amb.')}
+    ${os.observacoesGerais && tema('obs', '📝', 'Observações gerais', html`<div style=${{ whiteSpace: 'pre-line' }}>${os.observacoesGerais}</div>`)}
+  </div>`;
+}
+
+/* ---------- OS no calendário ---------- */
+function CalendarioOS({ sessao, os }) {
+  const [tar, setTar] = useState(null);
+  useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', os.id)), s => setTar(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setTar([])); }, [os.id]);
+  const hoje = isoD(new Date());
+  const itens = [
+    ...(tar || []).map(t => ({ d: t.inicio, fim: t.fim, ic: t.status === 'concluida' ? '✅' : t.fim < hoje ? '⚠️' : '📅', t: (GRADES.find(g => g[0] === t.grade) || [, ''])[1].replace(/^\S+ /, '') + ' · ' + t.pessoa, s: t.texto, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje })),
+    ...(os.prazoEntrega ? [{ d: os.prazoEntrega, ic: os.entregaFeita ? '✅' : '🚚', t: 'Prazo de entrega', ok: !!os.entregaFeita, ent: true }] : []),
+  ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+  return html`<div class="cal-os">
+    ${tar === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Esta OS ainda não está no cronograma. Use 📅 Enviar para cronograma.</div>` :
+      itens.map((x, i) => html`<button key=${i} class=${'cal-i' + (x.ok ? ' ok' : '') + (x.atr ? ' atr' : '') + (x.ent ? ' ent' : '')} onClick=${() => window.__irCronograma && window.__irCronograma(x.d)}>
+        <span class="cal-d"><b>${dm(x.d)}</b>${x.fim && x.fim !== x.d ? html`<small>até ${dm(x.fim)}</small>` : ''}</span>
+        <span class="cal-x">${x.ic} <b>${x.t}</b>${x.s ? html`<small>${x.s}</small>` : ''}</span><span class="cal-ir">Abrir ›</span></button>`)}
+    <button class="btn btn-block" onClick=${() => window.__irCronograma && window.__irCronograma(itens[0]?.d || null)}>📆 Abrir o cronograma</button>
+  </div>`;
+}
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
 function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const [o, setO] = useState(undefined);
@@ -3281,6 +3328,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     return () => u.forEach(f => f && f());
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
+  const [modoV, setModoV] = useState('temas');
   const [todas, setTodas] = useState([]);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setTodas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}), []);
   useEffect(() => { if (o === null) fechar(); }, [o]);
@@ -3312,8 +3360,12 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         <button class="btn btn-grande btn-primary" onClick=${() => editar(osId)}>✏️ Editar OS</button>
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
         <button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>
+        <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="ficha-papel"><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
+      ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
+      <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🏭 Esteira de produção</div>
       <div class="ficha-esteira">${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const st = e.onde === 'nao' ? 'nao' : e.status || 'pendente';
@@ -4725,6 +4777,8 @@ function Principal({ sessao, toast }) {
   const abrirDireto = (id) => { setFicha(null); setOsAberta(id); setAba('os'); window.scrollTo(0, 0); };
   const abrirOS = (id) => setFicha(id);
   window.__abrirOS = abrirOS;
+  const [cronoK, setCronoK] = useState(0);
+  window.__irCronograma = (d) => { window.__semanaIr = d || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
   const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
@@ -4781,7 +4835,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'contratos' && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'pedidos' && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
-        ${aba === 'cronograma' && html`<${TelaCronograma} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
+        ${aba === 'cronograma' && html`<${TelaCronograma} key=${cronoK} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
         ${aba === 'config' && sessao.papel === 'admin' && html`<${TelaConfig} key=${STATUS_OS.map(x => x.v + x.t).join()} sessao=${sessao} toast=${toast} />`}
         ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
