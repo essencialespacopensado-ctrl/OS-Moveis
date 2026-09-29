@@ -969,3 +969,9 @@ fieldset.trava[disabled]{opacity:.72}
 .fl-i{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:#fafaf9;border-radius:8px;font-size:14px}
 .fl-i small{color:#78716c}
 .fl-st{color:#fff;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;white-space:nowrap}
+
+/* v45 — apagar em lote */
+.sel-barra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5;background:#fff;padding:8px 0;border-bottom:1px solid #e7e5e4}
+.sel-todas{display:flex;align-items:center;gap:8px;font-weight:700;flex:1;cursor:pointer}
+.sel-todas input,.sel-ck{width:22px;height:22px;accent-color:#dc2626;flex:none;cursor:pointer}
+.list-item.sel-on{outline:2px solid #dc2626}

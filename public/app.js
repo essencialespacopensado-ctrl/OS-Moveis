@@ -3345,6 +3345,8 @@ function TelaExcluir({ sessao, toast }) {
   const [hist, setHist] = useState([]);
   const [busca, setBusca] = useState('');
   const [alvo, setAlvo] = useState(null);
+  const [sel, setSel] = useState([]);
+  const [lote, setLote] = useState(false);
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     const a = onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
@@ -3364,9 +3366,14 @@ function TelaExcluir({ sessao, toast }) {
       <div><h2>Excluir OSs</h2><div class="dim">Para excluir é obrigatório digitar a <b>sua senha</b> e o <b>motivo</b>. Tudo fica registrado no histórico abaixo e pode ser restaurado.</div></div>
       <div class="card page-card stack">
         <input class="inp" placeholder="Buscar por número, cliente ou ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />
+        ${filtradas.length > 0 && html`<div class="sel-barra">
+          <label class="sel-todas"><input type="checkbox" checked=${filtradas.every(o => sel.includes(o.id))} onChange=${e => setSel(e.target.checked ? [...new Set([...sel, ...filtradas.map(o => o.id)])] : sel.filter(id => !filtradas.some(o => o.id === id)))} /> Selecionar todas (${filtradas.length})</label>
+          ${sel.length > 0 && html`<button class="btn btn-sm" onClick=${() => setSel([])}>Limpar</button><button class="btn btn-danger" onClick=${() => setLote(true)}>🗑 Apagar ${sel.length} ${sel.length === 1 ? 'OS' : 'OSs'}</button>`}
+        </div>`}
         ${lista === null ? html`<div class="dim">Carregando…</div>` : filtradas.length === 0 ? html`<div class="vazio dim">Nenhuma OS.</div>` : html`
           <div class="list">${filtradas.map(o => html`
-            <div key=${o.id} class="list-item" style=${pinta(o)}>
+            <div key=${o.id} class=${'list-item' + (sel.includes(o.id) ? ' sel-on' : '')} style=${pinta(o)}>
+              <input type="checkbox" class="sel-ck" checked=${sel.includes(o.id)} onChange=${() => setSel(sel.includes(o.id) ? sel.filter(x => x !== o.id) : [...sel, o.id])} />
               <div class="os-num">${numOS(o)}${bolinhas(o)}</div>
               <div class="grow"><div class="title">${o.cliente?.nome || 'Cliente não informado'}</div><div class="dim">${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'} · ${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t}</div></div>
               <button class="btn btn-sm btn-danger" onClick=${() => setAlvo(o)}>🗑 Excluir</button>
@@ -3380,6 +3387,8 @@ function TelaExcluir({ sessao, toast }) {
             ${sessao.papel === 'admin' && html`<button class="btn btn-sm" onClick=${() => restaurar(h)}>↩ Restaurar</button>`}
           </div>`)}
       </div>
+      ${lote && html`<${SenhaMotivo} perigo titulo=${'Apagar ' + sel.length + (sel.length === 1 ? ' OS' : ' OSs')} texto=${'Serão apagadas: ' + (lista || []).filter(o => sel.includes(o.id)).map(o => numOS(o)).join(', ') + '. Ficam no histórico e podem ser restauradas.'} botao=${'Apagar ' + sel.length}
+        onOk=${async (motivo) => { let n = 0; for (const o of (lista || []).filter(o => sel.includes(o.id))) { try { await excluirOS(sessao, o, motivo); n++; } catch (e) { toast('Erro em ' + numOS(o) + ': ' + e.message, 'erro'); } } setSel([]); toast(n + (n === 1 ? ' OS apagada.' : ' OSs apagadas.'), 'ok'); }} fechar=${() => setLote(false)} />`}
       ${alvo && html`<${SenhaMotivo} perigo titulo=${'Excluir a OS ' + numOS(alvo)} texto=${(alvo.cliente?.nome || '') + ' — o número não será reaproveitado.'} botao="Excluir OS"
         onOk=${async (motivo) => { await excluirOS(sessao, alvo, motivo); toast('OS ' + numOS(alvo) + ' excluída.', 'ok'); }} fechar=${() => setAlvo(null)} />`}
     </div>`;
