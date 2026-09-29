@@ -3302,16 +3302,16 @@ async function conferirSenha(senha) {
   if (!u) throw new Error('Sessão expirada. Entre de novo.');
   await authMod.reauthenticateWithCredential(u, authMod.EmailAuthProvider.credential(u.email, senha));
 }
-function SenhaMotivo({ titulo, texto, botao = 'Confirmar', perigo, onOk, fechar }) {
+function SenhaMotivo({ titulo, texto, botao = 'Confirmar', perigo, onOk, fechar, semMotivo }) {
   const [senha, setSenha] = useState('');
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [rodando, setRodando] = useState(false);
   const ok = async () => {
-    if (motivo.trim().length < 5) return setErro('Escreva o motivo (obrigatório, pelo menos 5 letras).');
+    if (!semMotivo && motivo.trim().length < 5) return setErro('Escreva o motivo (obrigatório, pelo menos 5 letras).');
     if (!senha) return setErro('Digite a sua senha.');
     setRodando(true); setErro('');
-    try { await conferirSenha(senha); await onOk(motivo.trim()); fechar(); }
+    try { await conferirSenha(senha); await onOk(motivo.trim() || (semMotivo ? 'Apagadas em lote (importação incorreta)' : '')); fechar(); }
     catch (e) { setErro(/password|credential/i.test(e.code || e.message) ? 'Senha incorreta.' : e.message); setRodando(false); }
   };
   return html`
@@ -3319,7 +3319,7 @@ function SenhaMotivo({ titulo, texto, botao = 'Confirmar', perigo, onOk, fechar 
       <div class="card modal-caixa stack">
         <div class="sec-title">${perigo ? '🗑' : '🔓'} ${titulo}</div>
         ${texto && html`<div class="dim">${texto}</div>`}
-        <div class="field"><span class="lbl">Motivo (obrigatório)</span><textarea class="inp" rows="3" placeholder="Ex: cliente cancelou o ambiente / OS duplicada / correção de medida" value=${motivo} onInput=${e => setMotivo(e.target.value)} autoFocus></textarea></div>
+        ${!semMotivo && html`<div class="field"><span class="lbl">Motivo (obrigatório)</span><textarea class="inp" rows="3" placeholder="Ex: cliente cancelou o ambiente / OS duplicada / correção de medida" value=${motivo} onInput=${e => setMotivo(e.target.value)} autoFocus></textarea></div>`}
         <div class="field"><span class="lbl">Sua senha</span><input class="inp" type="password" autocomplete="current-password" value=${senha} onInput=${e => setSenha(e.target.value)} onKeyDown=${e => e.key === 'Enter' && ok()} /></div>
         ${erro && html`<div class="error-box">${erro}</div>`}
         <div class="row" style=${{ justifyContent: 'flex-end', gap: '6px' }}>
@@ -3387,7 +3387,7 @@ function TelaExcluir({ sessao, toast }) {
             ${sessao.papel === 'admin' && html`<button class="btn btn-sm" onClick=${() => restaurar(h)}>↩ Restaurar</button>`}
           </div>`)}
       </div>
-      ${lote && html`<${SenhaMotivo} perigo titulo=${'Apagar ' + sel.length + (sel.length === 1 ? ' OS' : ' OSs')} texto=${'Serão apagadas: ' + (lista || []).filter(o => sel.includes(o.id)).map(o => numOS(o)).join(', ') + '. Ficam no histórico e podem ser restauradas.'} botao=${'Apagar ' + sel.length}
+      ${lote && html`<${SenhaMotivo} perigo semMotivo titulo=${'Apagar ' + sel.length + (sel.length === 1 ? ' OS' : ' OSs')} texto=${'Serão apagadas: ' + (lista || []).filter(o => sel.includes(o.id)).map(o => numOS(o)).join(', ') + '. Ficam no histórico e podem ser restauradas.'} botao=${'Apagar ' + sel.length}
         onOk=${async (motivo) => { let n = 0; for (const o of (lista || []).filter(o => sel.includes(o.id))) { try { await excluirOS(sessao, o, motivo); n++; } catch (e) { toast('Erro em ' + numOS(o) + ': ' + e.message, 'erro'); } } setSel([]); toast(n + (n === 1 ? ' OS apagada.' : ' OSs apagadas.'), 'ok'); }} fechar=${() => setLote(false)} />`}
       ${alvo && html`<${SenhaMotivo} perigo titulo=${'Excluir a OS ' + numOS(alvo)} texto=${(alvo.cliente?.nome || '') + ' — o número não será reaproveitado.'} botao="Excluir OS"
         onOk=${async (motivo) => { await excluirOS(sessao, alvo, motivo); toast('OS ' + numOS(alvo) + ' excluída.', 'ok'); }} fechar=${() => setAlvo(null)} />`}
