@@ -2802,7 +2802,7 @@ function OSPicker({ lista, onPick }) {
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">Escolher OS</div><button class="x-btn" onClick=${fechar}>✕</button></div>
         <input class="inp" autoFocus placeholder="Buscar cliente, nº da OS ou ambiente…" value=${q} onInput=${e => setQ(e.target.value)} onKeyDown=${e => e.key === 'Escape' && fechar()} />
         <div class="os-picker-lista">
-          ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" style=${{ borderLeft: '5px solid ' + corOS(o), background: corOS(o) + '10' }} onClick=${() => { onPick(linhaOS(o)); fechar(); }}>
+          ${res.map(o => html`<button type="button" key=${o.id} class="opc-i" style=${{ borderLeft: '5px solid ' + corOS(o), background: corOS(o) + '10' }} onClick=${() => { onPick(linhaOS(o), o); fechar(); }}>
             <span><b>${numOS(o)}</b> — ${o.cliente?.nome || 'Cliente'}<small>${(o.ambientes || []).map(a => a.nome).join(', ') || 'Sem ambientes'}${o.prazoEntrega ? ' · entrega ' + o.prazoEntrega : ''}</small></span></button>`)}
           ${!res.length && html`<div class="dim">Nenhuma OS encontrada.</div>`}
         </div>
@@ -2917,6 +2917,8 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
       if (osSel) {
         const dup = todas.find(t => t.osId === osSel.id && t.grade === grade);
         if (dup) return avisar('Bloqueado: a OS ' + numOS(osSel) + ' já está neste cronograma com ' + dup.pessoa + ' (' + dm(dup.inicio) + ' a ' + dm(dup.fim) + '). Use ＋ Mais dias nela em vez de lançar de novo.');
+        const junto = todas.find(t => t.osId === osSel.id && t.inicio <= fimF && t.fim >= iniF);
+        if (junto) return avisar('Bloqueado: a OS ' + numOS(osSel) + ' já está com ' + junto.pessoa + ' de ' + dm(junto.inicio) + ' a ' + dm(junto.fim) + '. A mesma OS não pode estar em dois lugares ao mesmo tempo — escolha datas depois de ' + dm(junto.fim) + '.');
       }
       const choque = todas.filter(t => norm(t.pessoa) === norm(pessoa) && t.inicio <= fimF && t.fim >= iniF).sort((a, b) => a.fim.localeCompare(b.fim));
       if (choque.length) {
@@ -2978,6 +2980,8 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
     if (!mv.pessoa.trim()) return toast('Escolha quem vai executar.');
     if (mv.fim < mv.inicio) return toast('O prazo final não pode ser antes do início.');
     if (mv.pessoa === t.pessoa && mv.grade === t.grade && mv.inicio === t.inicio && mv.fim === t.fim) return toast('Nada mudou.');
+    const junto = t.osId && todas.find(x => x.id !== t.id && x.status !== 'concluida' && x.osId === t.osId && x.inicio <= mv.fim && x.fim >= mv.inicio);
+    if (junto) return toast('Bloqueado: a OS já está com ' + junto.pessoa + ' de ' + dm(junto.inicio) + ' a ' + dm(junto.fim) + '. Não pode estar em dois lugares ao mesmo tempo.', 'erro');
     const choque = todas.filter(x => x.id !== t.id && x.status !== 'concluida' && norm(x.pessoa) === norm(mv.pessoa) && x.inicio <= mv.fim && x.fim >= mv.inicio);
     if (choque.length) return toast('Bloqueado: ' + mv.pessoa + ' já tem ' + choque.map(x => (x.osCod || x.texto) + ' (' + dm(x.inicio) + ' a ' + dm(x.fim) + ')').join(', ') + '.');
     try {
@@ -3041,6 +3045,8 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
 }
 
 function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
+  const [grupoSel, setGrupoSel0] = useState(() => { if (window.__focoAgenda) return 'todos'; try { return localStorage.getItem('osm_grupo') || 'producao'; } catch { return 'producao'; } });
+  const setGrupoSel = (k) => { setGrupoSel0(k); try { localStorage.setItem('osm_grupo', k); } catch {} };
   const tarefas = useTarefas(sessao);
   const [novaT, setNovaT] = useState(null);
   const [verT, setVerT] = useState(null);
@@ -3178,7 +3184,8 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             <div class="sec-title">⭐ Prioridades da semana</div>
             <textarea class="inp" rows="2" placeholder="Uma por linha" value=${doc.prioridades || ''} onInput=${e => mudar(d => { d.prioridades = e.target.value; })}></textarea>
           </div>
-          ${GRADES.map(([k, t, rot]) => html`
+          <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, t.replace(/ –.*$/, '').replace('Cronograma de ', '').replace('Cronograma ', '')])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}</div>
+          ${GRADES.filter(([k]) => grupoSel === 'todos' || grupoSel === k).map(([k, t, rot]) => html`
             <div key=${k} class="card page-card stack">
               <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${t}</div>
                 <button class="btn btn-sm btn-ghost" onClick=${() => mudar(d => { d.grades[k] = [...(d.grades[k] || []), { nome: '', dias: ['', '', '', '', ''] }]; })}>+ ${rot}</button></div>
@@ -3205,7 +3212,14 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                         registrarVarias(sessao, osCitadas(v, lista), '⏳', 'Mais ' + n + (n === 1 ? ' dia' : ' dias') + ' no cronograma (' + r.nome + '): ' + dm(dISO) + ' → ' + dm(fimN), mot);
                         toast('+' + n + (n === 1 ? ' dia' : ' dias') + ' até ' + dm(fimN) + '.', 'ok');
                       }}>＋ Mais dias</button>`}<button class=${'cel-ok' + (fe ? ' on' : '')} title=${fe ? 'Concluído por ' + fe.por + ' — toque para desfazer' : 'Marcar como concluído'} onClick=${async () => { let mot = ''; if (fe) { mot = await pedirMotivo('Reabrir no cronograma', 'Já estava concluído. Informe o motivo para reabrir.'); if (!mot) return; } registrarVarias(sessao, osCitadas(v, lista), fe ? '↺' : '✅', (fe ? 'Reaberto no cronograma: ' : 'Concluído no cronograma: ') + (r.nome || '') + ' · ' + dm(isoD(diasD[di])), mot || v.split('\n')[0]); mudar(d => { d.feitos = d.feitos || {}; if (d.feitos[fk]) { d.reaberturas = [...(d.reaberturas || []), { fk, motivo: mot, quem: sessao.nome, em: nowIso() }]; delete d.feitos[fk]; } else d.feitos[fk] = { por: sessao.nome, em: nowIso() }; }); }}>${fe ? '✓ Concluído · ' + fe.por.split(' ')[0] : '✓ Concluir'}</button>` : null; })()}<textarea class=${'ag-cel' + (doc.feitos?.[k + '|' + norm(r.nome) + '|' + di] ? ' feito' : '')} rows="2" value=${v} onInput=${e => mudar(d => { d.grades[k][ri].dias[di] = e.target.value; })}></textarea>
-                      <span class="cel-acoes"><button class="btn btn-ghost btn-sm" title="Tarefa com prazo" onClick=${() => setNovaT({ pessoa: r.nome, grade: k, inicio: dISO })}>📅</button><${OSPicker} lista=${lista} onPick=${l => mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); })} /></span></td>`; })}
+                      <span class="cel-acoes"><button class="btn btn-ghost btn-sm" title="Tarefa com prazo" onClick=${() => setNovaT({ pessoa: r.nome, grade: k, inicio: dISO })}>📅</button><${OSPicker} lista=${lista} onPick=${(l, o) => {
+                        if (o) {
+                          const outro = []; GRADES.forEach(([k2, t2]) => (doc.grades?.[k2] || []).forEach((r2, ri2) => { if (k2 === k && ri2 === ri) return; if (osCitadas(r2.dias?.[di] || '', [o]).length) outro.push(r2.nome || t2.replace(/^\S+ /, '')); }));
+                          (tarefas || []).forEach(t => { if (t.osId === o.id && t.status !== 'concluida' && t.inicio <= dISO && t.fim >= dISO && norm(t.pessoa) !== norm(r.nome)) outro.push(t.pessoa); });
+                          if (outro.length) return toast('Bloqueado: a OS ' + numOS(o) + ' já está com ' + [...new Set(outro)].join(', ') + ' neste dia. A mesma OS não pode estar em dois lugares ao mesmo tempo.', 'erro');
+                        }
+                        mudar(d => { d.grades[k][ri].dias[di] = addLinha(d.grades[k][ri].dias[di], l); });
+                      }} /></span></td>`; })}
                   </tr>`)}
                 </tbody>
               </table></div>
