@@ -3184,7 +3184,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             <div class="sec-title">⭐ Prioridades da semana</div>
             <textarea class="inp" rows="2" placeholder="Uma por linha" value=${doc.prioridades || ''} onInput=${e => mudar(d => { d.prioridades = e.target.value; })}></textarea>
           </div>
-          <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, t.replace(/ –.*$/, '').replace('Cronograma de ', '').replace('Cronograma ', '')])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}</div>
+          <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, ({ entregas: '🚚 Entregas', montagem: '🔧 Montagem', producao: '🪵 Produção', terceirizados: '🤝 Terceirizados', marceneiros: '🪚 Marceneiros' })[k] || t])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}</div>
           ${GRADES.filter(([k]) => grupoSel === 'todos' || grupoSel === k).map(([k, t, rot]) => html`
             <div key=${k} class="card page-card stack">
               <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${t}</div>
