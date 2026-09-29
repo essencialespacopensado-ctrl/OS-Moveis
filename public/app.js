@@ -3404,7 +3404,7 @@ function CalendarioOS({ sessao, os }) {
   const cod = numOS(os), cli = norm((os.cliente?.nome || '').split(/\s[-–]\s/)[0]);
   const itensDia = (d) => {
     const di = isoD(d), out = [];
-    (tar || []).forEach(t => { if (t.inicio <= di && t.fim >= di) out.push({ t: t.pessoa, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje, fim: t.fim === di, foco: { p: norm(t.pessoa), d: di } }); });
+    (tar || []).forEach(t => { if ((d.getDay() + 6) % 7 < 5 && t.inicio <= di && t.fim >= di) out.push({ t: t.pessoa, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje, fim: t.fim === di, foco: { p: norm(t.pessoa), d: di } }); });
     const wd = (d.getDay() + 6) % 7; const ag = ags[iso(segundaDe(d))];
     if (ag && wd < 5) GRADES.forEach(([k]) => (ag.grades?.[k] || []).forEach(r => { const v = r.dias?.[wd] || ''; if ((v.includes(cod) || (cli && norm(v).includes(cli))) && !out.some(x => norm(x.t) === norm(r.nome))) out.push({ t: r.nome, ok: !!ag.feitos?.[k + '|' + norm(r.nome) + '|' + wd], foco: { p: norm(r.nome), d: di } }); }));
     if (os.prazoEntrega === di) out.push({ t: '🚚 Entrega', ent: true, ok: !!os.entregaFeita, foco: { d: di } });
