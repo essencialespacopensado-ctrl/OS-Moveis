@@ -3396,20 +3396,36 @@ function VisaoTemas({ os }) {
 /* ---------- OS no calendário ---------- */
 function CalendarioOS({ sessao, os }) {
   const [tar, setTar] = useState(null);
+  const [ags, setAgs] = useState({});
+  const [mes, setMes] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', os.id)), s => setTar(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setTar([])); }, [os.id]);
-  const hoje = isoD(new Date());
-  const itens = [
-    ...(tar || []).map(t => ({ foco: { p: norm(t.pessoa), d: t.inicio < hoje && t.fim >= hoje ? hoje : t.inicio }, d: t.inicio, fim: t.fim, ic: t.status === 'concluida' ? '✅' : t.fim < hoje ? '⚠️' : '📅', t: (GRADES.find(g => g[0] === t.grade) || [, ''])[1].replace(/^\S+ /, '') + ' · ' + t.pessoa, s: t.texto, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje })),
-    ...(os.prazoEntrega ? [{ d: os.prazoEntrega, ic: os.entregaFeita ? '✅' : '🚚', t: 'Prazo de entrega', ok: !!os.entregaFeita, ent: true }] : []),
-  ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
-  return html`<div class="cal-os">
-    ${tar === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Esta OS ainda não está no cronograma. Use 📅 Enviar para cronograma.</div>` :
-      itens.map((x, i) => html`<button key=${i} class=${'cal-i' + (x.ok ? ' ok' : '') + (x.atr ? ' atr' : '') + (x.ent ? ' ent' : '')} onClick=${() => window.__irCronograma && window.__irCronograma(x.foco?.d || x.d, x.foco || { d: x.d, entrega: true })}>
-        <span class="cal-d"><b>${dm(x.d)}</b>${x.fim && x.fim !== x.d ? html`<small>até ${dm(x.fim)}</small>` : ''}</span>
-        <span class="cal-x">${x.ic} <b>${x.t}</b>${x.s ? html`<small>${x.s}</small>` : ''}</span><span class="cal-ir">Abrir ›</span></button>`)}
-    <button class="btn btn-block" onClick=${() => window.__irCronograma && window.__irCronograma(itens[0]?.d || null)}>📆 Abrir o cronograma</button>
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'agenda'), s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); setAgs(m); }, () => {}), []);
+  const cor = corOS(os), hoje = isoD(new Date());
+  const cod = numOS(os), cli = norm((os.cliente?.nome || '').split(/\s[-–]\s/)[0]);
+  const itensDia = (d) => {
+    const di = isoD(d), out = [];
+    (tar || []).forEach(t => { if (t.inicio <= di && t.fim >= di) out.push({ t: t.pessoa, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje, fim: t.fim === di, foco: { p: norm(t.pessoa), d: di } }); });
+    const wd = (d.getDay() + 6) % 7; const ag = ags[iso(segundaDe(d))];
+    if (ag && wd < 5) GRADES.forEach(([k]) => (ag.grades?.[k] || []).forEach(r => { const v = r.dias?.[wd] || ''; if ((v.includes(cod) || (cli && norm(v).includes(cli))) && !out.some(x => norm(x.t) === norm(r.nome))) out.push({ t: r.nome, ok: !!ag.feitos?.[k + '|' + norm(r.nome) + '|' + wd], foco: { p: norm(r.nome), d: di } }); }));
+    if (os.prazoEntrega === di) out.push({ t: '🚚 Entrega', ent: true, ok: !!os.entregaFeita, foco: { d: di } });
+    return out;
+  };
+  const ini = segundaDe(mes), fimMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0), dias = [];
+  for (let d = new Date(ini); d <= fimMes || dias.length % 7; d.setDate(d.getDate() + 1)) dias.push(new Date(d));
+  return html`<div class="cal-mes" style=${{ '--cc': cor }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}>
+      <button class="btn btn-sm" onClick=${() => setMes(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
+      <b style=${{ textTransform: 'capitalize' }}>${mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</b>
+      <button class="btn btn-sm" onClick=${() => setMes(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>›</button>
+    </div>
+    <div class="calm">${['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((x, i) => html`<div key=${'h' + i} class="calm-h">${x}</div>`)}
+      ${dias.map(d => { const it = itensDia(d); const di = isoD(d); return html`<div key=${di} class=${'calm-d' + (d.getMonth() !== mes.getMonth() ? ' fora' : '') + (di === hoje ? ' hoje' : '') + (it.length ? ' tem' : '')} onClick=${() => it.length && window.__irCronograma && window.__irCronograma(di, it[0].foco)}>
+        <b>${d.getDate()}</b>${it.map((x, j) => html`<i key=${j} class=${(x.ok ? 'ok' : '') + (x.atr ? ' atr' : '') + (x.ent ? ' ent' : '') + (x.fim ? ' fim' : '')}>${x.ok ? '✓ ' : x.fim ? '🏁 ' : ''}${String(x.t).split(/[\s+]/)[0]}</i>`)}</div>`; })}
+    </div>
+    <div class="dim" style=${{ fontSize: '12px' }}>Toque num dia colorido para abrir o cronograma naquela linha. 🏁 = prazo final · ✓ = concluído</div>
   </div>`;
 }
+
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
 function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const [o, setO] = useState(undefined);
@@ -4630,6 +4646,41 @@ const CATEG_AMB = [
 ];
 const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a => c.k.some(k => norm(a.nome).includes(k)))).map(c => c.t);
 
+/* Métricas: dias/horas ganhos ou perdidos no cronograma */
+const HORAS_DIA = 8;
+function MetricasPrazo({ sessao }) {
+  const [tar, setTar] = useState([]);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setTar(s.docs.map(d => d.data())), () => {}), []);
+  const hoje = isoD(new Date());
+  const difDe = (prev, real) => real === prev ? 0 : real > prev ? uteisEntre(prev, real) : -uteisEntre(real, prev);
+  const conc = tar.filter(t => t.status === 'concluida' && t.concluidaEm).map(t => ({ ...t, dif: difDe(t.fimOriginal || t.fim, isoD(new Date(t.concluidaEm))) }));
+  const abertasAtr = tar.filter(t => t.status !== 'concluida' && (t.fimOriginal || t.fim) < hoje).map(t => ({ ...t, dif: difDe(t.fimOriginal || t.fim, hoje) }));
+  const todos = [...conc, ...abertasAtr];
+  const ganho = -todos.filter(t => t.dif < 0).reduce((n, t) => n + t.dif, 0);
+  const perda = todos.filter(t => t.dif > 0).reduce((n, t) => n + t.dif, 0);
+  const saldo = ganho - perda;
+  const noPrazo = conc.filter(t => t.dif <= 0).length;
+  const prorr = tar.flatMap(t => (t.prorrogacoes || []).filter(p => !p.auto));
+  const porPessoa = {}; todos.forEach(t => { const k = t.pessoa || '—'; porPessoa[k] = (porPessoa[k] || 0) - t.dif; });
+  const porGrade = {}; todos.forEach(t => { const k = (GRADES.find(g => g[0] === t.grade) || [, t.grade || '—'])[1].replace(/^\S+ /, ''); porGrade[k] = (porGrade[k] || 0) - t.dif; });
+  const h = (d) => (d * HORAS_DIA) + 'h';
+  const maxAbs = Math.max(1, ...Object.values(porPessoa).map(Math.abs), ...Object.values(porGrade).map(Math.abs));
+  const barras = (obj) => Object.entries(obj).sort((a, b) => a[1] - b[1]).map(([k, v]) => html`<div key=${k} class="mt-bar"><span>${k}</span><div><i style=${{ width: Math.abs(v) / maxAbs * 50 + '%', [v < 0 ? 'right' : 'left']: '50%', background: v < 0 ? '#dc2626' : v > 0 ? '#16a34a' : '#a8a29e' }}></i></div><b class=${v < 0 ? 'neg' : v > 0 ? 'pos' : ''}>${v > 0 ? '+' : ''}${v}d</b></div>`);
+  return html`<details class="card metricas" open=${todos.length > 0}>
+    <summary><b>⏱ Tempo ganho / perdido no cronograma</b> <span class=${'mt-saldo ' + (saldo < 0 ? 'neg' : saldo > 0 ? 'pos' : '')}>${saldo > 0 ? '+' : ''}${saldo} dias · ${saldo > 0 ? '+' : ''}${h(saldo)}</span></summary>
+    ${tar.length === 0 ? html`<div class="dim">Ainda não há tarefas no cronograma. As métricas aparecem quando as tarefas forem concluídas.</div>` : html`
+    <div class="mt-tiles">
+      <div class="mt-t pos"><small>Ganho (antes do prazo)</small><b>${ganho}d</b><em>${h(ganho)}</em></div>
+      <div class="mt-t neg"><small>Perdido (atrasos/retrabalho)</small><b>${perda}d</b><em>${h(perda)}</em></div>
+      <div class="mt-t"><small>Concluídas no prazo</small><b>${conc.length ? Math.round(noPrazo * 100 / conc.length) : 0}%</b><em>${noPrazo} de ${conc.length}</em></div>
+      <div class="mt-t warn"><small>Prorrogações (＋ dias)</small><b>${prorr.length}</b><em>${prorr.reduce((n, p) => n + (p.dias || 0), 0)}d · ${h(prorr.reduce((n, p) => n + (p.dias || 0), 0))}</em></div>
+    </div>
+    ${Object.keys(porGrade).length > 0 && html`<div class="mt-sec">Por etapa do cronograma</div>${barras(porGrade)}`}
+    ${Object.keys(porPessoa).length > 0 && html`<div class="mt-sec">Por pessoa / equipe</div>${barras(porPessoa)}`}
+    ${prorr.length > 0 && html`<div class="mt-sec">Motivos dos dias a mais</div><div class="mt-mot">${prorr.slice(-6).reverse().map((p, i) => html`<div key=${i}>+${p.dias}d · ${p.motivo} <small>${p.quem || ''}</small></div>`)}</div>`}
+    <div class="dim" style=${{ fontSize: '11px' }}>Dias úteis comparando o prazo original com o dia da conclusão (tarefas abertas e atrasadas contam até hoje). 1 dia = ${HORAS_DIA}h.</div>`}
+  </details>`;
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_ini_vista') || 'compacto'; } catch { return 'compacto'; } });
@@ -4663,6 +4714,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
         <button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button>
       </div>
       ${togg}
+      <${MetricasPrazo} sessao=${sessao} />
       <div class="ini-fluxo">
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
@@ -4872,7 +4924,9 @@ function Principal({ sessao, toast }) {
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); setCfgV(v => v + 1); }, () => {}), []);
-  const [aba, setAba] = useState(() => { try { return localStorage.getItem('osm_aba') || 'inicio'; } catch { return 'inicio'; } });
+  const [aba, setAba] = useState('inicio');
+  const [podeInstalar, setPodeInstalar] = useState(!!window.__instalar);
+  useEffect(() => { const f = () => setPodeInstalar(!!window.__instalar); window.addEventListener('pode-instalar', f); return () => window.removeEventListener('pode-instalar', f); }, []);
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
   const [statusIA, setStatusIA] = useState(null);
@@ -4923,6 +4977,7 @@ function Principal({ sessao, toast }) {
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
+            ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${sessao.papel === 'admin' && html`<button class=${'btn btn-ghost btn-sm' + (aba === 'config' ? ' on-cfg' : '')} title="Configurações" onClick=${() => irPara('config')}>⚙<span class="txt-desk"> Configurações</span></button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
