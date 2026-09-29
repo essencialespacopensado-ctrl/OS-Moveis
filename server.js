@@ -393,7 +393,22 @@ conferir OS (medidas incoerentes, ferragem faltando, corrediça x profundidade, 
 escrever mensagens para clientes e fornecedores; e explicar como usar o app.
 Como usar o app: Projetos (cliente, contrato/detalhamentos, Ata da reunião com microfone), botão "Gerar OS automática" no projeto,
 Ordens de serviço (editar, "Preencher falando", imprimir/PDF, status), Importar antigas, Catálogo, Equipe (só administrador).
-Se a pergunta depender de um dado que não está nos DADOS DA EMPRESA, diga isso em vez de inventar. Medidas em milímetros.`;
+Se a pergunta depender de um dado que não está nos DADOS DA EMPRESA, diga isso em vez de inventar. Medidas em milímetros.
+
+VOCÊ PODE MODIFICAR O SISTEMA. Quando o usuário pedir para mudar, lançar, marcar, mover, excluir ou anotar algo, responda em 1-3 frases dizendo o que vai fazer
+e no FINAL coloque as ações entre <acoes> e </acoes> como um array JSON. O usuário confirma antes de aplicar. Use só estes tipos:
+- {"tipo":"status","os":"26.010","status":"<valor da lista ETAPAS DA OS>"}
+- {"tipo":"prazo_entrega","os":"26.010","data":"AAAA-MM-DD"}
+- {"tipo":"observacao","os":"26.010","texto":"..."}  (acrescenta nas observações gerais da OS)
+- {"tipo":"pendencia","os":"26.010","texto":"..."}  (pendência no diário de obra)
+- {"tipo":"cliente","os":"26.010","campo":"nome|telefone|obra|endereco","valor":"..."}
+- {"tipo":"cronograma","os":"26.010","categoria":"<chave da lista CATEGORIAS DO CRONOGRAMA>","pessoa":"EDINHO","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD","texto":"opcional"}
+- {"tipo":"concluir_tarefa","os":"26.010"}
+- {"tipo":"mais_dias","os":"26.010","dias":2,"motivo":"..."}
+- {"tipo":"mover_tarefa","os":"26.010","pessoa":"opcional","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD","motivo":"..."}
+- {"tipo":"excluir_tarefa","os":"26.010","motivo":"..."}
+Regras: use sempre o número da OS no formato 26.010; datas reais (hoje está nos dados); dias úteis (seg a sex); nunca invente OS ou pessoas que não estão nos dados;
+se faltar informação (ex.: quem executa, datas), pergunte em vez de gerar a ação. Sem pedido de mudança, não coloque <acoes>.`;
 
 async function assistente(res, dados) {
   const contexto = String(dados.contexto || '').slice(0, 40000);
@@ -405,9 +420,12 @@ async function assistente(res, dados) {
   if (!historico.length || historico[historico.length - 1].role !== 'user') return enviarJSON(res, 400, { erro: 'Mensagem vazia.' });
   try {
     let texto;
-    try { texto = (await chamarModelo({ system: REGRAS_ASSISTENTE + '\n\nDADOS DA EMPRESA (agora):\n' + contexto, messages: historico, maxTokens: 3000 })).texto.trim(); }
+    try { texto = (await chamarModelo({ system: REGRAS_ASSISTENTE + '\n\nDADOS DA EMPRESA (agora):\n' + contexto, messages: historico, maxTokens: 4000 })).texto.trim(); }
     catch (e) { return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + e.message }); }
-    enviarJSON(res, 200, { ok: true, resultado: { texto } });
+    let acoes = [];
+    const m = texto.match(/<acoes>([\s\S]*?)<\/acoes>/i);
+    if (m) { try { const j = JSON.parse(m[1].replace(/```(json)?/g, '').trim()); if (Array.isArray(j)) acoes = j.slice(0, 20); } catch {} texto = texto.replace(m[0], '').trim(); }
+    enviarJSON(res, 200, { ok: true, resultado: { texto, acoes } });
   } catch {
     enviarJSON(res, 502, { erro: 'Sem conexão com a IA agora. Tente de novo em instantes.' });
   }
