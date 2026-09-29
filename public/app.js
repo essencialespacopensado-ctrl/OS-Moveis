@@ -2847,7 +2847,28 @@ function useTarefas(sessao) {
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setT(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setT([])), []);
   return t;
 }
-function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: inicio0, fechar, toast, osInicial }) {
+/* Escreve a tarefa nos dias da agenda semanal (linha da pessoa) */
+async function escreverNaAgenda(sessao, grade, pessoa, ini, fim, linha) {
+  const porSemana = {};
+  for (let d = deIsoD(ini); isoD(d) <= fim; d.setDate(d.getDate() + 1)) {
+    const wd = (d.getDay() + 6) % 7; if (wd > 4) continue;
+    const sem = iso(segundaDe(d)); (porSemana[sem] = porSemana[sem] || []).push(wd);
+  }
+  const { getDoc, setDoc } = F().fsMod;
+  for (const [sem, dias] of Object.entries(porSemana)) {
+    const ref = docRef('empresas', sessao.empresaId, 'agenda', sem);
+    const snap = await getDoc(ref);
+    const ag = snap.exists() ? snap.data() : agendaPadrao(sem);
+    ag.grades = ag.grades || {}; ag.grades[grade] = ag.grades[grade] || [];
+    let row = ag.grades[grade].find(r => norm(r.nome) === norm(pessoa));
+    if (!row) { row = { nome: pessoa, dias: ['', '', '', '', ''] }; ag.grades[grade].push(row); }
+    row.dias = row.dias || ['', '', '', '', ''];
+    dias.forEach(i => { const v = row.dias[i] || ''; if (!v.includes(linha)) row.dias[i] = (v ? v + '\n' : '') + linha; });
+    await setDoc(ref, { ...ag, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+  }
+  return Object.values(porSemana).reduce((n, d) => n + d.length, 0);
+}
+function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: inicio0, fechar, toast, osInicial, aoLancar }) {
   const inicio = inicio0 || isoD(new Date());
   const [pessoa, setPessoa] = useState(pessoa0 || '');
   const [grade, setGrade] = useState(grade0 || 'producao');
@@ -2866,7 +2887,9 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
     try {
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
       if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa, dm(ini) + ' a ' + dm(fim) + (texto.trim() ? ' — ' + texto.trim() : ''));
-      toast('Tarefa lançada no cronograma de ' + pessoa + '.', 'ok'); fechar();
+      let nd = 0;
+      if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '') : '', texto.trim() || (osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '')].filter(Boolean).join(' – '));
+      toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini) + ' a ' + dm(fim) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
     } catch (e) { toast(e.message, 'erro'); }
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
@@ -3404,7 +3427,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       <${LinhaDoTempo} os=${o} sessao=${sessao} />
       <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${fechar}>Fechar</button>
         <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => editar(osId)}>✏️ Editar OS</button></div>
-      ${enviar && html`<${NovaTarefa} sessao=${sessao} lista=${todas} osInicial=${o} toast=${toast} fechar=${() => setEnviar(false)} />`}
+      ${enviar && html`<${NovaTarefa} sessao=${sessao} lista=${todas} osInicial=${o} toast=${toast} fechar=${() => setEnviar(false)} aoLancar=${fechar} />`}
     </div></div>`, document.body);
 }
 function linhaDoTempo(os, extras) {
