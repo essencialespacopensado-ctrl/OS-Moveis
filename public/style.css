@@ -948,3 +948,24 @@ fieldset.trava[disabled]{opacity:.72}
 .ag-chip.feito .cel-ok{text-decoration:none}
 .ag-chip .cel-ok{margin-left:6px}
 .tar-ok{width:100%;justify-content:center}
+
+/* v43 — ficha da OS finalizada */
+.ficha{padding:0;overflow:hidden;max-height:92vh;overflow-y:auto}
+.ficha>*:not(.ficha-cab){margin-left:14px;margin-right:14px}
+.ficha>*:last-child{margin-bottom:14px}
+.ficha-cab{display:flex;justify-content:space-between;gap:8px;background:var(--cc);color:#fff;padding:14px 16px}
+.ficha-cab b{display:block;font-size:18px}.ficha-cab small{opacity:.9}
+.ficha-num{font-weight:800;font-size:22px}.ficha-num span{font-size:12px;background:#fff3;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+.ficha-falta{border-radius:10px;padding:10px 12px;background:#fef2f2;border:2px solid #fca5a5;color:#7f1d1d;font-size:14px;line-height:1.5}
+.ficha-falta.ok{background:#f0fdf4;border-color:#86efac;color:#14532d}
+.ficha-sec{font-weight:800;font-size:15px;margin-top:4px;border-left:4px solid var(--cc);padding-left:8px}
+.ficha-esteira{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:6px}
+.fe-i{border-radius:10px;padding:8px;background:#f5f5f4;border:2px solid #e7e5e4;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.fe-i i{font-style:normal;font-weight:800;font-size:18px}.fe-i small{color:#78716c;font-size:11px}
+.fe-i.pronto{background:#f0fdf4;border-color:#22c55e}.fe-i.pronto i{color:#16a34a}
+.fe-i.andamento{background:#eff6ff;border-color:#3b82f6}.fe-i.andamento i{color:#2563eb}
+.fe-i.nao{opacity:.5}
+.ficha-lista{display:flex;flex-direction:column;gap:4px}
+.fl-i{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:#fafaf9;border-radius:8px;font-size:14px}
+.fl-i small{color:#78716c}
+.fl-st{color:#fff;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;white-space:nowrap}

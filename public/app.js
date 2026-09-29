@@ -2776,7 +2776,7 @@ function osCitadas(txt, lista) {
   return achadas;
 }
 const corCelula = (txt, lista) => { const o = osCitadas(txt, lista)[0]; return o ? { background: corOS(o) + '1c', boxShadow: 'inset 4px 0 0 ' + corOS(o) } : undefined; };
-const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); const vis = new Set(); const uni = os.filter(o => { const k = norm((o.cliente?.nome || '').split(/\s[-–]\s/)[0]); if (vis.has(k)) return false; vis.add(k); return true; }); return uni.length ? html`<div class="ag-tags">${uni.map(o => html`<span key=${o.id} style=${{ background: corOS(o) }}>${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</span>`)}</div>` : null; };
+const tagsOS = (txt, lista) => { const os = osCitadas(txt, lista); const vis = new Set(); const uni = os.filter(o => { const k = norm((o.cliente?.nome || '').split(/\s[-–]\s/)[0]); if (vis.has(k)) return false; vis.add(k); return true; }); return uni.length ? html`<div class="ag-tags">${uni.map(o => html`<span key=${o.id} role="button" style=${{ background: corOS(o), cursor: 'pointer' }} onClick=${() => window.__abrirOS && window.__abrirOS(o.id)}>${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</span>`)}</div>` : null; };
 const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 
 /* ---------- Tarefas com prazo final (cronograma do marceneiro) ---------- */
@@ -3194,6 +3194,66 @@ function pedirMotivo(titulo, texto) {
     const alertaMin = () => { const t = el.querySelector('textarea'); if (t) { t.style.borderColor = '#dc2626'; t.placeholder = 'Escreva o motivo (mín. 5 letras)'; t.focus(); } };
     root.render(html`<${M} />`);
   });
+}
+
+/* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
+function FichaOS({ sessao, osId, fechar, editar }) {
+  const [o, setO] = useState(undefined);
+  const [compras, setCompras] = useState([]);
+  const [peds, setPeds] = useState([]);
+  const [pend, setPend] = useState([]);
+  useEffect(() => {
+    const { onSnapshot, query, where } = F().fsMod; const e = sessao.empresaId;
+    const u = [
+      onSnapshot(docRef('empresas', e, 'os', osId), d => setO(d.exists() ? { id: d.id, ...d.data() } : null), () => setO(null)),
+      onSnapshot(docRef('empresas', e, 'compras', osId), d => setCompras(d.exists() ? (d.data().itens || []) : []), () => {}),
+      onSnapshot(query(col('empresas', e, 'pedidos'), where('osId', '==', osId)), s => setPeds(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}),
+      onSnapshot(col('empresas', e, 'os', osId, 'diario'), s => setPend(s.docs.map(d => d.data()).filter(x => x.tipo === 'pendencia' && !x.resolvida)), () => {}),
+    ];
+    return () => u.forEach(f => f && f());
+  }, [osId]);
+  useEffect(() => { if (o && o.status !== 'concluida') editar(osId); }, [o?.status]);
+  if (o === undefined || (o && o.status !== 'concluida')) return null;
+  if (o === null) { fechar(); return null; }
+  const cor = corOS(o);
+  const et = o.execucao?.etapas || {};
+  const parc = parceirosDaOS(o);
+  const faltaCompra = compras.filter(i => !i.comprado);
+  const pedAb = peds.filter(pedAberto);
+  const parcAb = parc.filter(p => p.st !== 'recebido');
+  const etAb = ETAPAS_FAB.filter(([k]) => et[k] && et[k].status !== 'pronto' && et[k].onde !== 'nao');
+  const falta = [
+    ...parcAb.map(p => p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2]),
+    ...faltaCompra.map(i => '🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : '')),
+    ...pedAb.map(p => '🪵 Peça extra: ' + resumoPed(p)),
+    ...pend.map(p => '⚠️ Pendência: ' + String(p.texto || '').slice(0, 90)),
+    ...etAb.map(([, t]) => '🏭 Etapa aberta: ' + t),
+  ];
+  const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
+    <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
+      <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>✅ Finalizada${fim ? ' · ' + fmtData(fim.em) : ''}</span></div>
+        <b>${o.cliente?.nome || ''}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}${o.prazoEntrega ? ' · entrega ' + dm(o.prazoEntrega) : ''}</small></div>
+        <button class="x-btn" style=${{ color: '#fff' }} onClick=${fechar}>✕</button></div>
+
+      <div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>
+
+      <div class="ficha-sec">🏭 Esteira de produção</div>
+      <div class="ficha-esteira">${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const st = e.onde === 'nao' ? 'nao' : e.status || 'pendente';
+        return html`<div key=${k} class=${'fe-i ' + st}><i>${st === 'pronto' ? '✓' : st === 'andamento' ? '▶' : st === 'nao' ? '—' : '○'}</i><b>${t}</b><small>${st === 'nao' ? 'não se aplica' : st === 'pronto' ? (e.concluidaEm ? fmtData(e.concluidaEm) : 'pronto') + (e.concluidaPor ? ' · ' + e.concluidaPor : '') : ST_FAB[st] || st}${e.onde === 'terceirizada' ? ' · terceirizada' : ''}</small></div>`; })}</div>
+
+      <div class="ficha-sec">🤝 Terceiros / parceiros</div>
+      ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
+
+      <div class="ficha-sec">🛒 Compras <small class="dim">${compras.length - faltaCompra.length}/${compras.length} compradas</small></div>
+      ${compras.length ? html`<div class="ficha-lista">${compras.map((i, j) => html`<div key=${j} class="fl-i"><span>${i.comprado ? '✅' : '⬜'} ${i.qtd ? i.qtd + ' ' : ''}${i.descricao}${i.parceiro ? html` <small>${i.parceiro}</small>` : ''}</span><span class="fl-st" style=${{ background: i.comprado ? '#16a34a' : '#dc2626' }}>${i.comprado ? 'Comprado' : 'Falta'}</span></div>`)}</div>` : html`<div class="dim">Sem folha de compras.</div>`}
+
+      ${peds.length > 0 && html`<div class="ficha-sec">🪵 Peças extras</div><div class="ficha-lista">${peds.map(p => { const s = ((PED_ST[p.tipo] || PED_ST.interno).find(x => x[0] === p.st) || []); return html`<div key=${p.id} class="fl-i"><span>${resumoPed(p)}</span><span class="fl-st" style=${{ background: s[2] || '#9ca3af' }}>${s[1] || p.st}</span></div>`; })}</div>`}
+
+      <${LinhaDoTempo} os=${o} sessao=${sessao} />
+      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${fechar}>Fechar</button>
+        <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => editar(osId)}>📋 Ver OS completa</button></div>
+    </div></div>`, document.body);
 }
 function linhaDoTempo(os, extras) {
   const ev = [];
@@ -4521,7 +4581,10 @@ function Principal({ sessao, toast }) {
   useEffect(() => { try { localStorage.setItem('osm_aba', aba); } catch {} }, [aba]);
   useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => setStatusIA({ ia: false })); }, []);
 
-  const abrirOS = (id) => { setOsAberta(id); setAba('os'); window.scrollTo(0, 0); };
+  const [ficha, setFicha] = useState(null);
+  const abrirDireto = (id) => { setFicha(null); setOsAberta(id); setAba('os'); window.scrollTo(0, 0); };
+  const abrirOS = (id) => setFicha(id);
+  window.__abrirOS = abrirOS;
   const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
@@ -4570,7 +4633,8 @@ function Principal({ sessao, toast }) {
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
         ${aba === 'inicio' && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-        ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${setOsAberta} />`}
+        ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
+        ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} />`}
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
