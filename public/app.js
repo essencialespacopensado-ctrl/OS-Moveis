@@ -3481,7 +3481,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       <div class="ficha-acoes">
         <button class="btn btn-grande btn-primary" onClick=${editarMot}>✏️ Editar OS</button>
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
-        ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📍 Ver no cronograma<small style=${{ display: 'block', fontWeight: 500, fontSize: '11px', opacity: .9 }}>${tarOS[0].pessoa} · ${dm(tarOS[0].inicio)} a ${dm(tarOS[0].fim)}</small></button>`
+        ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📅 Ver no cronograma</button>`
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
