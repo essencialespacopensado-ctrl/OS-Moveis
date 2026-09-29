@@ -1045,3 +1045,8 @@ fieldset.trava[disabled]{opacity:.72}
 .mes-ev.feito{opacity:.6;text-decoration:line-through}
 .mes-nome{font-style:normal;font-size:9px;font-weight:800;color:#fff;border-radius:3px;padding:0 3px;margin-right:3px;text-transform:uppercase;border:1px solid #fff8}
 .mes-d{transition:transform .15s,box-shadow .15s}.mes-d:hover{transform:translateY(-2px);box-shadow:0 6px 14px #0001}
+
+/* v61 — foco na linha ao abrir do calendário da OS */
+tr.foco-linha>td{background:#fef9c3!important;transition:background .3s}
+td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s ease-in-out 3}
+@keyframes focoPisca{50%{outline-color:transparent}}

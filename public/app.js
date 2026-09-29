@@ -2982,6 +2982,14 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
     return F().fsMod.onSnapshot(ref, d => { if (!sujoRef.current) setDoc(d.exists() ? d.data() : null); });
   }, [semana]);
   const sujoRef = useRef(false); sujoRef.current = sujo;
+  useEffect(() => {
+    const f = window.__focoAgenda; if (!f || !doc) return;
+    setTimeout(() => {
+      const el = f.p ? document.querySelector(`td[data-p="${f.p}"][data-d="${f.d}"]`) || document.querySelector(`td[data-p="${f.p}"]`) : document.querySelector(`td[data-d="${f.d}"]`);
+      if (el) { const tr = el.closest('tr'); el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); tr && tr.classList.add('foco-linha'); el.classList.add('foco-cel'); setTimeout(() => { tr && tr.classList.remove('foco-linha'); el.classList.remove('foco-cel'); }, 4000); }
+      window.__focoAgenda = null;
+    }, 400);
+  }, [doc]);
   const salvoRef = useRef(null);
   useEffect(() => { if (!sujo && doc) salvoRef.current = doc; }, [doc, sujo]);
   const logCitacoes = (antes, depois) => {
@@ -3110,7 +3118,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                   ${(doc.grades?.[k] || []).map((r, ri) => html`<tr key=${ri}>
                     <td class="ag-nome"><input class="ag-inp" value=${r.nome} placeholder=${rot} onInput=${e => mudar(d => { d.grades[k][ri].nome = e.target.value; })} />
                       <button class="x-btn" title="Remover linha" onClick=${() => mudar(d => { d.grades[k].splice(ri, 1); })}>×</button></td>
-                    ${r.dias.map((v, di) => { const dISO = isoD(diasD[di]); const tsk = tarefas.filter(t => norm(t.pessoa) === norm(r.nome) && t.inicio <= dISO && t.fim >= dISO); return html`<td key=${di} style=${corCelula(v, lista)}>
+                    ${r.dias.map((v, di) => { const dISO = isoD(diasD[di]); const tsk = tarefas.filter(t => norm(t.pessoa) === norm(r.nome) && t.inicio <= dISO && t.fim >= dISO); return html`<td key=${di} data-p=${norm(r.nome)} data-d=${dISO} style=${corCelula(v, lista)}>
                       ${tsk.map(t => { const c = t.cliente ? corCliente(t.cliente) : '#57534e'; const atr = t.status !== 'concluida' && t.fim < isoD(new Date()); const ult = t.fim === dISO; return html`<button key=${t.id} class=${'tar-bar' + (t.status === 'concluida' ? ' ok' : '') + (atr ? ' atr' : '') + (t.inicio === dISO ? ' ini' : '') + (ult ? ' fim' : '')} style=${{ '--cc': c }} onClick=${() => setVerT(t)} title=${(t.cliente || '') + ' ' + (t.texto || '')}>
                         ${t.inicio === dISO || di === 0 ? html`<b>${(t.cliente || t.texto || '').split(/\s[-–]\s/)[0]}</b> <small>${t.ambiente || t.texto}</small>` : html`<small>…</small>`}
                         ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>
@@ -3364,12 +3372,12 @@ function CalendarioOS({ sessao, os }) {
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', os.id)), s => setTar(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setTar([])); }, [os.id]);
   const hoje = isoD(new Date());
   const itens = [
-    ...(tar || []).map(t => ({ d: t.inicio, fim: t.fim, ic: t.status === 'concluida' ? '✅' : t.fim < hoje ? '⚠️' : '📅', t: (GRADES.find(g => g[0] === t.grade) || [, ''])[1].replace(/^\S+ /, '') + ' · ' + t.pessoa, s: t.texto, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje })),
+    ...(tar || []).map(t => ({ foco: { p: norm(t.pessoa), d: t.inicio < hoje && t.fim >= hoje ? hoje : t.inicio }, d: t.inicio, fim: t.fim, ic: t.status === 'concluida' ? '✅' : t.fim < hoje ? '⚠️' : '📅', t: (GRADES.find(g => g[0] === t.grade) || [, ''])[1].replace(/^\S+ /, '') + ' · ' + t.pessoa, s: t.texto, ok: t.status === 'concluida', atr: t.status !== 'concluida' && t.fim < hoje })),
     ...(os.prazoEntrega ? [{ d: os.prazoEntrega, ic: os.entregaFeita ? '✅' : '🚚', t: 'Prazo de entrega', ok: !!os.entregaFeita, ent: true }] : []),
   ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
   return html`<div class="cal-os">
     ${tar === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Esta OS ainda não está no cronograma. Use 📅 Enviar para cronograma.</div>` :
-      itens.map((x, i) => html`<button key=${i} class=${'cal-i' + (x.ok ? ' ok' : '') + (x.atr ? ' atr' : '') + (x.ent ? ' ent' : '')} onClick=${() => window.__irCronograma && window.__irCronograma(x.d)}>
+      itens.map((x, i) => html`<button key=${i} class=${'cal-i' + (x.ok ? ' ok' : '') + (x.atr ? ' atr' : '') + (x.ent ? ' ent' : '')} onClick=${() => window.__irCronograma && window.__irCronograma(x.foco?.d || x.d, x.foco || { d: x.d, entrega: true })}>
         <span class="cal-d"><b>${dm(x.d)}</b>${x.fim && x.fim !== x.d ? html`<small>até ${dm(x.fim)}</small>` : ''}</span>
         <span class="cal-x">${x.ic} <b>${x.t}</b>${x.s ? html`<small>${x.s}</small>` : ''}</span><span class="cal-ir">Abrir ›</span></button>`)}
     <button class="btn btn-block" onClick=${() => window.__irCronograma && window.__irCronograma(itens[0]?.d || null)}>📆 Abrir o cronograma</button>
@@ -4845,7 +4853,7 @@ function Principal({ sessao, toast }) {
   const abrirOS = (id) => setFicha(id);
   window.__abrirOS = abrirOS;
   const [cronoK, setCronoK] = useState(0);
-  window.__irCronograma = (d) => { window.__semanaIr = d || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
+  window.__irCronograma = (d, foco) => { window.__semanaIr = d || null; window.__focoAgenda = foco || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
   const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
