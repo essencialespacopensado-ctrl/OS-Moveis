@@ -2897,12 +2897,31 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
     if (!pessoa.trim()) return avisar('Escolha quem vai executar.');
     if (!osSel && !texto.trim()) return avisar('Escolha a OS ou escreva a tarefa.');
     if (fim < ini) return avisar('O prazo final não pode ser antes do início.');
+    let iniF = ini, fimF = fim;
     try {
-      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
-      if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa + ' · prazo ' + dm(fim), 'De ' + dm(ini) + ' a ' + dm(fim) + ' (' + (uteisEntre(ini, fim) + 1) + ' dias úteis)' + (texto.trim() ? ' — ' + texto.trim() : ''));
+      const todas = (await F().fsMod.getDocs(col('empresas', sessao.empresaId, 'tarefas'))).docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida');
+      if (osSel) {
+        const dup = todas.find(t => t.osId === osSel.id && t.grade === grade);
+        if (dup) return avisar('Bloqueado: a OS ' + numOS(osSel) + ' já está neste cronograma com ' + dup.pessoa + ' (' + dm(dup.inicio) + ' a ' + dm(dup.fim) + '). Use ＋ Mais dias nela em vez de lançar de novo.');
+      }
+      const choque = todas.filter(t => norm(t.pessoa) === norm(pessoa) && t.inicio <= fimF && t.fim >= iniF).sort((a, b) => a.fim.localeCompare(b.fim));
+      if (choque.length) {
+        const ult = choque[choque.length - 1];
+        const dur = uteisEntre(iniF, fimF);
+        const novoIni = somaUteis(ult.fim, 1), novoFim = somaUteis(novoIni, dur);
+        const r = await escolher('Choque de datas', pessoa + ' já tem tarefa nesses dias:\n' + choque.map(t => '• ' + [t.osCod, t.cliente].filter(Boolean).join(' ') + ' (' + dm(t.inicio) + ' a ' + dm(t.fim) + ')').join('\n') + '\n\nUma tarefa não pode sobrepor a outra.',
+          [{ v: 'depois', t: 'Começar depois: ' + dm(novoIni) + ' a ' + dm(novoFim), cls: 'btn-primary' }, { v: 'nao', t: 'Cancelar e escolher outras datas' }]);
+        if (r !== 'depois') return avisar('Escolha outras datas ou outra pessoa.');
+        iniF = novoIni; fimF = novoFim; setIni(novoIni); setFim(novoFim);
+      }
+    } catch (e) { return avisar('Não consegui conferir o cronograma: ' + e.message); }
+    const ini2 = iniF, fim2 = fimF;
+    try {
+      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini2, fim: fim2, fimOriginal: fim2, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
+      if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa + ' · prazo ' + dm(fim2), 'De ' + dm(ini2) + ' a ' + dm(fim2) + ' (' + (uteisEntre(ini2, fim2) + 1) + ' dias úteis)' + (texto.trim() ? ' — ' + texto.trim() : ''));
       let nd = 0;
-      if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '').split(/\s[-–]\s/)[0] : '', texto.trim()].filter(Boolean).join(' – '));
-      toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini) + ' a ' + dm(fim) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
+      if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini2, fim2, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '').split(/\s[-–]\s/)[0] : '', texto.trim()].filter(Boolean).join(' – '));
+      toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini2) + ' a ' + dm(fim2) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
     } catch (e) { avisar('Não salvou: ' + e.message); }
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
