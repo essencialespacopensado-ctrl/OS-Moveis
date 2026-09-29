@@ -3028,6 +3028,22 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
         <div class="row" style=${{ gap: '6px' }}>
           <button class="btn btn-sm" disabled=${!!importando} onClick=${() => inp.current?.click()}>${importando || '⬆ Importar agenda (Word/PDF/foto)'}</button>
           <input ref=${inp} type="file" hidden accept=".docx,.pdf,.xlsx,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
+          <button class="btn btn-sm btn-danger" onClick=${async () => {
+            const fimSem = isoD(new Date(deIso(semana).getTime() + 6 * 864e5));
+            const daSemana = (tarefas || []).filter(t => t.inicio <= fimSem && t.fim >= semana);
+            const r = await escolher('Apagar cronograma', 'Semana de ' + dm(semana) + ' a ' + dm(fimSem) + '.\n' + (doc ? 'Tem texto escrito na agenda. ' : '') + daSemana.length + ' tarefa(s) lançadas nesta semana.\nIsso não pode ser desfeito.',
+              [{ v: 'tudo', t: '🗑 Apagar a semana inteira (agenda + tarefas)', cls: 'btn-danger' }, { v: 'agenda', t: 'Apagar só o texto da agenda' }, { v: 'tar', t: 'Apagar só as tarefas (' + daSemana.length + ')' }, { v: 'todas', t: '🧹 Apagar TODAS as tarefas de todas as semanas (' + (tarefas || []).length + ')', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }]);
+            if (r === 'nao' || !r) return;
+            if (r === 'todas' && (await escolher('Tem certeza?', 'Vai apagar ' + (tarefas || []).length + ' tarefas de todo o cronograma.', [{ v: 'sim', t: 'Sim, apagar todas', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }])) !== 'sim') return;
+            try {
+              const { writeBatch } = F().fsMod; const b = writeBatch(F().db);
+              if (r === 'tudo' || r === 'agenda') { b.delete(ref); sujoRef.current = false; }
+              const alvo = r === 'todas' ? (tarefas || []) : (r === 'tudo' || r === 'tar') ? daSemana : [];
+              alvo.slice(0, 450).forEach(t => b.delete(docRef('empresas', sessao.empresaId, 'tarefas', t.id)));
+              await b.commit(); setSujo(false); if (r === 'tudo' || r === 'agenda') setDoc(null);
+              toast('Cronograma apagado.', 'ok');
+            } catch (e) { toast(e.message, 'erro'); }
+          }}>🗑 Apagar</button>
           ${doc && html`<button class="btn btn-sm" onClick=${() => { document.body.classList.add('imp-agenda'); setTimeout(() => { window.print(); document.body.classList.remove('imp-agenda'); }, 100); }}>🖨 Imprimir</button>`}
         </div>
       </div>
