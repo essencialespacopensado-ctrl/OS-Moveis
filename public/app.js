@@ -4627,6 +4627,63 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* =========================================================
    Assistente de IA (chat flutuante)
    ========================================================= */
+/* ---------- A IA mexendo no sistema (com confirmação) ---------- */
+const TIPO_ACAO = { status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma' };
+function descAcao(a) {
+  const x = { ...a }; delete x.tipo; delete x.os;
+  return (a.os ? 'OS ' + a.os + ' · ' : '') + Object.entries(x).map(([k, v]) => k + ': ' + (/^\d{4}-\d\d-\d\d$/.test(String(v)) ? dm(v) : v)).join(' · ');
+}
+async function executarAcao(sessao, a) {
+  const { getDocs, updateDoc, addDoc, writeBatch } = F().fsMod; const E = sessao.empresaId;
+  const oss = (await getDocs(col('empresas', E, 'os'))).docs.map(d => ({ id: d.id, ...d.data() }));
+  const o = a.os ? oss.find(x => numOS(x) === String(a.os).trim() || x.numeroAntigo === a.os) : null;
+  if (a.os && !o) throw new Error('Não achei a OS ' + a.os + '.');
+  const refO = o && docRef('empresas', E, 'os', o.id);
+  const tars = (await getDocs(col('empresas', E, 'tarefas'))).docs.map(d => ({ id: d.id, ...d.data() }));
+  const tarDaOS = () => tars.filter(t => t.osId === o.id && t.status !== 'concluida').sort((x, y) => x.inicio.localeCompare(y.inicio))[0];
+  const ia = '🤖 ';
+  switch (a.tipo) {
+    case 'status': {
+      const st = STATUS_OS.find(x => x.v === a.status || norm(x.t).includes(norm(a.status))); if (!st) throw new Error('Etapa desconhecida: ' + a.status);
+      await updateDoc(refO, { status: st.v, statusHist: [...(o.statusHist || []), { st: st.v, em: nowIso(), quem: sessao.nome + ' (IA)' }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+      return 'OS ' + numOS(o) + ' → ' + st.t.replace(/^\d+\. /, '');
+    }
+    case 'prazo_entrega': await updateDoc(refO, { prazoEntrega: a.data, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); registrar(sessao, o.id, ia + '🚚', 'Prazo de entrega: ' + dm(a.data), 'pela IA'); return 'Prazo de entrega ' + dm(a.data);
+    case 'observacao': await updateDoc(refO, { observacoesGerais: ((o.observacoesGerais || '') + '\n' + a.texto).trim(), atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); registrar(sessao, o.id, ia + '📝', 'Observação adicionada', a.texto); return 'Observação adicionada';
+    case 'pendencia': await addDoc(col('empresas', E, 'os', o.id, 'diario'), { tipo: 'pendencia', texto: a.texto, fotos: [], quem: sessao.nome, em: nowIso(), resolvida: false }); await updateDoc(refO, { pendAbertas: (o.pendAbertas || 0) + 1 }); registrar(sessao, o.id, ia + '⚠️', 'Pendência no diário', a.texto); return 'Pendência registrada';
+    case 'cliente': { if (!['nome', 'telefone', 'obra', 'endereco'].includes(a.campo)) throw new Error('Campo inválido'); await updateDoc(refO, { cliente: { ...(o.cliente || {}), [a.campo]: a.valor }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); registrar(sessao, o.id, ia + '👤', 'Cliente: ' + a.campo + ' = ' + a.valor); return 'Cliente atualizado'; }
+    case 'cronograma': {
+      if (!a.pessoa || !a.inicio || !a.fim) throw new Error('Faltam pessoa ou datas.');
+      const grade = GRADES.find(g => g[0] === a.categoria) ? a.categoria : (GRADES.find(g => norm(g[1]).includes(norm(a.categoria || ''))) || GRADES[0])[0];
+      const abertas = tars.filter(t => t.status !== 'concluida');
+      const junto = abertas.find(t => t.osId === o.id && t.inicio <= a.fim && t.fim >= a.inicio); if (junto) throw new Error('A OS já está com ' + junto.pessoa + ' de ' + dm(junto.inicio) + ' a ' + dm(junto.fim) + '.');
+      const choque = abertas.find(t => norm(t.pessoa) === norm(a.pessoa) && t.inicio <= a.fim && t.fim >= a.inicio); if (choque) throw new Error(a.pessoa + ' já tem ' + (choque.osCod || choque.texto) + ' nesses dias.');
+      await addDoc(col('empresas', E, 'tarefas'), { pessoa: a.pessoa, grade, inicio: a.inicio, fim: a.fim, fimOriginal: a.fim, texto: a.texto || '', osId: o.id, osCod: numOS(o), cliente: o.cliente?.nome || '', ambiente: (o.ambientes || []).map(x => x.nome).join(', '), status: 'andamento', prorrogacoes: [], quem: sessao.nome + ' (IA)', em: nowIso() });
+      await escreverNaAgenda(sessao, grade, a.pessoa, a.inicio, a.fim, numOS(o) + ' ' + (o.cliente?.nome || '').split(/\s[-–]\s/)[0]);
+      registrar(sessao, o.id, ia + '📅', 'Entrou no cronograma: ' + a.pessoa + ' · prazo ' + dm(a.fim), 'De ' + dm(a.inicio) + ' a ' + dm(a.fim) + ' — pela IA');
+      return 'Lançada com ' + a.pessoa + ' de ' + dm(a.inicio) + ' a ' + dm(a.fim);
+    }
+    case 'concluir_tarefa': { const t = tarDaOS(); if (!t) throw new Error('Essa OS não tem tarefa aberta no cronograma.'); await updateDoc(docRef('empresas', E, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); const rp = resultadoPrazo(t); registrar(sessao, o.id, ia + (rp.dif > 0 ? '⚠️' : '✅'), 'Concluída (' + t.pessoa + ') — ' + rp.txt, rp.d); return 'Concluída — ' + rp.txt; }
+    case 'mais_dias': {
+      const t = tarDaOS(); if (!t) throw new Error('Essa OS não tem tarefa aberta.'); if (!a.motivo) throw new Error('Falta o motivo.');
+      const n = Math.max(1, parseInt(a.dias, 10) || 1), novoFim = somaUteis(t.fim, n); const b = writeBatch(F().db);
+      b.update(docRef('empresas', E, 'tarefas', t.id), { fim: novoFim, prorrogacoes: [...(t.prorrogacoes || []), { dias: n, motivo: a.motivo, quem: sessao.nome, em: nowIso(), fimAntes: t.fim, fimDepois: novoFim }] });
+      tars.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim).forEach(x => b.update(docRef('empresas', E, 'tarefas', x.id), { inicio: somaUteis(x.inicio, n), fim: somaUteis(x.fim, n) }));
+      await b.commit(); escreverNaAgenda(sessao, t.grade, t.pessoa, somaUteis(t.fim, 1), novoFim, numOS(o) + ' ' + (o.cliente?.nome || '').split(/\s[-–]\s/)[0]).catch(() => {});
+      registrar(sessao, o.id, ia + '⏳', 'Prazo prorrogado +' + n + 'd: ' + dm(t.fim) + ' → ' + dm(novoFim), a.motivo); return '+' + n + ' dias, até ' + dm(novoFim);
+    }
+    case 'mover_tarefa': {
+      const t = tarDaOS(); if (!t) throw new Error('Essa OS não tem tarefa aberta.'); if (!a.motivo) throw new Error('Falta o motivo.');
+      const pessoa = a.pessoa || t.pessoa, ini = a.inicio || t.inicio, fim = a.fim || t.fim;
+      const choque = tars.find(x => x.id !== t.id && x.status !== 'concluida' && norm(x.pessoa) === norm(pessoa) && x.inicio <= fim && x.fim >= ini); if (choque) throw new Error(pessoa + ' já tem ' + (choque.osCod || choque.texto) + ' nesses dias.');
+      await updateDoc(docRef('empresas', E, 'tarefas', t.id), { pessoa, inicio: ini, fim, mudancas: [...(t.mudancas || []), { de: { pessoa: t.pessoa, inicio: t.inicio, fim: t.fim }, para: { pessoa, inicio: ini, fim }, motivo: a.motivo, quem: sessao.nome + ' (IA)', em: nowIso() }] });
+      await removerDaAgenda(sessao, t.grade, t.pessoa, t.inicio, t.fim, numOS(o)); await escreverNaAgenda(sessao, t.grade, pessoa, ini, fim, numOS(o) + ' ' + (o.cliente?.nome || '').split(/\s[-–]\s/)[0]);
+      registrar(sessao, o.id, ia + '↔️', 'Mudou no cronograma: ' + t.pessoa + ' → ' + pessoa + ' (' + dm(ini) + '–' + dm(fim) + ')', a.motivo); return 'Movida para ' + pessoa + ', ' + dm(ini) + ' a ' + dm(fim);
+    }
+    case 'excluir_tarefa': { const t = tarDaOS(); if (!t) throw new Error('Essa OS não tem tarefa aberta.'); if (!a.motivo) throw new Error('Falta o motivo.'); await F().fsMod.deleteDoc(docRef('empresas', E, 'tarefas', t.id)); await removerDaAgenda(sessao, t.grade, t.pessoa, t.inicio, t.fim, numOS(o)); registrar(sessao, o.id, ia + '🗑', 'Excluída do cronograma: ' + t.pessoa, a.motivo); return 'Excluída do cronograma'; }
+    default: throw new Error('Ação desconhecida: ' + a.tipo);
+  }
+}
 async function montarContexto(sessao, osAbertaId) {
   const { getDocs, getDoc, query, orderBy, limit } = F().fsMod;
   const linhas = [`Empresa: ${sessao.empresaNome}. Usuário: ${sessao.nome} (${(PAPEIS.find(p => p.v === sessao.papel) || {}).t || sessao.papel}). Hoje: ${new Date().toLocaleDateString('pt-BR')}.`];
@@ -4642,6 +4699,15 @@ async function montarContexto(sessao, osAbertaId) {
       const amb = (o.ambientes || []).map(a => `${a.nome} [${(a.moveis || []).map(m => m.nome).join(', ')}]`).join('; ');
       linhas.push(`- OS ${numOS(o)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
     });
+    linhas.push('\nETAPAS DA OS (valor = nome): ' + STATUS_OS.map(x => x.v + ' = ' + x.t.replace(/^\d+\. /, '')).join('; '));
+    linhas.push('CATEGORIAS DO CRONOGRAMA (chave = nome): ' + GRADES.map(g => g[0] + ' = ' + g[1]).join('; '));
+    try {
+      const ts = await getDocs(col('empresas', sessao.empresaId, 'tarefas'));
+      linhas.push(`\nTAREFAS NO CRONOGRAMA (${ts.size}):`);
+      ts.docs.forEach(d => { const t = d.data(); linhas.push(`- ${t.osCod || '(sem OS)'} ${t.cliente || ''} | ${t.grade} | ${t.pessoa} | ${t.inicio} a ${t.fim} | ${t.status}`); });
+      const ag = await getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date()))));
+      if (ag.exists()) linhas.push('PESSOAS/EQUIPES NO CRONOGRAMA: ' + GRADES.map(g => g[0] + ': ' + ((ag.data().grades || {})[g[0]] || []).map(r => r.nome).filter(Boolean).join(', ')).join(' | '));
+    } catch {}
     if (osAbertaId) {
       const o = await getDoc(docRef('empresas', sessao.empresaId, 'os', osAbertaId));
       if (o.exists()) {
@@ -4678,14 +4744,21 @@ function Assistente({ sessao, osAberta }) {
     try {
       const contexto = await montarContexto(sessao, osAberta);
       const r = await chamarIA('assistente', { contexto, historico: hist });
-      setMsgs(h => [...h, { role: 'assistant', content: String(r?.texto || '').replace(/\*\*/g, '') }]);
+      setMsgs(h => [...h, { role: 'assistant', content: String(r?.texto || '').replace(/\*\*/g, '') || (r?.acoes?.length ? 'Preparei estas mudanças. Confira e aplique:' : ''), acoes: (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' })) }]);
     } catch (e) { setErro(e.message); }
     setPensando(false);
   };
 
+  const marcar = (i, j, patch) => setMsgs(h => h.map((m, k) => k !== i ? m : { ...m, acoes: m.acoes.map((a, l) => l === j ? { ...a, ...patch } : a) }));
+  const aplicar = async (i, j) => {
+    const a = msgs[i]?.acoes?.[j]; if (!a) return;
+    marcar(i, j, { _st: 'rodando' });
+    try { const { _st, _msg, ...limpa } = a; const r = await executarAcao(sessao, limpa); marcar(i, j, { _st: 'feita', _msg: r }); }
+    catch (e) { marcar(i, j, { _st: 'erro', _msg: e.message }); }
+  };
   const sugestoes = osAberta
     ? ['Confira esta OS e aponte o que está faltando', 'Sugira ferragens para os móveis desta OS', 'Escreva uma mensagem pro cliente confirmando os acabamentos']
-    : ['Quais OS estão em produção?', 'Quais projetos ainda não têm OS?', 'Sugira combinações de MDF para uma cozinha clara', 'Como eu faço a ata da reunião?'];
+    : ['Mande a OS 26.010 para a produção com o EDINHO de segunda a quarta', 'Quais OS estão em produção?', 'Quais projetos ainda não têm OS?', 'Sugira combinações de MDF para uma cozinha clara', 'Como eu faço a ata da reunião?'];
 
   return html`
     <button class=${'assist-fab' + (aberto ? ' on' : '')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
@@ -4703,7 +4776,14 @@ function Assistente({ sessao, osAberta }) {
             <div class="stack" style=${{ gap: '6px' }}>
               ${sugestoes.map(s => html`<button key=${s} class="btn btn-sm" style=${{ justifyContent: 'flex-start', whiteSpace: 'normal', textAlign: 'left' }} onClick=${() => enviar(s)}>${s}</button>`)}
             </div>`}
-          ${msgs.map((m, i) => html`<div key=${i} class=${'bolha ' + (m.role === 'user' ? 'eu' : 'ia')}>${m.content}</div>`)}
+          ${msgs.map((m, i) => html`<div key=${i} class=${'bolha ' + (m.role === 'user' ? 'eu' : 'ia')}>${m.content}
+            ${(m.acoes || []).length > 0 && html`<div class="ia-acoes">${m.acoes.map((a, j) => html`<div key=${j} class=${'ia-acao ' + a._st}>
+              <b>${TIPO_ACAO[a.tipo] || a.tipo}</b><small>${descAcao(Object.fromEntries(Object.entries(a).filter(([k]) => !k.startsWith('_'))))}</small>
+              ${a._st === 'pendente' ? html`<div class="row" style=${{ gap: '4px' }}><button class="btn btn-sm btn-verde" onClick=${() => aplicar(i, j)}>✓ Aplicar</button><button class="btn btn-sm btn-ghost" onClick=${() => marcar(i, j, { _st: 'descartada' })}>Descartar</button></div>`
+                : html`<em>${a._st === 'feita' ? '✅ ' + (a._msg || 'Feito') : a._st === 'rodando' ? '⏳ Aplicando…' : a._st === 'erro' ? '⚠️ ' + a._msg : '✕ Descartada'}</em>`}
+            </div>`)}
+            ${m.acoes.filter(a => a._st === 'pendente').length > 1 && html`<button class="btn btn-sm btn-verde btn-block" onClick=${async () => { for (let j = 0; j < m.acoes.length; j++) if (m.acoes[j]._st === 'pendente') await aplicar(i, j); }}>✓ Aplicar todas</button>`}</div>`}
+          </div>`)}
           ${pensando && html`<div class="bolha ia dim">Pensando…</div>`}
           ${erro && html`<div class="error-box">${erro}</div>`}
           <div ref=${fimRef}></div>

@@ -1092,3 +1092,10 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cat-linha{display:flex;gap:6px;align-items:center;border-left:6px solid;padding:4px 0 4px 8px;border-radius:6px;background:#fafaf9}
 .cat-linha input[type=color]{width:34px;height:34px;border:none;background:none;padding:0;cursor:pointer;flex:none}
 .cat-linha .inp{flex:1;min-width:0}
+
+/* v74 — IA aplicando mudanças */
+.ia-acoes{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.ia-acao{background:#fff;border:2px solid #c7d2fe;border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:4px;color:#1c1917}
+.ia-acao small{color:#57534e;font-size:12px}
+.ia-acao em{font-style:normal;font-size:12px;font-weight:700}
+.ia-acao.feita{border-color:#86efac;background:#f0fdf4}.ia-acao.erro{border-color:#fca5a5;background:#fef2f2}.ia-acao.descartada{opacity:.5}
