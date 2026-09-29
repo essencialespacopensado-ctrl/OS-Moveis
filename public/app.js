@@ -301,13 +301,14 @@ function pedirTexto(titulo, ph) {
   });
 }
 /* Caixa de escolha (aviso com opções) */
-function escolher(titulo, texto, opcoes) {
+function escolher(titulo, texto, opcoes, links) {
   return new Promise(res => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = ReactDOM.createRoot(el);
     const fim = (v) => { root.unmount(); el.remove(); res(v); };
     root.render(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(520px,100%)' }}>
       <div class="sec-title">⚠️ ${titulo}</div><div style=${{ whiteSpace: 'pre-line' }}>${texto}</div>
+      ${(links || []).length > 0 && html`<div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>${links.map((l, i) => html`<button key=${i} class="btn btn-sm" onClick=${l.fn}>${l.t}</button>`)}</div>`}
       <div class="stack" style=${{ gap: '6px' }}>${opcoes.map((o, i) => html`<button key=${i} class=${'btn btn-grande btn-block ' + (o.cls || '')} onClick=${() => fim(o.v)}>${o.t}${o.d ? html`<small style=${{ display: 'block', fontWeight: 400, opacity: .8 }}>${o.d}</small>` : ''}</button>`)}</div>
     </div></div>`);
   });
@@ -4113,33 +4114,41 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
         const lista = await numerosUsados(sessao.empresaId);
         const anoAt = String(new Date().getFullYear()).slice(2);
         const cArq = lerCodigo(item.nome), cDoc = lerCodigo(res.numeroAntigo);
+        const verArq = { t: '👁 Ver o arquivo enviado', fn: () => window.open(URL.createObjectURL(item.file), '_blank') };
+        const digitar = { v: 'digitar', t: '✏️ Digitar outro número' };
         let fixo = cArq || cDoc;
         if (cArq && cDoc && codigoDe(cArq.ano, cArq.numero) !== codigoDe(cDoc.ano, cDoc.numero)) {
           const r = await escolher('Numeração diferente', `O nome do arquivo diz ${codigoDe(cArq.ano, cArq.numero)}, mas dentro da OS está ${codigoDe(cDoc.ano, cDoc.numero)}.\nArquivo: ${item.nome}`,
-            [{ v: 'arq', t: 'Usar ' + codigoDe(cArq.ano, cArq.numero) + ' (nome do arquivo)', cls: 'btn-primary' }, { v: 'doc', t: 'Usar ' + codigoDe(cDoc.ano, cDoc.numero) + ' (dentro da OS)' }, { v: 'pular', t: 'Pular este arquivo' }]);
+            [{ v: 'arq', t: 'Usar ' + codigoDe(cArq.ano, cArq.numero) + ' (nome do arquivo)', cls: 'btn-primary' }, { v: 'doc', t: 'Usar ' + codigoDe(cDoc.ano, cDoc.numero) + ' (dentro da OS)' }, digitar, { v: 'pular', t: 'Pular este arquivo' }], [verArq]);
           if (r === 'pular') { upd(item.key, { status: 'Pulado por você.', erro: true, rodando: false }); continue; }
-          fixo = r === 'doc' ? cDoc : cArq;
+          fixo = r === 'doc' ? cDoc : r === 'digitar' ? lerCodigo(await pedirTexto('Número da OS', 'Ex: 26.089')) : cArq;
+          if (!fixo) { upd(item.key, { status: 'Número inválido — pulado.', erro: true, rodando: false }); continue; }
         }
         if (!fixo) {
           const prox = codigoDe(anoAt, proximoLivre(lista, anoAt));
           const r = await escolher('OS sem número', `Não achei o número da OS no arquivo nem dentro dele.\nArquivo: ${item.nome}`,
-            [{ v: 'prox', t: 'Usar o próximo número livre: ' + prox, cls: 'btn-primary' }, { v: 'digitar', t: 'Digitar o número' }, { v: 'pular', t: 'Pular este arquivo' }]);
+            [{ v: 'prox', t: 'Usar o próximo número livre: ' + prox, cls: 'btn-primary' }, { v: 'digitar', t: '✏️ Digitar o número' }, { v: 'pular', t: 'Pular este arquivo' }], [verArq]);
           if (r === 'pular') { upd(item.key, { status: 'Pulado por você.', erro: true, rodando: false }); continue; }
           if (r === 'digitar') { fixo = lerCodigo(await pedirTexto('Número da OS', 'Ex: 26.089')); if (!fixo) { upd(item.key, { status: 'Número inválido — pulado.', erro: true, rodando: false }); continue; } }
         }
         if (fixo) {
           const cod = codigoDe(fixo.ano, fixo.numero);
-          const ja = lista.find(o => numOS(o) === cod);
-          if (ja) {
+          let ja = lista.find(o => numOS(o) === cod);
+          while (ja) {
             const prox = codigoDe(fixo.ano, proximoLivre(lista, fixo.ano));
             const r = await escolher('Número já existe', `A OS ${cod} já existe no app: ${ja.cliente?.nome || ''} — ${(ja.ambientes || []).map(a => a.nome).join(', ') || ja.ambienteResumo || ''}.\nArquivo enviado: ${item.nome} (${res.cliente?.nome || ''})`,
               [{ v: 'subst', t: 'Substituir a existente pela do arquivo', d: 'A antiga vai para o histórico de exclusões (dá para restaurar)', cls: 'btn-danger' },
                { v: 'prox', t: 'Criar com o próximo número livre: ' + prox },
-               { v: 'pular', t: 'Pular este arquivo (manter a existente)' }]);
-            if (r === 'pular') { upd(item.key, { status: 'Pulado — já existe a OS ' + cod + '.', erro: true, dupId: ja.id, rodando: false }); continue; }
-            if (r === 'subst') await excluirOS(sessao, ja, 'Substituída pela importação do arquivo ' + item.nome);
-            else fixo = null;
+               digitar, { v: 'pular', t: 'Pular este arquivo (manter a existente)' }],
+              [verArq, { t: '👁 Ver a OS ' + cod + ' que já existe', fn: () => window.__abrirOS && window.__abrirOS(ja.id) }]);
+            if (r === 'pular') { fixo = 'pular'; break; }
+            if (r === 'subst') { await excluirOS(sessao, ja, 'Substituída pela importação do arquivo ' + item.nome); break; }
+            if (r === 'prox') { fixo = null; break; }
+            const novo = lerCodigo(await pedirTexto('Número da OS', 'Ex: 26.089'));
+            if (!novo) continue;
+            fixo = novo; const c2 = codigoDe(novo.ano, novo.numero); ja = lista.find(o => numOS(o) === c2);
           }
+          if (fixo === 'pular') { upd(item.key, { status: 'Pulado — manteve a OS existente.', erro: true, rodando: false }); continue; }
         }
         const { id, numero } = await criarOS(sessao, res, {
           fixo: fixo || undefined,
