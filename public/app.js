@@ -2846,14 +2846,20 @@ function useTarefas(sessao) {
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setT(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setT([])), []);
   return t;
 }
-function NovaTarefa({ sessao, lista, pessoa, grade, inicio, fechar, toast }) {
-  const [osSel, setOsSel] = useState(null);
+function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: inicio0, fechar, toast, osInicial }) {
+  const inicio = inicio0 || isoD(new Date());
+  const [pessoa, setPessoa] = useState(pessoa0 || '');
+  const [grade, setGrade] = useState(grade0 || 'producao');
+  const [nomes, setNomes] = useState({});
+  useEffect(() => { if (pessoa0) return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date())))).then(d => { const g = d.data()?.grades || {}; const m = {}; Object.keys(g).forEach(k => { m[k] = [...new Set((g[k] || []).map(r => r.nome).filter(Boolean))]; }); setNomes(m); }).catch(() => {}); }, []);
+  const [osSel, setOsSel] = useState(osInicial || null);
   const [q, setQ] = useState('');
   const [ini, setIni] = useState(inicio);
   const [fim, setFim] = useState(inicio);
   const [texto, setTexto] = useState('');
   const res = (lista || []).filter(o => o.status !== 'concluida' && (!q || norm(linhaOS(o) + ' ' + (o.numeroAntigo || '')).includes(norm(q)))).slice(0, 30);
   const salvar = async () => {
+    if (!pessoa.trim()) return toast('Escolha quem vai executar.');
     if (!osSel && !texto.trim()) return toast('Escolha a OS ou escreva a tarefa.');
     if (fim < ini) return toast('O prazo final não pode ser antes do início.');
     try {
@@ -2864,7 +2870,14 @@ function NovaTarefa({ sessao, lista, pessoa, grade, inicio, fechar, toast }) {
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
-      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">📅 Nova tarefa · ${pessoa}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">📅 ${pessoa0 ? 'Nova tarefa · ' + pessoa0 : 'Enviar para o cronograma'}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+      ${!pessoa0 && html`<div class="stack" style=${{ gap: '6px' }}>
+        <span class="lbl">Qual cronograma?</span>
+        <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${GRADES.map(([k, t]) => html`<button key=${k} class=${'pill' + (grade === k ? ' on' : '')} onClick=${() => { setGrade(k); setPessoa(''); }}>${t}</button>`)}</div>
+        <span class="lbl">Quem vai executar?</span>
+        ${(nomes[grade] || []).length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomes[grade].map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => setPessoa(n)}>${n}</button>`)}</div>`}
+        <input class="inp" placeholder="Nome (ou escolha acima)" value=${pessoa} onInput=${e => setPessoa(e.target.value)} />
+      </div>`}
       ${osSel ? html`<div class="tar-os" style=${{ '--cc': corOS(osSel) }}><b>${numOS(osSel)}</b> ${osSel.cliente?.nome} · ${(osSel.ambientes || []).map(a => a.nome).join(', ')} <button class="x-btn" onClick=${() => setOsSel(null)}>trocar</button></div>`
         : html`<input class="inp" autoFocus placeholder="🔍 Buscar OS (nº novo ou antigo, cliente, ambiente)" value=${q} onInput=${e => setQ(e.target.value)} />
           <div class="os-picker-lista" style=${{ maxHeight: '30vh' }}>${res.map(o => html`<button key=${o.id} class="opc-i" style=${{ borderLeft: '5px solid ' + corOS(o), background: corOS(o) + '10' }} onClick=${() => setOsSel(o)}><span><b>${numOS(o)}</b>${o.numeroAntigo ? html` <small style=${{ display: 'inline' }}>(antiga ${o.numeroAntigo})</small>` : ''} — ${o.cliente?.nome}<small>${(o.ambientes || []).map(a => a.nome).join(', ')}</small></span></button>`)}</div>`}
@@ -3251,7 +3264,7 @@ function pedirMotivo(titulo, texto) {
 }
 
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
-function FichaOS({ sessao, osId, fechar, editar }) {
+function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const [o, setO] = useState(undefined);
   const [compras, setCompras] = useState([]);
   const [peds, setPeds] = useState([]);
@@ -3266,9 +3279,13 @@ function FichaOS({ sessao, osId, fechar, editar }) {
     ];
     return () => u.forEach(f => f && f());
   }, [osId]);
-  useEffect(() => { if (o && o.status !== 'concluida') editar(osId); }, [o?.status]);
-  if (o === undefined || (o && o.status !== 'concluida')) return null;
-  if (o === null) { fechar(); return null; }
+  const [enviar, setEnviar] = useState(false);
+  const [todas, setTodas] = useState([]);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setTodas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}), []);
+  useEffect(() => { if (o === null) fechar(); }, [o]);
+  if (!o) return null;
+  const fin = o.status === 'concluida';
+  const imprimir = () => { document.body.classList.add('imp-ficha'); setTimeout(() => { window.print(); document.body.classList.remove('imp-ficha'); }, 150); };
   const cor = corOS(o);
   const et = o.execucao?.etapas || {};
   const parc = parceirosDaOS(o);
@@ -3286,13 +3303,18 @@ function FichaOS({ sessao, osId, fechar, editar }) {
   const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
-      <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>✅ Finalizada${fim ? ' · ' + fmtData(fim.em) : ''}</span></div>
+      <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
         <b>${o.cliente?.nome || ''}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}${o.prazoEntrega ? ' · entrega ' + dm(o.prazoEntrega) : ''}</small></div>
         <button class="x-btn" style=${{ color: '#fff' }} onClick=${fechar}>✕</button></div>
 
-      <div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>
-
-      <div class="ficha-sec">🏭 Esteira de produção</div>
+      <div class="ficha-acoes">
+        <button class="btn btn-grande btn-primary" onClick=${() => editar(osId)}>✏️ Editar OS</button>
+        <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
+        <button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>
+      </div>
+      <div class="ficha-papel"><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
+      ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
+      ${fin && html`<div class="ficha-sec">🏭 Esteira de produção</div>
       <div class="ficha-esteira">${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const st = e.onde === 'nao' ? 'nao' : e.status || 'pendente';
         return html`<div key=${k} class=${'fe-i ' + st}><i>${st === 'pronto' ? '✓' : st === 'andamento' ? '▶' : st === 'nao' ? '—' : '○'}</i><b>${t}</b><small>${st === 'nao' ? 'não se aplica' : st === 'pronto' ? (e.concluidaEm ? fmtData(e.concluidaEm) : 'pronto') + (e.concluidaPor ? ' · ' + e.concluidaPor : '') : ST_FAB[st] || st}${e.onde === 'terceirizada' ? ' · terceirizada' : ''}</small></div>`; })}</div>
 
@@ -3304,9 +3326,11 @@ function FichaOS({ sessao, osId, fechar, editar }) {
 
       ${peds.length > 0 && html`<div class="ficha-sec">🪵 Peças extras</div><div class="ficha-lista">${peds.map(p => { const s = ((PED_ST[p.tipo] || PED_ST.interno).find(x => x[0] === p.st) || []); return html`<div key=${p.id} class="fl-i"><span>${resumoPed(p)}</span><span class="fl-st" style=${{ background: s[2] || '#9ca3af' }}>${s[1] || p.st}</span></div>`; })}</div>`}
 
+`}
       <${LinhaDoTempo} os=${o} sessao=${sessao} />
       <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${fechar}>Fechar</button>
-        <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => editar(osId)}>📋 Ver OS completa</button></div>
+        <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => editar(osId)}>✏️ Editar OS</button></div>
+      ${enviar && html`<${NovaTarefa} sessao=${sessao} lista=${todas} osInicial=${o} toast=${toast} fechar=${() => setEnviar(false)} />`}
     </div></div>`, document.body);
 }
 function linhaDoTempo(os, extras) {
@@ -4741,7 +4765,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'inicio' && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
-        ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} />`}
+        ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} toast=${toast} />`}
         ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
