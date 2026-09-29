@@ -3032,17 +3032,27 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             const fimSem = isoD(new Date(deIso(semana).getTime() + 6 * 864e5));
             const daSemana = (tarefas || []).filter(t => t.inicio <= fimSem && t.fim >= semana);
             const r = await escolher('Apagar cronograma', 'Semana de ' + dm(semana) + ' a ' + dm(fimSem) + '.\n' + (doc ? 'Tem texto escrito na agenda. ' : '') + daSemana.length + ' tarefa(s) lançadas nesta semana.\nIsso não pode ser desfeito.',
-              [{ v: 'tudo', t: '🗑 Apagar a semana inteira (agenda + tarefas)', cls: 'btn-danger' }, { v: 'agenda', t: 'Apagar só o texto da agenda' }, { v: 'tar', t: 'Apagar só as tarefas (' + daSemana.length + ')' }, { v: 'todas', t: '🧹 Apagar TODAS as tarefas de todas as semanas (' + (tarefas || []).length + ')', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }]);
+              [{ v: 'tudo', t: '🗑 Apagar a semana inteira (agenda + tarefas)', cls: 'btn-danger' }, { v: 'agenda', t: 'Apagar só o texto da agenda' }, { v: 'tar', t: 'Apagar só as tarefas (' + daSemana.length + ')' }, { v: 'todas', t: '🧹 Apagar TODAS as tarefas de todas as semanas (' + (tarefas || []).length + ')', cls: 'btn-danger' }, { v: 'geral', t: '🧨 Zerar o cronograma inteiro (todas as semanas + todas as tarefas)', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }]);
             if (r === 'nao' || !r) return;
+            if (r === 'geral') {
+              if ((await escolher('Zerar tudo?', 'Vai apagar TODAS as semanas da agenda e TODAS as tarefas. Não pode ser desfeito.', [{ v: 'sim', t: 'Sim, zerar o cronograma', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }])) !== 'sim') return;
+              try {
+                const { getDocs, writeBatch } = F().fsMod; sujoRef.current = false; setSujo(false);
+                const docs = [...(await getDocs(col('empresas', sessao.empresaId, 'agenda'))).docs, ...(await getDocs(col('empresas', sessao.empresaId, 'tarefas'))).docs];
+                for (let i = 0; i < docs.length; i += 400) { const b = writeBatch(F().db); docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); }
+                setDoc(null); toast('Cronograma zerado: ' + docs.length + ' registros apagados.', 'ok');
+              } catch (e) { toast('Não apagou: ' + e.message, 'erro'); }
+              return;
+            }
             if (r === 'todas' && (await escolher('Tem certeza?', 'Vai apagar ' + (tarefas || []).length + ' tarefas de todo o cronograma.', [{ v: 'sim', t: 'Sim, apagar todas', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }])) !== 'sim') return;
             try {
               const { writeBatch } = F().fsMod; const b = writeBatch(F().db);
-              if (r === 'tudo' || r === 'agenda') { b.delete(ref); sujoRef.current = false; }
+              if (r === 'tudo' || r === 'agenda') { b.delete(ref); sujoRef.current = false; setSujo(false); }
               const alvo = r === 'todas' ? (tarefas || []) : (r === 'tudo' || r === 'tar') ? daSemana : [];
               alvo.slice(0, 450).forEach(t => b.delete(docRef('empresas', sessao.empresaId, 'tarefas', t.id)));
               await b.commit(); setSujo(false); if (r === 'tudo' || r === 'agenda') setDoc(null);
               toast('Cronograma apagado.', 'ok');
-            } catch (e) { toast(e.message, 'erro'); }
+            } catch (e) { toast('Não apagou: ' + e.message, 'erro'); }
           }}>🗑 Apagar</button>
           ${doc && html`<button class="btn btn-sm" onClick=${() => { document.body.classList.add('imp-agenda'); setTimeout(() => { window.print(); document.body.classList.remove('imp-agenda'); }, 100); }}>🖨 Imprimir</button>`}
         </div>
@@ -3363,7 +3373,6 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     ...faltaCompra.map(i => '🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : '')),
     ...pedAb.map(p => '🪵 Peça extra: ' + resumoPed(p)),
     ...pend.map(p => '⚠️ Pendência: ' + String(p.texto || '').slice(0, 90)),
-    ...etAb.map(([, t]) => '🏭 Etapa aberta: ' + t),
   ];
   const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
@@ -3383,11 +3392,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
-      ${fin && html`<div class="ficha-sec">🏭 Esteira de produção</div>
-      <div class="ficha-esteira">${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; const st = e.onde === 'nao' ? 'nao' : e.status || 'pendente';
-        return html`<div key=${k} class=${'fe-i ' + st}><i>${st === 'pronto' ? '✓' : st === 'andamento' ? '▶' : st === 'nao' ? '—' : '○'}</i><b>${t}</b><small>${st === 'nao' ? 'não se aplica' : st === 'pronto' ? (e.concluidaEm ? fmtData(e.concluidaEm) : 'pronto') + (e.concluidaPor ? ' · ' + e.concluidaPor : '') : ST_FAB[st] || st}${e.onde === 'terceirizada' ? ' · terceirizada' : ''}</small></div>`; })}</div>
-
-      <div class="ficha-sec">🤝 Terceiros / parceiros</div>
+      ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
 
       <div class="ficha-sec">🛒 Compras <small class="dim">${compras.length - faltaCompra.length}/${compras.length} compradas</small></div>
@@ -3897,7 +3902,7 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
   const MODOS = [['interna', 'Execução 100% interna', 'Toda a produção na marcenaria própria: corte, fita, usinagem, acabamento e montagem.', 'Controle total de prazos'], ['terceirizada', 'Execução 100% terceirizada', 'Produção entregue pronta por parceiro externo (central de corte, nesting ou prestador).', 'Escalabilidade alta'], ['mista', 'Execução mista / híbrida', 'Por etapa: ex. corte na central parceira, fita, laca e montagem internas.', 'Flexibilidade ideal']];
 
   return html`
-    <div class="card page-card stack">
+    <div class="card page-card stack" style=${{ display: 'none' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div><span class="chip chip-accent">AUTOMAÇÃO DA OFICINA</span> <b>Esteira de produção</b><div class="dim">Ao concluir uma etapa, a próxima começa sozinha e o status da OS acompanha.</div></div>
         ${ETAPAS_FAB.every(([k]) => et(k).status === 'pendente') && html`<button class="btn btn-primary" onClick=${() => setEt('corte', { status: 'andamento' })}>▶ Iniciar produção</button>`}
@@ -4146,9 +4151,6 @@ function ImpressaoOS({ os, empresa }) {
 
       ${os.observacoesGerais && html`<div class="po-obs"><b>Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
 
-      <div class="po-esteira">
-        ${ETAPAS_FAB.map(([k, t]) => { const e = et[k] || {}; return html`<div key=${k} class=${'po-et ' + (e.status || 'pendente')}><i></i><b>${t}</b><small>${({ pendente: 'Pendente', andamento: 'Em andamento', pronto: 'Pronto' })[e.status || 'pendente']}${e.onde === 'terceirizada' ? ' · terceirizado' : ''}</small></div>`; })}
-      </div>
 
       <div class="po-ass">
         ${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}
