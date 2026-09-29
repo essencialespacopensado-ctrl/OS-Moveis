@@ -1099,3 +1099,19 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .ia-acao small{color:#57534e;font-size:12px}
 .ia-acao em{font-style:normal;font-size:12px;font-weight:700}
 .ia-acao.feita{border-color:#86efac;background:#f0fdf4}.ia-acao.erro{border-color:#fca5a5;background:#fef2f2}.ia-acao.descartada{opacity:.5}
+
+/* v75 — chamada ativa com a IA */
+.chamada{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px;margin:6px 10px;border-radius:16px;background:linear-gradient(135deg,#1e1b4b,#312e81);color:#fff}
+.ch-orb{position:relative;width:86px;height:86px;display:grid;place-items:center}
+.ch-orb b{position:relative;z-index:2;font-size:30px;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#6366f1;box-shadow:0 0 24px #818cf8}
+.ch-orb span{position:absolute;inset:0;border-radius:50%;border:3px solid #a5b4fc;opacity:0;animation:onda 2s ease-out infinite}
+.ch-orb span:nth-child(2){animation-delay:.6s}.ch-orb span:nth-child(3){animation-delay:1.2s}
+@keyframes onda{0%{transform:scale(.7);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+.chamada.falando .ch-orb b{background:#16a34a;box-shadow:0 0 28px #4ade80;animation:falaPulso .5s ease-in-out infinite alternate}
+.chamada.falando .ch-orb span{border-color:#86efac}
+@keyframes falaPulso{to{transform:scale(1.1)}}
+.chamada.pensando .ch-orb b{background:#d97706;animation:girar 1.2s linear infinite}
+@keyframes girar{to{transform:rotate(360deg)}}
+.chamada.confirmando .ch-orb b{background:#f59e0b}
+.ch-st{font-weight:800}
+.ch-ouvido{font-size:13px;opacity:.9;text-align:center;font-style:italic;max-width:100%}

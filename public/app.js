@@ -4749,6 +4749,52 @@ function Assistente({ sessao, osAberta }) {
     setPensando(false);
   };
 
+  /* ---- Chamada ativa: fala em tempo real, ela responde falando e executa ---- */
+  const [chamada, setChamada] = useState(false);
+  const [fase, setFase] = useState('');
+  const [ouvido, setOuvido] = useState('');
+  const bufRef = useRef(''); const timerRef = useRef(null); const faseRef = useRef(''); faseRef.current = fase;
+  const pendRef = useRef(null); const msgsRef = useRef(msgs); msgsRef.current = msgs;
+  const chamadaRef = useRef(false); chamadaRef.current = chamada;
+  const falaCh = useFala({ onFinal: t => { if (faseRef.current === 'falando') return; bufRef.current = (bufRef.current + ' ' + t).trim(); setOuvido(bufRef.current); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => { const q = bufRef.current; bufRef.current = ''; if (q) processar(q); }, 1300); }, onInterim: t => { if (faseRef.current !== 'falando' && t) setOuvido((bufRef.current + ' ' + t).trim()); } });
+  const falar = (txt) => new Promise(res => {
+    const sy = window.speechSynthesis; if (!sy || !txt) return res();
+    falaCh.parar(); setFase('falando');
+    const u = new SpeechSynthesisUtterance(String(txt).replace(/[*#_`>]/g, '').slice(0, 600));
+    u.lang = 'pt-BR'; const v = sy.getVoices().find(x => /pt-BR/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.08;
+    const fim = () => { res(); if (chamadaRef.current) { setFase('ouvindo'); falaCh.iniciar(); } };
+    u.onend = fim; u.onerror = fim; sy.cancel(); sy.speak(u);
+  });
+  const aplicarPendentes = async () => {
+    const p = pendRef.current; pendRef.current = null; if (!p) return;
+    const res = [];
+    for (let j = 0; j < p.acoes.length; j++) { marcar(p.i, j, { _st: 'rodando' }); try { const { _st, _msg, ...limpa } = p.acoes[j]; const r = await executarAcao(sessao, limpa); marcar(p.i, j, { _st: 'feita', _msg: r }); res.push(r); } catch (e) { marcar(p.i, j, { _st: 'erro', _msg: e.message }); res.push('não deu: ' + e.message); } }
+    await falar('Pronto. ' + res.join('. ') + '. Mais alguma coisa?');
+  };
+  const processar = async (q) => {
+    setOuvido('');
+    if (faseRef.current === 'confirmando' && pendRef.current) {
+      if (/\b(sim|pode|confirm|aplica|isso|manda|beleza|ok|claro|faz)/i.test(q)) { setFase('pensando'); return aplicarPendentes(); }
+      if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); return falar('Tudo bem, não apliquei. O que mais?'); }
+      const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
+    }
+    setFase('pensando'); falaCh.parar();
+    const hist = [...msgsRef.current, { role: 'user', content: q }];
+    setMsgs(hist);
+    try {
+      const contexto = await montarContexto(sessao, osAberta);
+      const r = await chamarIA('assistente', { contexto, historico: hist.map(m => ({ role: m.role, content: m.content })) });
+      const acoes = (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' }));
+      const txt = String(r?.texto || '').replace(/\*\*/g, '');
+      const idx = hist.length;
+      setMsgs(h => [...h, { role: 'assistant', content: txt || (acoes.length ? 'Preparei estas mudanças.' : ''), acoes }]);
+      if (acoes.length) { pendRef.current = { i: idx, acoes }; await falar((txt ? txt + ' ' : '') + 'Posso aplicar?'); setFase('confirmando'); }
+      else await falar(txt || 'Não entendi, pode repetir?');
+    } catch (e) { await falar('Tive um problema: ' + e.message); }
+  };
+  const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(true); falar('Oi ' + (sessao.nome || '').split(' ')[0] + ', estou ouvindo. O que você precisa?'); };
+  const desligar = () => { setChamada(false); chamadaRef.current = false; setFase(''); clearTimeout(timerRef.current); bufRef.current = ''; falaCh.parar(); try { window.speechSynthesis.cancel(); } catch {} };
+  useEffect(() => () => desligar(), []);
   const marcar = (i, j, patch) => setMsgs(h => h.map((m, k) => k !== i ? m : { ...m, acoes: m.acoes.map((a, l) => l === j ? { ...a, ...patch } : a) }));
   const aplicar = async (i, j) => {
     const a = msgs[i]?.acoes?.[j]; if (!a) return;
@@ -4768,8 +4814,17 @@ function Assistente({ sessao, osAberta }) {
       <div class="assist-panel glass" role="dialog" aria-label="Assistente de IA">
         <div class="assist-head">
           <div><b>Assistente Gestão Pró</b><div class="dim" style=${{ fontSize: '12px' }}>Conhece os projetos e as OS da sua empresa${osAberta ? ' e a OS aberta' : ''}</div></div>
-          ${msgs.length > 0 && html`<button class="btn btn-ghost btn-sm" onClick=${() => setMsgs([])}>Limpar</button>`}
+          <div class="row" style=${{ gap: '4px' }}>
+            ${falaCh.suportado !== false && html`<button class=${'btn btn-sm ' + (chamada ? 'btn-danger' : 'btn-verde')} onClick=${chamada ? desligar : ligar}>${chamada ? '📵 Encerrar' : '📞 Chamada'}</button>`}
+            ${msgs.length > 0 && html`<button class="btn btn-ghost btn-sm" onClick=${() => setMsgs([])}>Limpar</button>`}
+          </div>
         </div>
+        ${chamada && html`<div class=${'chamada ' + fase}>
+          <div class="ch-orb"><span></span><span></span><span></span><b>${fase === 'falando' ? '🔊' : fase === 'pensando' ? '⏳' : fase === 'confirmando' ? '❓' : '🎙'}</b></div>
+          <div class="ch-st">${fase === 'falando' ? 'Falando…' : fase === 'pensando' ? 'Pensando…' : fase === 'confirmando' ? 'Diga "sim" para aplicar ou "não"' : 'Ouvindo — pode falar'}</div>
+          ${ouvido && html`<div class="ch-ouvido">"${ouvido}"</div>`}
+          ${falaCh.erro && html`<div class="error-box">${falaCh.erro}</div>`}
+        </div>`}
         <div class="assist-body">
           ${msgs.length === 0 && html`
             <div class="dim" style=${{ marginBottom: '8px' }}>Pergunte qualquer coisa sobre seus projetos, OS, materiais ou o uso do app.</div>
