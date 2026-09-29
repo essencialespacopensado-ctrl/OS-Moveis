@@ -1035,3 +1035,5 @@ fieldset.trava[disabled]{opacity:.72}
 .error-box{animation:tremer .35s}
 @keyframes tremer{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.cel-ok.cel-mais{border-color:#d97706;color:#b45309;margin-left:4px}
+.cel-ok.cel-mais:hover{background:#fffbeb}
