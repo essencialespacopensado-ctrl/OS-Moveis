@@ -3406,6 +3406,12 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   useEffect(() => { if (o === null) fechar(); }, [o]);
   if (!o) return null;
   const fin = o.status === 'concluida';
+  const editarMot = async () => {
+    const mot = await pedirMotivo('Abrir OS ' + numOS(o) + ' para edição', 'A OS já está salva. Informe o motivo da edição.');
+    if (!mot) return;
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { reaberturas: [...(o.reaberturas || []), { oque: 'Aberta para edição', motivo: mot, quem: sessao.nome, quando: nowIso() }] }); } catch {}
+    editar(osId);
+  };
   const imprimir = () => { document.body.classList.add('imp-ficha'); setTimeout(() => { window.print(); document.body.classList.remove('imp-ficha'); }, 150); };
   const cor = corOS(o);
   const et = o.execucao?.etapas || {};
@@ -3428,7 +3434,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         <button class="x-btn" style=${{ color: '#fff' }} onClick=${fechar}>✕</button></div>
 
       <div class="ficha-acoes">
-        <button class="btn btn-grande btn-primary" onClick=${() => editar(osId)}>✏️ Editar OS</button>
+        <button class="btn btn-grande btn-primary" onClick=${editarMot}>✏️ Editar OS</button>
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
         <button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
@@ -3449,7 +3455,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
 `}
       <${LinhaDoTempo} os=${o} sessao=${sessao} />
       <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${fechar}>Fechar</button>
-        <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => editar(osId)}>✏️ Editar OS</button></div>
+        <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${editarMot}>✏️ Editar OS</button></div>
       ${enviar && html`<${NovaTarefa} sessao=${sessao} lista=${todas} osInicial=${o} toast=${toast} fechar=${() => setEnviar(false)} aoLancar=${fechar} />`}
     </div></div>`, document.body);
 }
