@@ -3168,7 +3168,7 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
     const s = agendas[iso(segundaDe(dia))]; if (!s) return [];
     const i = (dia.getDay() + 6) % 7; if (i > 4) return [];
     const out = [];
-    GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) out.push({ k, txt: (s.feitos?.[k + '|' + norm(r.nome) + '|' + i] ? '✓ ' : '') + (r.nome ? r.nome + ': ' : '') + v.split('\n')[0] }); }));
+    GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) { const o = osCitadas(v, lista || [])[0]; out.push({ k, ok: !!s.feitos?.[k + '|' + norm(r.nome) + '|' + i], nome: r.nome || '', txt: v.split('\n')[0], c: o ? corOS(o) : '' }); } }));
     return out;
   };
   const cor = { entregas: '#0E7490', montagem: '#15803D', producao: '#A16207', terceirizados: '#7C3AED', marceneiros: '#B45309' };
@@ -3189,8 +3189,8 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
           const ev = eventosOS(lista, d); const ag = itensAgenda(d);
           return html`<div key=${iso(d)} class=${'mes-d' + (d.getMonth() !== mes.getMonth() ? ' fora' : '') + (mesmoDia(d, hoje) ? ' hoje' : '')} onClick=${() => { setSemana(iso(segundaDe(d))); setVista('semana'); }}>
             <b>${d.getDate()}</b>
-            ${ev.slice(0, 4).map((e, j) => html`<div key=${'e' + j} class=${'mes-ev ' + (e.t === 'entrega' ? 'ent' : '')} style=${{ borderLeftColor: corOS(e.o), background: corOS(e.o) + '1a' }}>${e.t === 'entrega' ? '🚚' : '📌'} ${numOS(e.o)} ${e.o.cliente?.nome || ''}${e.t !== 'entrega' ? ' · ' + e.txt : ''}</div>`)}
-            ${ag.slice(0, 4).map((a, j) => html`<div key=${'a' + j} class="mes-ev" style=${{ borderLeftColor: cor[a.k] }}>${a.txt}</div>`)}
+            ${ev.slice(0, 4).map((e, j) => html`<div key=${'e' + j} class=${'mes-ev cli' + (e.t === 'entrega' ? ' ent' : '')} style=${{ '--cc': corOS(e.o) }}>${e.t === 'entrega' ? '🚚' : '📌'} <b>${numOS(e.o)}</b> ${(e.o.cliente?.nome || '').split(/\s[-–]\s/)[0]}${e.t !== 'entrega' ? ' · ' + e.txt : ''}</div>`)}
+            ${ag.slice(0, 4).map((a, j) => html`<div key=${'a' + j} class=${'mes-ev' + (a.c ? ' cli' : '') + (a.ok ? ' feito' : '')} style=${a.c ? { '--cc': a.c, '--gc': cor[a.k] } : { borderLeftColor: cor[a.k] }}>${a.ok ? '✓ ' : ''}${a.nome && html`<i class="mes-nome" style=${{ background: cor[a.k] }}>${a.nome.split(/[\s+]/)[0]}</i>`}${a.txt}</div>`)}
             ${ev.length + ag.length > 8 && html`<small class="dim">+${ev.length + ag.length - 8} mais</small>`}
           </div>`; })}
       </div>
