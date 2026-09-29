@@ -2878,22 +2878,24 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
   const [nomes, setNomes] = useState({});
   useEffect(() => { if (pessoa0) return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date())))).then(d => { const g = d.data()?.grades || {}; const m = {}; Object.keys(g).forEach(k => { m[k] = [...new Set((g[k] || []).map(r => r.nome).filter(Boolean))]; }); setNomes(m); }).catch(() => {}); }, []);
   const [osSel, setOsSel] = useState(osInicial || null);
+  const [aviso, setAviso] = useState('');
+  const avisar = (m) => { setAviso(m); toast(m); };
   const [q, setQ] = useState('');
   const [ini, setIni] = useState(inicio);
   const [fim, setFim] = useState(inicio);
   const [texto, setTexto] = useState('');
   const res = (lista || []).filter(o => o.status !== 'concluida' && (!q || norm(linhaOS(o) + ' ' + (o.numeroAntigo || '')).includes(norm(q)))).slice(0, 30);
   const salvar = async () => {
-    if (!pessoa.trim()) return toast('Escolha quem vai executar.');
-    if (!osSel && !texto.trim()) return toast('Escolha a OS ou escreva a tarefa.');
-    if (fim < ini) return toast('O prazo final não pode ser antes do início.');
+    if (!pessoa.trim()) return avisar('Escolha quem vai executar.');
+    if (!osSel && !texto.trim()) return avisar('Escolha a OS ou escreva a tarefa.');
+    if (fim < ini) return avisar('O prazo final não pode ser antes do início.');
     try {
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
       if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa, dm(ini) + ' a ' + dm(fim) + (texto.trim() ? ' — ' + texto.trim() : ''));
       let nd = 0;
       if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '').split(/\s[-–]\s/)[0] : '', texto.trim()].filter(Boolean).join(' – '));
       toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini) + ' a ' + dm(fim) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
-    } catch (e) { toast(e.message, 'erro'); }
+    } catch (e) { avisar('Não salvou: ' + e.message); }
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
@@ -2902,7 +2904,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
         <span class="lbl">Qual cronograma?</span>
         <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${GRADES.map(([k, t]) => html`<button key=${k} class=${'pill' + (grade === k ? ' on' : '')} onClick=${() => { setGrade(k); setPessoa(''); }}>${t}</button>`)}</div>
         <span class="lbl">Quem vai executar?</span>
-        ${(nomes[grade] || []).length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomes[grade].map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => setPessoa(n)}>${n}</button>`)}</div>`}
+        ${(nomes[grade] || []).length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomes[grade].map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => { setPessoa(n); setAviso(''); }}>${n}</button>`)}</div>`}
         <input class="inp" placeholder="Nome (ou escolha acima)" value=${pessoa} onInput=${e => setPessoa(e.target.value)} />
       </div>`}
       ${osSel ? html`<div class="tar-os" style=${{ '--cc': corOS(osSel) }}><b>${numOS(osSel)}</b> ${osSel.cliente?.nome} · ${(osSel.ambientes || []).map(a => a.nome).join(', ')} <button class="x-btn" onClick=${() => setOsSel(null)}>trocar</button></div>`
@@ -2914,6 +2916,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
       </div>
       <div class="row" style=${{ gap: '5px' }}><span class="dim">Duração:</span>${[1, 2, 3, 5, 10].map(n => html`<button key=${n} class=${'pill' + (uteisEntre(ini, fim) + 1 === n ? ' on' : '')} onClick=${() => setFim(somaUteis(ini, n - 1))}>${n} ${n === 1 ? 'dia' : 'dias'}</button>`)}<span class="dim">(dias úteis)</span></div>
       <input class="inp" placeholder="O que vai ser feito (ex: produzir cristaleira, montar ilha)" value=${texto} onInput=${e => setTexto(e.target.value)} />
+      ${aviso && html`<div class="error-box">⚠️ ${aviso}</div>`}
       <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>💾 Salvar no cronograma</button>
     </div></div>`, document.body);
 }
