@@ -1546,6 +1546,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     setSujo(true);
   };
 
+  const [sairDepois, setSairDepois] = useState(false);
+  useEffect(() => { if (sairDepois && !sujo && !salvando) { toast('OS salva.', 'ok'); voltar(); } }, [sairDepois, sujo, salvando]);
   // Salva sozinho 1,2 s depois da última alteração.
   useEffect(() => {
     if (!sujo || !os) return;
@@ -1660,6 +1662,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         <div class="row" style=${{ gap: '6px' }}>
           <button class="btn btn-sm" onClick=${voltar}>← Voltar para lista de OSs</button>
           <span class="dim">${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
+          <button class="btn btn-sm btn-verde" disabled=${sairDepois} onClick=${() => setSairDepois(true)}>${sairDepois ? 'Salvando…' : '💾 Salvar e fechar'}</button>
         </div>
         <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${numOS(os)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span>
           <${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} travada=${bloqueada} />
@@ -2888,7 +2891,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
       if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa, dm(ini) + ' a ' + dm(fim) + (texto.trim() ? ' — ' + texto.trim() : ''));
       let nd = 0;
-      if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '') : '', texto.trim() || (osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '')].filter(Boolean).join(' – '));
+      if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '').split(/\s[-–]\s/)[0] : '', texto.trim()].filter(Boolean).join(' – '));
       toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini) + ' a ' + dm(fim) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
     } catch (e) { toast(e.message, 'erro'); }
   };
@@ -2911,7 +2914,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
       </div>
       <div class="row" style=${{ gap: '5px' }}><span class="dim">Duração:</span>${[1, 2, 3, 5, 10].map(n => html`<button key=${n} class=${'pill' + (uteisEntre(ini, fim) + 1 === n ? ' on' : '')} onClick=${() => setFim(somaUteis(ini, n - 1))}>${n} ${n === 1 ? 'dia' : 'dias'}</button>`)}<span class="dim">(dias úteis)</span></div>
       <input class="inp" placeholder="O que vai ser feito (ex: produzir cristaleira, montar ilha)" value=${texto} onInput=${e => setTexto(e.target.value)} />
-      <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>✓ Lançar no cronograma</button>
+      <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>💾 Salvar no cronograma</button>
     </div></div>`, document.body);
 }
 function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
