@@ -2850,6 +2850,14 @@ function useTarefas(sessao) {
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setT(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setT([])), []);
   return t;
 }
+/* Resultado do prazo: compara o dia que concluiu com o prazo estipulado */
+function resultadoPrazo(t) {
+  const hoje = isoD(new Date()), prev = t.fimOriginal || t.fim;
+  const dif = hoje === prev ? 0 : hoje > prev ? uteisEntre(prev, hoje) : -uteisEntre(hoje, prev);
+  const txt = dif === 0 ? '✅ No prazo' : dif > 0 ? '⚠️ ' + dif + (dif === 1 ? ' dia' : ' dias') + ' a mais' : '⭐ ' + (-dif) + (dif === -1 ? ' dia' : ' dias') + ' antes';
+  const pr = (t.prorrogacoes || []).filter(p => !p.auto);
+  return { dif, txt, d: 'Prazo estipulado: ' + dm(prev) + (t.fim !== prev ? ' (ajustado p/ ' + dm(t.fim) + ')' : '') + ' · concluída ' + dm(hoje) + ' · ' + txt + (pr.length ? ' · prorrogações: ' + pr.map(p => '+' + p.dias + 'd ' + p.motivo).join('; ') : '') };
+}
 /* Escreve a tarefa nos dias da agenda semanal (linha da pessoa) */
 async function escreverNaAgenda(sessao, grade, pessoa, ini, fim, linha) {
   const porSemana = {};
@@ -2891,7 +2899,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
     if (fim < ini) return avisar('O prazo final não pode ser antes do início.');
     try {
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'tarefas'), { pessoa, grade, inicio: ini, fim, fimOriginal: fim, texto: texto.trim(), osId: osSel?.id || '', osCod: osSel ? numOS(osSel) : '', cliente: osSel?.cliente?.nome || '', ambiente: osSel ? (osSel.ambientes || []).map(a => a.nome).join(', ') : '', status: 'andamento', prorrogacoes: [], quem: sessao.nome, em: nowIso() });
-      if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa, dm(ini) + ' a ' + dm(fim) + (texto.trim() ? ' — ' + texto.trim() : ''));
+      if (osSel) registrar(sessao, osSel.id, '📅', 'Entrou no cronograma: ' + pessoa + ' · prazo ' + dm(fim), 'De ' + dm(ini) + ' a ' + dm(fim) + ' (' + (uteisEntre(ini, fim) + 1) + ' dias úteis)' + (texto.trim() ? ' — ' + texto.trim() : ''));
       let nd = 0;
       if (!pessoa0) nd = await escreverNaAgenda(sessao, grade, pessoa.trim(), ini, fim, [osSel ? numOS(osSel) + ' ' + (osSel.cliente?.nome || '').split(/\s[-–]\s/)[0] : '', texto.trim()].filter(Boolean).join(' – '));
       toast('Lançado no cronograma de ' + pessoa + (nd ? ' · ' + nd + (nd === 1 ? ' dia escrito' : ' dias escritos') + ' (' + dm(ini) + ' a ' + dm(fim) + ')' : '') + '.', 'ok'); fechar(); aoLancar && aoLancar();
@@ -2927,7 +2935,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
   const [modo, setModo] = useState('');
   const hoje = isoD(new Date());
   const atrasada = t.status !== 'concluida' && t.fim < hoje;
-  const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } registrar(sessao, t.osId, v ? '✅' : '↺', (v ? 'Tarefa concluída: ' : 'Tarefa reaberta: ') + t.pessoa, mot || t.texto || ''); try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } { const rp = v ? resultadoPrazo(t) : null; registrar(sessao, t.osId, v ? (rp.dif > 0 ? '⚠️' : '✅') : '↺', v ? 'Concluída (' + t.pessoa + ') — ' + rp.txt : 'Tarefa reaberta: ' + t.pessoa, v ? rp.d : mot); } try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
   const excluir = async () => { try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); fechar(); } catch (e) { toast(e.message, 'erro'); } };
   const prorrogar = async () => {
     if (motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
@@ -3122,7 +3130,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
                       ${tsk.map(t => { const c = t.cliente ? corCliente(t.cliente) : '#57534e'; const atr = t.status !== 'concluida' && t.fim < isoD(new Date()); const ult = t.fim === dISO; return html`<button key=${t.id} class=${'tar-bar' + (t.status === 'concluida' ? ' ok' : '') + (atr ? ' atr' : '') + (t.inicio === dISO ? ' ini' : '') + (ult ? ' fim' : '')} style=${{ '--cc': c }} onClick=${() => setVerT(t)} title=${(t.cliente || '') + ' ' + (t.texto || '')}>
                         ${t.inicio === dISO || di === 0 ? html`<b>${(t.cliente || t.texto || '').split(/\s[-–]\s/)[0]}</b> <small>${t.ambiente || t.texto}</small>` : html`<small>…</small>`}
                         ${ult ? html`<em>${t.status === 'concluida' ? '✓' : atr ? '⚠' : '📅'} ${dm(t.fim)}</em>` : ''}</button>
-                        ${ult && t.status !== 'concluida' ? html`<button class="cel-ok tar-ok" onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); registrar(sessao, t.osId, '✅', 'Tarefa concluída: ' + t.pessoa, t.texto || ''); toast('Tarefa concluída.', 'ok'); } catch (er) { toast(er.message, 'erro'); } }}>✓ Concluir tarefa</button><button class="cel-ok cel-mais tar-ok" onClick=${() => setVerT(t)}>＋ Mais dias</button>` : ''}`; })}
+                        ${ult && t.status !== 'concluida' ? html`<button class="cel-ok tar-ok" onClick=${async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: 'concluida', concluidaEm: nowIso(), concluidaPor: sessao.nome }); { const rp = resultadoPrazo(t); registrar(sessao, t.osId, rp.dif > 0 ? '⚠️' : '✅', 'Concluída (' + t.pessoa + ') — ' + rp.txt, rp.d); toast('Tarefa concluída — ' + rp.txt, 'ok'); } } catch (er) { toast(er.message, 'erro'); } }}>✓ Concluir tarefa</button><button class="cel-ok cel-mais tar-ok" onClick=${() => setVerT(t)}>＋ Mais dias</button>` : ''}`; })}
                       ${tagsOS(v, lista)}${(() => { const fk = k + '|' + norm(r.nome) + '|' + di; const fe = doc.feitos?.[fk]; const l1 = String(v).split('\n')[0].trim(); const ultimoDia = di === r.dias.length - 1 || !String(r.dias[di + 1] || '').includes(l1); return v.trim() && ultimoDia && !tsk.length ? html`${!fe && html`<button class="cel-ok cel-mais" title="Precisa de mais dias" onClick=${async () => {
                         const n = await escolher('Mais dias', 'Quantos dias úteis a mais para:\n' + l1, [1, 2, 3, 5].map(x => ({ v: x, t: '+' + x + (x === 1 ? ' dia' : ' dias') })).concat([{ v: 0, t: 'Cancelar' }])); if (!n) return;
                         const mot = await pedirMotivo('Motivo dos dias a mais', 'Por que precisa de mais ' + n + (n === 1 ? ' dia' : ' dias') + '?'); if (!mot) return;
