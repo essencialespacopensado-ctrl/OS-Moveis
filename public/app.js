@@ -262,6 +262,56 @@ async function acharDuplicada(empresaId, fp, ignorarId) {
   return d ? { id: d.id, ...d.data() } : null;
 }
 
+/* Numeração: sempre segue as OSs que existem (apagou → o número volta a ficar livre) */
+async function numerosUsados(empresaId) {
+  const snap = await F().fsMod.getDocs(col('empresas', empresaId, 'os'));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+function lerCodigo(txt) {
+  const t = String(txt || '');
+  let m = t.match(/(?:^|[^\d])(\d{2})\s*[.,\-_ ]\s*(\d{1,4})(?!\d)/);
+  if (m) return { ano: m[1], numero: parseInt(m[2], 10) };
+  m = t.match(/(?:^|[^\d])(\d{2})(\d{3})(?!\d)/);
+  if (m) return { ano: m[1], numero: parseInt(m[2], 10) };
+  return null;
+}
+const codigoDe = (ano, n) => ano + '.' + String(n).padStart(3, '0');
+function proximoLivre(lista, ano) {
+  const usados = lista.filter(o => numOS(o).startsWith(ano + '.')).map(o => parseInt(numOS(o).split('.')[1], 10) || 0);
+  return (usados.length ? Math.max(...usados) : 0) + 1;
+}
+async function ajustarSequencia(sessao) {
+  try {
+    const lista = await numerosUsados(sessao.empresaId);
+    const seq = {};
+    lista.forEach(o => { const [a, n] = numOS(o).split('.'); const v = parseInt(n, 10) || 0; if (a && v > (seq[a] || 0)) seq[a] = v; });
+    const ano = String(new Date().getFullYear()).slice(2); if (!seq[ano]) seq[ano] = 0;
+    await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { seqAno: seq, osSeq: lista.length });
+  } catch {}
+}
+function pedirTexto(titulo, ph) {
+  return new Promise(res => {
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = ReactDOM.createRoot(el);
+    const fim = (v) => { root.unmount(); el.remove(); res(v); };
+    function M() { const [v, setV] = useState(''); return html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(420px,100%)' }}>
+      <div class="sec-title">${titulo}</div><input class="inp" autoFocus placeholder=${ph} value=${v} onInput=${e => setV(e.target.value)} onKeyDown=${e => e.key === 'Enter' && fim(v)} />
+      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => fim('')}>Cancelar</button><button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => fim(v)}>OK</button></div></div></div>`; }
+    root.render(html`<${M} />`);
+  });
+}
+/* Caixa de escolha (aviso com opções) */
+function escolher(titulo, texto, opcoes) {
+  return new Promise(res => {
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = ReactDOM.createRoot(el);
+    const fim = (v) => { root.unmount(); el.remove(); res(v); };
+    root.render(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(520px,100%)' }}>
+      <div class="sec-title">⚠️ ${titulo}</div><div style=${{ whiteSpace: 'pre-line' }}>${texto}</div>
+      <div class="stack" style=${{ gap: '6px' }}>${opcoes.map((o, i) => html`<button key=${i} class=${'btn btn-grande btn-block ' + (o.cls || '')} onClick=${() => fim(o.v)}>${o.t}${o.d ? html`<small style=${{ display: 'block', fontWeight: 400, opacity: .8 }}>${o.d}</small>` : ''}</button>`)}</div>
+    </div></div>`);
+  });
+}
 async function criarOS(sessao, conteudo, extras = {}) {
   const { fsMod } = F();
   const os = sanearOS(conteudo);
@@ -276,16 +326,20 @@ async function criarOS(sessao, conteudo, extras = {}) {
   const osRef = fsMod.doc(col('empresas', sessao.empresaId, 'os'));
   const agora = nowIso();
   let numero = 0, codigo = '';
-  const ano = String(new Date().getFullYear()).slice(2);
+  let ano = String(new Date().getFullYear()).slice(2);
+  const existentes = await numerosUsados(sessao.empresaId);
+  if (extras.fixo) {
+    ano = extras.fixo.ano; numero = extras.fixo.numero;
+    if (existentes.some(o => numOS(o) === codigoDe(ano, numero))) throw new Error('O número ' + codigoDe(ano, numero) + ' já está em uso.');
+  } else numero = proximoLivre(existentes, ano);
+  codigo = codigoDe(ano, numero);
   await fsMod.runTransaction(F().db, async (tx) => {
     const e = await tx.get(empRef);
     const ed = e.data() || {};
     const seqs = ed.seqAno || {};
-    numero = (seqs[ano] ?? (ed.seqAno ? 0 : (ed.osSeq || 0))) + 1;
-    codigo = ano + '.' + String(numero).padStart(3, '0');
-    tx.update(empRef, { osSeq: (ed.osSeq || 0) + 1, seqAno: { ...seqs, [ano]: numero } });
+    tx.update(empRef, { osSeq: existentes.length + 1, seqAno: { ...seqs, [ano]: Math.max(numero, proximoLivre(existentes, ano) - 1) } });
     tx.set(osRef, {
-      ...os, numero, ano, codigo, fingerprint: fp, status: 'elaboracao', modoExecucao: 'interna',
+      ...os, numero, ano, codigo, fingerprint: fp, status: STATUS_OS[0]?.v || 'elaboracao', modoExecucao: 'interna',
       projetoId: extras.projetoId || '', origem: extras.origem || 'manual',
       numeroAntigo: extras.numeroAntigo || '', dataAntiga: extras.dataAntiga || '', arquivoOrigem: extras.arquivoOrigem || '',
       criadoPor: sessao.nome, criadoEm: agora, atualizadoEm: agora, atualizadoPor: sessao.nome,
@@ -3338,6 +3392,7 @@ async function excluirOS(sessao, os, motivo) {
     excluidoPor: sessao.nome, excluidoEm: nowIso(), dados: JSON.parse(JSON.stringify(dados)),
   });
   await fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'os', id));
+  if (!excluirOS.lote) ajustarSequencia(sessao);
 }
 
 function TelaExcluir({ sessao, toast }) {
@@ -3355,6 +3410,12 @@ function TelaExcluir({ sessao, toast }) {
     return () => { a(); b(); };
   }, []);
   const restaurar = async (h) => {
+    if ((lista || []).some(o => numOS(o) === h.codigo)) {
+      const prox = codigoDe(h.codigo.split('.')[0], proximoLivre(lista, h.codigo.split('.')[0]));
+      const r = await escolher('Número já em uso', `A OS ${h.codigo} não pode voltar com o mesmo número: ele já está sendo usado por outra OS.`, [{ v: 'prox', t: 'Restaurar com o próximo número livre: ' + prox, cls: 'btn-primary' }, { v: 'nao', t: 'Cancelar' }]);
+      if (r !== 'prox') return;
+      const [a, n] = prox.split('.'); h = { ...h, dados: { ...h.dados, ano: a, numero: parseInt(n, 10), codigo: prox } };
+    }
     try {
       await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'os', h.osId), { ...h.dados, restauradaEm: nowIso(), restauradaPor: sessao.nome });
       await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'exclusoes', h.id));
@@ -3392,7 +3453,7 @@ function TelaExcluir({ sessao, toast }) {
       ${limparH && html`<${SenhaMotivo} perigo semMotivo titulo="Limpar histórico permanentemente" texto=${'As ' + hist.length + ' OSs do histórico serão apagadas para sempre e NÃO poderão mais ser restauradas.'} botao="Apagar para sempre"
         onOk=${async () => { const { writeBatch } = F().fsMod; for (let i = 0; i < hist.length; i += 400) { const b = writeBatch(F().db); hist.slice(i, i + 400).forEach(h => b.delete(docRef('empresas', sessao.empresaId, 'exclusoes', h.id))); await b.commit(); } toast('Histórico limpo.', 'ok'); }} fechar=${() => setLimparH(false)} />`}
       ${lote && html`<${SenhaMotivo} perigo semMotivo titulo=${'Apagar ' + sel.length + (sel.length === 1 ? ' OS' : ' OSs')} texto=${'Serão apagadas: ' + (lista || []).filter(o => sel.includes(o.id)).map(o => numOS(o)).join(', ') + '. Ficam no histórico e podem ser restauradas.'} botao=${'Apagar ' + sel.length}
-        onOk=${async (motivo) => { let n = 0; for (const o of (lista || []).filter(o => sel.includes(o.id))) { try { await excluirOS(sessao, o, motivo); n++; } catch (e) { toast('Erro em ' + numOS(o) + ': ' + e.message, 'erro'); } } setSel([]); toast(n + (n === 1 ? ' OS apagada.' : ' OSs apagadas.'), 'ok'); }} fechar=${() => setLote(false)} />`}
+        onOk=${async (motivo) => { let n = 0; excluirOS.lote = true; for (const o of (lista || []).filter(o => sel.includes(o.id))) { try { await excluirOS(sessao, o, motivo); n++; } catch (e) { toast('Erro em ' + numOS(o) + ': ' + e.message, 'erro'); } } excluirOS.lote = false; await ajustarSequencia(sessao); setSel([]); toast(n + (n === 1 ? ' OS apagada.' : ' OSs apagadas.') + ' Numeração ajustada.', 'ok'); }} fechar=${() => setLote(false)} />`}
       ${alvo && html`<${SenhaMotivo} perigo titulo=${'Excluir a OS ' + numOS(alvo)} texto=${(alvo.cliente?.nome || '') + ' — o número não será reaproveitado.'} botao="Excluir OS"
         onOk=${async (motivo) => { await excluirOS(sessao, alvo, motivo); toast('OS ' + numOS(alvo) + ' excluída.', 'ok'); }} fechar=${() => setAlvo(null)} />`}
     </div>`;
@@ -4024,7 +4085,40 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
         const { texto, imagens } = await extrairArquivo(item.file);
         upd(item.key, { status: 'Convertendo para o layout novo…' });
         const res = await chamarIA('importar_os', { texto, temImagens: imagens.length > 0, catalogo: resumoCatalogo(catalogo) }, imagens);
+        upd(item.key, { status: 'Conferindo a numeração…' });
+        const lista = await numerosUsados(sessao.empresaId);
+        const anoAt = String(new Date().getFullYear()).slice(2);
+        const cArq = lerCodigo(item.nome), cDoc = lerCodigo(res.numeroAntigo);
+        let fixo = cArq || cDoc;
+        if (cArq && cDoc && codigoDe(cArq.ano, cArq.numero) !== codigoDe(cDoc.ano, cDoc.numero)) {
+          const r = await escolher('Numeração diferente', `O nome do arquivo diz ${codigoDe(cArq.ano, cArq.numero)}, mas dentro da OS está ${codigoDe(cDoc.ano, cDoc.numero)}.\nArquivo: ${item.nome}`,
+            [{ v: 'arq', t: 'Usar ' + codigoDe(cArq.ano, cArq.numero) + ' (nome do arquivo)', cls: 'btn-primary' }, { v: 'doc', t: 'Usar ' + codigoDe(cDoc.ano, cDoc.numero) + ' (dentro da OS)' }, { v: 'pular', t: 'Pular este arquivo' }]);
+          if (r === 'pular') { upd(item.key, { status: 'Pulado por você.', erro: true, rodando: false }); continue; }
+          fixo = r === 'doc' ? cDoc : cArq;
+        }
+        if (!fixo) {
+          const prox = codigoDe(anoAt, proximoLivre(lista, anoAt));
+          const r = await escolher('OS sem número', `Não achei o número da OS no arquivo nem dentro dele.\nArquivo: ${item.nome}`,
+            [{ v: 'prox', t: 'Usar o próximo número livre: ' + prox, cls: 'btn-primary' }, { v: 'digitar', t: 'Digitar o número' }, { v: 'pular', t: 'Pular este arquivo' }]);
+          if (r === 'pular') { upd(item.key, { status: 'Pulado por você.', erro: true, rodando: false }); continue; }
+          if (r === 'digitar') { fixo = lerCodigo(await pedirTexto('Número da OS', 'Ex: 26.089')); if (!fixo) { upd(item.key, { status: 'Número inválido — pulado.', erro: true, rodando: false }); continue; } }
+        }
+        if (fixo) {
+          const cod = codigoDe(fixo.ano, fixo.numero);
+          const ja = lista.find(o => numOS(o) === cod);
+          if (ja) {
+            const prox = codigoDe(fixo.ano, proximoLivre(lista, fixo.ano));
+            const r = await escolher('Número já existe', `A OS ${cod} já existe no app: ${ja.cliente?.nome || ''} — ${(ja.ambientes || []).map(a => a.nome).join(', ') || ja.ambienteResumo || ''}.\nArquivo enviado: ${item.nome} (${res.cliente?.nome || ''})`,
+              [{ v: 'subst', t: 'Substituir a existente pela do arquivo', d: 'A antiga vai para o histórico de exclusões (dá para restaurar)', cls: 'btn-danger' },
+               { v: 'prox', t: 'Criar com o próximo número livre: ' + prox },
+               { v: 'pular', t: 'Pular este arquivo (manter a existente)' }]);
+            if (r === 'pular') { upd(item.key, { status: 'Pulado — já existe a OS ' + cod + '.', erro: true, dupId: ja.id, rodando: false }); continue; }
+            if (r === 'subst') await excluirOS(sessao, ja, 'Substituída pela importação do arquivo ' + item.nome);
+            else fixo = null;
+          }
+        }
         const { id, numero } = await criarOS(sessao, res, {
+          fixo: fixo || undefined,
           origem: 'importada', numeroAntigo: String(res.numeroAntigo || ''), dataAntiga: String(res.dataAntiga || ''), arquivoOrigem: item.nome,
         });
         upd(item.key, { status: `Importada como OS nº ${numOS(numero)}`, ok: true, osId: id, rodando: false });
@@ -4037,7 +4131,7 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
   return html`
     <div class="fade-up">
       <div class="page-head">
-        <div><h2>Importar OSs antigas</h2><div class="dim">A IA lê a OS antiga e monta no layout novo. Cada uma ganha número novo, e o número antigo fica guardado.</div></div>
+        <div><h2>Importar OSs antigas</h2><div class="dim">A IA lê a OS e monta no layout novo, <b>mantendo o número do arquivo</b> (ex: "26.089 Cliente.pdf"). Se o número já existir ou não bater, aparece um aviso para você escolher.</div></div>
       </div>
       <div class=${'drop-zone card' + (over ? ' over' : '')} style=${{ padding: '40px 16px' }}
         onClick=${() => !ocupado && inputRef.current.click()}
