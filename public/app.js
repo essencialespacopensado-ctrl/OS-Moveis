@@ -1260,7 +1260,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
 
   if (osAberta) return html`<${EditorOS} key=${osAberta} osId=${osAberta} sessao=${sessao} catalogo=${catalogo} toast=${toast} voltar=${() => setOsAberta(null)} />`;
 
-  const stOf = (o) => STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao';
+  const stOf = (o) => STATUS_OS.find(x => x.v === o.status) ? o.status : (STATUS_OS[0]?.v || 'elaboracao');
   const execOf = (o) => o.modoExecucao || 'interna';
   const filtradas = lista.filter(o =>
     (!status || (status === 'atrasadas' ? atrasada(o) : stOf(o) === status)) &&
@@ -1396,7 +1396,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
           <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')} style=${{ '--cc': corCliente(x.nome) }}>
             <div class="os-cli-top"><b>${x.nome}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
             ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
-              const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i];
+              const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i] || { c: 'chip', t: st || '' };
               const iniciada = st !== 'elaboracao' && st !== 'concluida';
               return html`<div key=${o.id} class=${'os-cli-os st-bg-' + st + (iniciada ? ' iniciada' : '') + (atrasada(o) ? ' atras' : '')}>
                 <button class="os-cli-info" onClick=${() => setOsAberta(o.id)}>
@@ -4354,7 +4354,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
   }, [sessao.empresaId]);
   const os = lista || [];
-  const st = (v) => os.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === v).length;
+  const st = (v) => os.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : (STATUS_OS[0]?.v || 'elaboracao')) === v).length;
   const pct = (n) => os.length ? Math.round(n * 100 / os.length) + '% do fluxo' : '0% do fluxo';
   const nAtr = os.filter(atrasada).length;
   const tiles = [
@@ -4363,7 +4363,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     { t: 'Atrasadas', n: nAtr, s: nAtr ? 'Precisa de atenção' : 'Tudo em dia', cls: nAtr ? 'tile-danger' : '', f: 'atrasadas' },
   ];
   const filtradas = os.filter(o =>
-    (!status || (status === 'atrasadas' ? atrasada(o) : (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === status)) &&
+    (!status || (status === 'atrasadas' ? atrasada(o) : (STATUS_OS.find(x => x.v === o.status) ? o.status : (STATUS_OS[0]?.v || 'elaboracao')) === status)) &&
     (!amb || categoriasDaOS(o).includes(amb)) &&
     (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
@@ -4405,7 +4405,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
       ${cabecalho}
       <div class="ini-kan">
-        ${STATUS_OS.map(col => { const itens = filtradas.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : 'elaboracao') === col.v); return html`
+        ${STATUS_OS.map(col => { const itens = filtradas.filter(o => (STATUS_OS.find(x => x.v === o.status) ? o.status : (STATUS_OS[0]?.v || 'elaboracao')) === col.v); return html`
           <div key=${col.v} class=${'ini-kcol k-' + col.v}>
             <div class="ini-kh"><b>${col.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</b><span>${itens.length}</span></div>
             <div class="ini-kcards">
