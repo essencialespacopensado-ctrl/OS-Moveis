@@ -3444,6 +3444,8 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
   const [modoV, setModoV] = useState('temas');
+  const [tarOS, setTarOS] = useState([]);
+  useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
   const [todas, setTodas] = useState([]);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setTodas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}), []);
   useEffect(() => { if (o === null) fechar(); }, [o]);
@@ -3479,7 +3481,8 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       <div class="ficha-acoes">
         <button class="btn btn-grande btn-primary" onClick=${editarMot}>✏️ Editar OS</button>
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
-        <button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>
+        ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📍 Ver no cronograma<small style=${{ display: 'block', fontWeight: 500, fontSize: '11px', opacity: .9 }}>${tarOS[0].pessoa} · ${dm(tarOS[0].inicio)} a ${dm(tarOS[0].fim)}</small></button>`
+          : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
       <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
