@@ -3347,6 +3347,7 @@ function TelaExcluir({ sessao, toast }) {
   const [alvo, setAlvo] = useState(null);
   const [sel, setSel] = useState([]);
   const [lote, setLote] = useState(false);
+  const [limparH, setLimparH] = useState(false);
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     const a = onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
@@ -3380,13 +3381,16 @@ function TelaExcluir({ sessao, toast }) {
             </div>`)}</div>`}
       </div>
       <div class="card page-card stack">
-        <div class="sec-title">📜 Histórico de exclusões</div>
+        <div class="row" style=${{ justifyContent: 'space-between', gap: '8px' }}><div class="sec-title">📜 Histórico de exclusões</div>
+          ${hist.length > 0 && html`<button class="btn btn-sm btn-danger" onClick=${() => setLimparH(true)}>🧹 Limpar histórico permanentemente</button>`}</div>
         ${hist.length === 0 ? html`<div class="dim">Nenhuma OS excluída.</div>` : hist.map(h => html`
           <div key=${h.id} class="item-lista" style=${{ alignItems: 'flex-start' }}>
             <span><b>OS ${h.codigo}</b> — ${h.cliente}<br/><span class="dim">Motivo: ${h.motivo}</span><br/><small class="dim">Excluída por ${h.excluidoPor} em ${fmtData(h.excluidoEm)}</small></span>
             ${sessao.papel === 'admin' && html`<button class="btn btn-sm" onClick=${() => restaurar(h)}>↩ Restaurar</button>`}
           </div>`)}
       </div>
+      ${limparH && html`<${SenhaMotivo} perigo semMotivo titulo="Limpar histórico permanentemente" texto=${'As ' + hist.length + ' OSs do histórico serão apagadas para sempre e NÃO poderão mais ser restauradas.'} botao="Apagar para sempre"
+        onOk=${async () => { const { writeBatch } = F().fsMod; for (let i = 0; i < hist.length; i += 400) { const b = writeBatch(F().db); hist.slice(i, i + 400).forEach(h => b.delete(docRef('empresas', sessao.empresaId, 'exclusoes', h.id))); await b.commit(); } toast('Histórico limpo.', 'ok'); }} fechar=${() => setLimparH(false)} />`}
       ${lote && html`<${SenhaMotivo} perigo semMotivo titulo=${'Apagar ' + sel.length + (sel.length === 1 ? ' OS' : ' OSs')} texto=${'Serão apagadas: ' + (lista || []).filter(o => sel.includes(o.id)).map(o => numOS(o)).join(', ') + '. Ficam no histórico e podem ser restauradas.'} botao=${'Apagar ' + sel.length}
         onOk=${async (motivo) => { let n = 0; for (const o of (lista || []).filter(o => sel.includes(o.id))) { try { await excluirOS(sessao, o, motivo); n++; } catch (e) { toast('Erro em ' + numOS(o) + ': ' + e.message, 'erro'); } } setSel([]); toast(n + (n === 1 ? ' OS apagada.' : ' OSs apagadas.'), 'ok'); }} fechar=${() => setLote(false)} />`}
       ${alvo && html`<${SenhaMotivo} perigo titulo=${'Excluir a OS ' + numOS(alvo)} texto=${(alvo.cliente?.nome || '') + ' — o número não será reaproveitado.'} botao="Excluir OS"
