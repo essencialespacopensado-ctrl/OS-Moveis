@@ -4652,7 +4652,18 @@ const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a =
 /* Métricas: dias/horas ganhos ou perdidos no cronograma */
 const HORAS_DIA = 8;
 function MetricasPrazo({ sessao }) {
-  const [tar, setTar] = useState([]);
+  const [tar0, setTar] = useState([]);
+  const [per, setPer] = useState('mes');
+  const PER = [['semana', 'Semanal'], ['mes', 'Mensal'], ['tri', 'Trimestral'], ['sem', 'Semestral'], ['ano', 'Anual']];
+  const agora = new Date();
+  const iniPer = (() => { const d = new Date(agora); d.setHours(0, 0, 0, 0);
+    if (per === 'semana') return isoD(segundaDe(d));
+    if (per === 'mes') return isoD(new Date(d.getFullYear(), d.getMonth(), 1));
+    if (per === 'tri') return isoD(new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1));
+    if (per === 'sem') return isoD(new Date(d.getFullYear(), d.getMonth() < 6 ? 0 : 6, 1));
+    return isoD(new Date(d.getFullYear(), 0, 1)); })();
+  const refData = (t) => t.status === 'concluida' && t.concluidaEm ? isoD(new Date(t.concluidaEm)) : (t.fimOriginal || t.fim);
+  const tar = tar0.filter(t => refData(t) >= iniPer);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setTar(s.docs.map(d => d.data())), () => {}), []);
   const hoje = isoD(new Date());
   const difDe = (prev, real) => real === prev ? 0 : real > prev ? uteisEntre(prev, real) : -uteisEntre(real, prev);
@@ -4669,9 +4680,11 @@ function MetricasPrazo({ sessao }) {
   const h = (d) => (d * HORAS_DIA) + 'h';
   const maxAbs = Math.max(1, ...Object.values(porPessoa).map(Math.abs), ...Object.values(porGrade).map(Math.abs));
   const barras = (obj) => Object.entries(obj).sort((a, b) => a[1] - b[1]).map(([k, v]) => html`<div key=${k} class="mt-bar"><span>${k}</span><div><i style=${{ width: Math.abs(v) / maxAbs * 50 + '%', [v < 0 ? 'right' : 'left']: '50%', background: v < 0 ? '#dc2626' : v > 0 ? '#16a34a' : '#a8a29e' }}></i></div><b class=${v < 0 ? 'neg' : v > 0 ? 'pos' : ''}>${v > 0 ? '+' : ''}${v}d</b></div>`);
-  return html`<details class="card metricas" open=${todos.length > 0}>
+  return html`<details class="card metricas" open=${tar0.length > 0}>
     <summary><b>⏱ Tempo ganho / perdido no cronograma</b> <span class=${'mt-saldo ' + (saldo < 0 ? 'neg' : saldo > 0 ? 'pos' : '')}>${saldo > 0 ? '+' : ''}${saldo} dias · ${saldo > 0 ? '+' : ''}${h(saldo)}</span></summary>
-    ${tar.length === 0 ? html`<div class="dim">Ainda não há tarefas no cronograma. As métricas aparecem quando as tarefas forem concluídas.</div>` : html`
+    <div class="seg-mini" style=${{ marginTop: '8px', flexWrap: 'wrap' }}>${PER.map(([k, t]) => html`<button key=${k} class=${per === k ? 'on' : ''} onClick=${() => setPer(k)}>${t}</button>`)}</div>
+    <div class="dim" style=${{ fontSize: '11px' }}>Período: desde ${dm(iniPer)}/${iniPer.slice(0, 4)}</div>
+    ${tar.length === 0 ? html`<div class="dim">Ainda não há tarefas no cronograma neste período. As métricas aparecem quando as tarefas forem concluídas.</div>` : html`
     <div class="mt-tiles">
       <div class="mt-t pos"><small>Ganho (antes do prazo)</small><b>${ganho}d</b><em>${h(ganho)}</em></div>
       <div class="mt-t neg"><small>Perdido (atrasos/retrabalho)</small><b>${perda}d</b><em>${h(perda)}</em></div>
