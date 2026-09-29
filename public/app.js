@@ -3032,7 +3032,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             const fimSem = isoD(new Date(deIso(semana).getTime() + 6 * 864e5));
             const daSemana = (tarefas || []).filter(t => t.inicio <= fimSem && t.fim >= semana);
             const r = await escolher('Apagar cronograma', 'Semana de ' + dm(semana) + ' a ' + dm(fimSem) + '.\n' + (doc ? 'Tem texto escrito na agenda. ' : '') + daSemana.length + ' tarefa(s) lançadas nesta semana.\nIsso não pode ser desfeito.',
-              [{ v: 'tudo', t: '🗑 Apagar a semana inteira (agenda + tarefas)', cls: 'btn-danger' }, { v: 'agenda', t: 'Apagar só o texto da agenda' }, { v: 'tar', t: 'Apagar só as tarefas (' + daSemana.length + ')' }, { v: 'todas', t: '🧹 Apagar TODAS as tarefas de todas as semanas (' + (tarefas || []).length + ')', cls: 'btn-danger' }, { v: 'geral', t: '🧨 Zerar o cronograma inteiro (todas as semanas + todas as tarefas)', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }]);
+              [{ v: 'tudo', t: '🗑 Apagar a semana inteira (agenda + tarefas)', cls: 'btn-danger' }, { v: 'agenda', t: 'Apagar só o texto da agenda' }, { v: 'tar', t: 'Apagar só as tarefas (' + daSemana.length + ')' }, { v: 'nao', t: 'Cancelar' }]);
             if (r === 'nao' || !r) return;
             if (r === 'geral') {
               if ((await escolher('Zerar tudo?', 'Vai apagar TODAS as semanas da agenda e TODAS as tarefas. Não pode ser desfeito.', [{ v: 'sim', t: 'Sim, zerar o cronograma', cls: 'btn-danger' }, { v: 'nao', t: 'Cancelar' }])) !== 'sim') return;
@@ -4736,6 +4736,7 @@ function aplicarEtapas(cfg) {
   ETAPAS_FAB.splice(0, ETAPAS_FAB.length, ...fab);
 }
 function TelaConfig({ sessao, toast }) {
+  const [zerar, setZerar] = useState(false);
   const [os, setOs] = useState(() => STATUS_OS.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] || '#78716c' })));
   const [fab, setFab] = useState(() => ETAPAS_FAB.map(([k, nome, desc]) => ({ k, nome, desc })));
   const [salvando, setSalvando] = useState(false);
@@ -4773,6 +4774,16 @@ function TelaConfig({ sessao, toast }) {
       <button class="btn" onClick=${() => { setOs(STATUS_PADRAO.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] }))); setFab(FAB_PADRAO.map(([k, nome, desc]) => ({ k, nome, desc }))); }}>Voltar ao padrão</button>
       <button class="btn btn-verde" disabled=${salvando} onClick=${salvar}>${salvando ? 'Salvando…' : '✓ Salvar etapas'}</button>
     </div>
+    <details class="card page-card zona-perigo"><summary><b>⚠️ Zona de perigo</b> <span class="dim">— reset do cronograma</span></summary>
+      <div class="stack" style=${{ marginTop: '10px' }}>
+        <div class="dim">Apaga <b>todas as semanas</b> da agenda e <b>todas as tarefas</b> do cronograma. Use só para limpar testes. Não pode ser desfeito.</div>
+        <button class="btn btn-danger" onClick=${() => setZerar(true)}>🧨 Zerar o cronograma inteiro</button>
+      </div>
+    </details>
+    ${zerar && html`<${SenhaMotivo} perigo semMotivo titulo="Zerar o cronograma inteiro" texto="Todas as semanas e todas as tarefas serão apagadas para sempre." botao="Zerar"
+      onOk=${async () => { const { getDocs, writeBatch } = F().fsMod; const docs = [...(await getDocs(col('empresas', sessao.empresaId, 'agenda'))).docs, ...(await getDocs(col('empresas', sessao.empresaId, 'tarefas'))).docs];
+        for (let i = 0; i < docs.length; i += 400) { const b = writeBatch(F().db); docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); }
+        toast('Cronograma zerado: ' + docs.length + ' registros apagados.', 'ok'); }} fechar=${() => setZerar(false)} />`}
   </div>`;
 }
 
