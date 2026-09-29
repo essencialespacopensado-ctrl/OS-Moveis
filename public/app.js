@@ -2879,6 +2879,20 @@ async function escreverNaAgenda(sessao, grade, pessoa, ini, fim, linha) {
   }
   return Object.values(porSemana).reduce((n, d) => n + d.length, 0);
 }
+/* Tira da agenda as linhas desta tarefa (quando muda de dia/pessoa) */
+async function removerDaAgenda(sessao, grade, pessoa, ini, fim, chave) {
+  if (!chave) return;
+  const sems = new Set();
+  for (let d = deIsoD(ini); isoD(d) <= fim; d.setDate(d.getDate() + 1)) sems.add(iso(segundaDe(d)));
+  const { getDoc, setDoc } = F().fsMod;
+  for (const sem of sems) {
+    const ref = docRef('empresas', sessao.empresaId, 'agenda', sem); const snap = await getDoc(ref); if (!snap.exists()) continue;
+    const ag = snap.data(); const row = (ag.grades?.[grade] || []).find(r => norm(r.nome) === norm(pessoa)); if (!row) continue;
+    let mudou = false;
+    row.dias = (row.dias || []).map((v, i) => { const d = new Date(deIso(sem)); d.setDate(d.getDate() + i); const di = isoD(d); if (di < ini || di > fim) return v; const nv = String(v || '').split('\n').filter(l => !l.includes(chave)).join('\n'); if (nv !== v) mudou = true; return nv; });
+    if (mudou) await setDoc(ref, { ...ag, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+  }
+}
 function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: inicio0, fechar, toast, osInicial, aoLancar }) {
   const inicio = inicio0 || isoD(new Date());
   const [pessoa, setPessoa] = useState(pessoa0 || '');
@@ -2955,7 +2969,26 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
   const hoje = isoD(new Date());
   const atrasada = t.status !== 'concluida' && t.fim < hoje;
   const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } { const rp = v ? resultadoPrazo(t) : null; registrar(sessao, t.osId, v ? (rp.dif > 0 ? '⚠️' : '✅') : '↺', v ? 'Concluída (' + t.pessoa + ') — ' + rp.txt : 'Tarefa reaberta: ' + t.pessoa, v ? rp.d : mot); } try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
-  const excluir = async () => { try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const excluir = async () => { const mot = await pedirMotivo('Excluir do cronograma', 'A tarefa sai do cronograma de ' + t.pessoa + '. Informe o motivo.'); if (!mot) return; registrar(sessao, t.osId, '🗑', 'Excluída do cronograma: ' + t.pessoa + ' (' + dm(t.inicio) + ' a ' + dm(t.fim) + ')', mot); try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); if (t.osCod) removerDaAgenda(sessao, t.grade, t.pessoa, t.inicio, t.fim, t.osCod).catch(() => {}); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const [mv, setMv] = useState({ pessoa: t.pessoa, grade: t.grade || 'producao', inicio: t.inicio, fim: t.fim, motivo: '' });
+  const [nomesMv, setNomesMv] = useState([]);
+  useEffect(() => { F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date())))).then(d => { const g = d.data()?.grades?.[mv.grade] || []; setNomesMv([...new Set(g.map(r => r.nome).filter(Boolean))]); }).catch(() => {}); }, [mv.grade]);
+  const mover = async () => {
+    if (mv.motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
+    if (!mv.pessoa.trim()) return toast('Escolha quem vai executar.');
+    if (mv.fim < mv.inicio) return toast('O prazo final não pode ser antes do início.');
+    if (mv.pessoa === t.pessoa && mv.grade === t.grade && mv.inicio === t.inicio && mv.fim === t.fim) return toast('Nada mudou.');
+    const choque = todas.filter(x => x.id !== t.id && x.status !== 'concluida' && norm(x.pessoa) === norm(mv.pessoa) && x.inicio <= mv.fim && x.fim >= mv.inicio);
+    if (choque.length) return toast('Bloqueado: ' + mv.pessoa + ' já tem ' + choque.map(x => (x.osCod || x.texto) + ' (' + dm(x.inicio) + ' a ' + dm(x.fim) + ')').join(', ') + '.');
+    try {
+      await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { pessoa: mv.pessoa.trim(), grade: mv.grade, inicio: mv.inicio, fim: mv.fim, mudancas: [...(t.mudancas || []), { de: { pessoa: t.pessoa, inicio: t.inicio, fim: t.fim }, para: { pessoa: mv.pessoa.trim(), inicio: mv.inicio, fim: mv.fim }, motivo: mv.motivo.trim(), quem: sessao.nome, em: nowIso() }] });
+      const linha = [t.osCod, (t.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') || t.texto;
+      if (t.osCod) await removerDaAgenda(sessao, t.grade, t.pessoa, t.inicio, t.fim, t.osCod);
+      await escreverNaAgenda(sessao, mv.grade, mv.pessoa.trim(), mv.inicio, mv.fim, linha);
+      registrar(sessao, t.osId, '↔️', 'Mudou no cronograma: ' + t.pessoa + ' ' + dm(t.inicio) + '–' + dm(t.fim) + ' → ' + mv.pessoa.trim() + ' ' + dm(mv.inicio) + '–' + dm(mv.fim), mv.motivo.trim());
+      toast('Tarefa movida.', 'ok'); fechar();
+    } catch (e) { toast('Não moveu: ' + e.message, 'erro'); }
+  };
   const prorrogar = async () => {
     if (motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
     const novoFim = novaData || somaUteis(t.fim, dias);
@@ -2980,8 +3013,20 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
       ${t.status !== 'concluida' ? html`
         <div class="row" style=${{ gap: '6px' }}>
           <button class="btn btn-grande btn-verde" style=${{ flex: 1 }} onClick=${() => concluir(true)}>✓ Concluída</button>
-          <button class=${'btn btn-grande' + (atrasada ? ' btn-marrom' : '')} style=${{ flex: 1 }} onClick=${() => setModo(modo ? '' : 'mais')}>＋ Mais dias</button>
+          <button class=${'btn btn-grande' + (atrasada ? ' btn-marrom' : '')} style=${{ flex: 1 }} onClick=${() => setModo(modo === 'mais' ? '' : 'mais')}>＋ Mais dias</button>
+          <button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => setModo(modo === 'mover' ? '' : 'mover')}>↔️ Mudar dia / profissional</button>
         </div>
+        ${modo === 'mover' && html`<div class="dia-box">
+          <span class="lbl">Cronograma</span>
+          <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${GRADES.map(([k, tt]) => html`<button key=${k} class=${'pill' + (mv.grade === k ? ' on' : '')} onClick=${() => setMv({ ...mv, grade: k })}>${tt}</button>`)}</div>
+          <span class="lbl">Profissional</span>
+          ${nomesMv.length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomesMv.map(n => html`<button key=${n} class=${'pill' + (mv.pessoa === n ? ' on' : '')} onClick=${() => setMv({ ...mv, pessoa: n })}>${n}</button>`)}</div>`}
+          <input class="inp" value=${mv.pessoa} onInput=${e => setMv({ ...mv, pessoa: e.target.value })} />
+          <div class="grid2"><div class="field"><span class="lbl">Início</span><input class="inp" type="date" value=${mv.inicio} onInput=${e => { const ni = e.target.value; const dur = uteisEntre(mv.inicio, mv.fim); setMv({ ...mv, inicio: ni, fim: somaUteis(ni, dur) }); }} /></div>
+            <div class="field"><span class="lbl">Prazo final</span><input class="inp" type="date" min=${mv.inicio} value=${mv.fim} onInput=${e => setMv({ ...mv, fim: e.target.value })} /></div></div>
+          <textarea class="inp" rows="2" placeholder="Motivo da mudança (obrigatório)" value=${mv.motivo} onInput=${e => setMv({ ...mv, motivo: e.target.value })}></textarea>
+          <button class="btn btn-grande btn-verde btn-block" onClick=${mover}>💾 Salvar mudança</button>
+        </div>`}
         ${modo === 'mais' && html`<div class="dia-box">
           <span class="lbl">Quantos dias a mais? (dias úteis)</span>
           <div class="row" style=${{ gap: '5px' }}>${[1, 2, 3, 5].map(n => html`<button key=${n} class=${'pill' + (!novaData && dias === n ? ' on' : '')} onClick=${() => { setDias(n); setNovaData(''); }}>+${n}</button>`)}
@@ -2991,7 +3036,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
           <button class="btn btn-grande btn-marrom btn-block" onClick=${prorrogar}>Confirmar novo prazo</button>
         </div>`}` : html`<button class="btn" onClick=${() => concluir(false)}>↺ Reabrir tarefa</button>`}
       ${(t.prorrogacoes || []).length > 0 && html`<details open><summary class="dim">Prorrogações (${t.prorrogacoes.length})</summary>${t.prorrogacoes.map((p, i) => html`<div key=${i} class="tar-prorr">+${p.dias}d · ${dm(p.fimAntes)} → ${dm(p.fimDepois)} · ${p.motivo}<small>${p.quem} · ${fmtData(p.em)}</small></div>`)}</details>`}
-      <button class="btn btn-sm btn-ghost" onClick=${excluir}>Excluir tarefa</button>
+      <button class="btn btn-danger" onClick=${excluir}>🗑 Excluir do cronograma</button>
     </div></div>`, document.body);
 }
 
