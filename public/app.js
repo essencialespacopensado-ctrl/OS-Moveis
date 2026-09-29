@@ -2751,13 +2751,42 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
 
 /* ---------- Cronogramas: agenda semanal (modelo Zonta), mês, produção e entregas ---------- */
 const DIAS_SEM = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-const GRADES = [
-  ['entregas', '🚚 Cronograma de entregas', 'Viagem'],
-  ['montagem', '🔧 Montagem', 'Equipe'],
-  ['producao', '🪵 Produção – vidros, madeira e ferros', 'Pessoa'],
-  ['terceirizados', '🤝 Produção – terceirizados', 'Parceiro'],
-  ['marceneiros', '🪚 Cronograma marceneiros', 'Marceneiro'],
+const GRADES_PADRAO = [
+  ['entregas', '🚚 Entregas', 'Viagem', '#0E7490'],
+  ['montagem', '🔧 Montagem', 'Equipe', '#15803D'],
+  ['producao', '🪵 Produção', 'Pessoa', '#A16207'],
+  ['terceirizados', '🤝 Terceirizados', 'Parceiro', '#7C3AED'],
+  ['marceneiros', '🪚 Marceneiros', 'Marceneiro', '#B45309'],
 ];
+const GRADES = GRADES_PADRAO.map(x => [...x]);
+const corGrade = (k) => (GRADES.find(g => g[0] === k) || [])[3] || '#78716c';
+function EditorCategorias({ sessao, toast, fechar }) {
+  const [l, setL] = useState(() => GRADES.map(([k, t, rot, cor]) => ({ k, t, rot, cor: cor || '#78716c' })));
+  const [salvando, setSalvando] = useState(false);
+  const mv = (i, d) => { const a = [...l]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; setL(a); };
+  const salvar = async () => {
+    if (l.some(x => !x.t.trim())) return toast('Toda categoria precisa de nome.');
+    setSalvando(true);
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { gradesCfg: l.map(x => ({ ...x, t: x.t.trim(), rot: (x.rot || 'Pessoa').trim() })) }); toast('Categorias salvas.', 'ok'); fechar(); }
+    catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+    setSalvando(false);
+  };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
+    <div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🗂 Categorias do cronograma</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+      <div class="dim">Renomeie, mude a cor, reordene, crie ou tire categorias. Dica: comece o nome com um emoji (ex: 🎨 Pintura).</div>
+      ${l.map((x, i) => html`<div key=${x.k} class="cat-linha" style=${{ borderLeftColor: x.cor }}>
+        <input type="color" value=${x.cor} onInput=${e => setL(l.map((y, j) => j === i ? { ...y, cor: e.target.value } : y))} />
+        <input class="inp inp-sm" value=${x.t} placeholder="Nome" onInput=${e => setL(l.map((y, j) => j === i ? { ...y, t: e.target.value } : y))} />
+        <input class="inp inp-sm" style=${{ maxWidth: '110px' }} value=${x.rot} placeholder="Linha (ex: Pessoa)" onInput=${e => setL(l.map((y, j) => j === i ? { ...y, rot: e.target.value } : y))} />
+        <button class="btn btn-sm btn-ghost" onClick=${() => mv(i, -1)}>▲</button><button class="btn btn-sm btn-ghost" onClick=${() => mv(i, 1)}>▼</button>
+        <button class="btn btn-sm btn-ghost" title="Remover" onClick=${async () => { if ((await escolher('Remover categoria', 'Remover "' + x.t + '" do cronograma? O que já foi escrito nela fica guardado, mas deixa de aparecer.', [{ v: 's', t: 'Remover', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }])) === 's') setL(l.filter((_, j) => j !== i)); }}>🗑</button>
+      </div>`)}
+      <button class="btn" onClick=${() => setL([...l, { k: 'cat_' + rand(5), t: '📌 Nova categoria', rot: 'Pessoa', cor: '#2563eb' }])}>＋ Nova categoria</button>
+      <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setL(GRADES_PADRAO.map(([k, t, rot, cor]) => ({ k, t, rot, cor })))}>Restaurar padrão</button>
+        <button class="btn btn-grande btn-verde" style=${{ flex: 1 }} disabled=${salvando} onClick=${salvar}>💾 Salvar categorias</button></div>
+    </div></div>`, document.body);
+}
 const LISTAS = [
   ['entregasObs', 'Entregas sem data / observações', '🚚'],
   ['usinagens', 'Corte – usinagens e orgânicos', '✂️'], ['cortes', 'Corte – cortes', '✂️'],
@@ -3046,6 +3075,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
 
 function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
   const [grupoSel, setGrupoSel0] = useState(() => { if (window.__focoAgenda) return 'todos'; try { return localStorage.getItem('osm_grupo') || 'producao'; } catch { return 'producao'; } });
+  const [editCat, setEditCat] = useState(false);
   const setGrupoSel = (k) => { setGrupoSel0(k); try { localStorage.setItem('osm_grupo', k); } catch {} };
   const tarefas = useTarefas(sessao);
   const [novaT, setNovaT] = useState(null);
@@ -3184,7 +3214,9 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             <div class="sec-title">⭐ Prioridades da semana</div>
             <textarea class="inp" rows="2" placeholder="Uma por linha" value=${doc.prioridades || ''} onInput=${e => mudar(d => { d.prioridades = e.target.value; })}></textarea>
           </div>
-          <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, ({ entregas: '🚚 Entregas', montagem: '🔧 Montagem', producao: '🪵 Produção', terceirizados: '🤝 Terceirizados', marceneiros: '🪚 Marceneiros' })[k] || t])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}</div>
+          <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, t])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} style=${k !== 'todos' ? { '--gc': corGrade(k) } : null} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}
+            ${sessao.papel === 'admin' && html`<button class="grupo-b grupo-edit" onClick=${() => setEditCat(true)}>✏️ Categorias</button>`}</div>
+          ${editCat && html`<${EditorCategorias} sessao=${sessao} toast=${toast} fechar=${() => setEditCat(false)} />`}
           ${GRADES.filter(([k]) => grupoSel === 'todos' || grupoSel === k).map(([k, t, rot]) => html`
             <div key=${k} class="card page-card stack">
               <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${t}</div>
@@ -3265,7 +3297,7 @@ function AgendaMes({ sessao, lista, setSemana, setVista }) {
     GRADES.forEach(([k, t]) => (s.grades?.[k] || []).forEach(r => { const v = (r.dias?.[i] || '').trim(); if (v) { const o = osCitadas(v, lista || [])[0]; out.push({ k, ok: !!s.feitos?.[k + '|' + norm(r.nome) + '|' + i], nome: r.nome || '', txt: v.split('\n')[0], c: o ? corOS(o) : '' }); } }));
     return out;
   };
-  const cor = { entregas: '#0E7490', montagem: '#15803D', producao: '#A16207', terceirizados: '#7C3AED', marceneiros: '#B45309' };
+  const cor = Object.fromEntries(GRADES.map(g => [g[0], g[3] || '#78716c']));
   const hoje = new Date();
   return html`
     <div class="card page-card stack">
@@ -4935,6 +4967,7 @@ const STATUS_PADRAO = STATUS_OS.map(x => ({ ...x }));
 const FAB_PADRAO = ETAPAS_FAB.map(x => [...x]);
 const CHIP_CLS = { elaboracao: 'chip', projetos: 'chip chip-azul', producao: 'chip chip-teal', liberacao: 'chip chip-warn', montagem: 'chip chip-roxo', concluida: 'chip chip-ok' };
 function aplicarEtapas(cfg) {
+  if (Array.isArray(cfg?.gradesCfg) && cfg.gradesCfg.length) GRADES.splice(0, GRADES.length, ...cfg.gradesCfg.map(x => [x.k, x.t, x.rot || 'Pessoa', x.cor || '#78716c']));
   const st = Array.isArray(cfg?.etapasOS) && cfg.etapasOS.length >= 2 ? cfg.etapasOS : STATUS_PADRAO.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] }));
   STATUS_OS.splice(0, STATUS_OS.length, ...st.map((x, i) => ({ v: x.v, t: (i + 1) + '. ' + x.nome, c: CHIP_CLS[x.v] || 'chip', cor: x.cor })));
   st.forEach(x => { if (x.cor) COR_ST[x.v] = x.cor; });

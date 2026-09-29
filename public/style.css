@@ -1084,3 +1084,11 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .grupo-b:hover{transform:translateY(-2px);box-shadow:0 5px 12px #0002}
 .grupo-b.on{background:#1f2937;color:#fff;border-color:#1f2937;animation:popOn .25s}
 .grupo-b small{background:#f59e0b;color:#fff;border-radius:999px;padding:0 7px;font-size:11px}
+
+/* v73 — categorias editáveis */
+.grupo-b{border-color:var(--gc,#d6d3d1)}
+.grupo-b.on{background:var(--gc,#1f2937);border-color:var(--gc,#1f2937)}
+.grupo-edit{border-style:dashed;color:#57534e}
+.cat-linha{display:flex;gap:6px;align-items:center;border-left:6px solid;padding:4px 0 4px 8px;border-radius:6px;background:#fafaf9}
+.cat-linha input[type=color]{width:34px;height:34px;border:none;background:none;padding:0;cursor:pointer;flex:none}
+.cat-linha .inp{flex:1;min-width:0}
