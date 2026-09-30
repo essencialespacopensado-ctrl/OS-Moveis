@@ -117,7 +117,7 @@ const STATUS_OS = [
 ];
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
-  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)']]],
+  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
   ['Produção', [['os', 'Ordens de Serviço'], ['cronograma', 'Cronograma'], ['pedidos', 'Peças extras'], ['catalogo', 'Catálogo'], ['excluir', 'Excluir OSs']]],
   ['Compras', [['compras', 'Compras, notas e parceiros']]],
   ['Equipe', [['equipe', 'Equipe e acessos']]],
@@ -130,8 +130,8 @@ const GRUPOS_PADRAO = [
   { v: 'gerente', t: 'Gerente', abas: TODAS_TELAS.filter(x => !['equipe', 'config'].includes(x)) },
   { v: 'financeiro', t: 'Financeiro', abas: ['inicio', 'quadro', 'contratos', 'os', 'compras', 'financeiro', 'contas'] },
   { v: 'compras', t: 'Compras', abas: ['inicio', 'os', 'pedidos', 'catalogo', 'compras'] },
-  { v: 'projetista', t: 'Projetista', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'os', 'cronograma', 'pedidos', 'catalogo'] },
-  { v: 'vendedor', t: 'Vendedor', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'os', 'catalogo'] },
+  { v: 'projetista', t: 'Projetista', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'os', 'cronograma', 'pedidos', 'catalogo', 'amostras'] },
+  { v: 'vendedor', t: 'Vendedor', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'os', 'catalogo', 'amostras'] },
   { v: 'producao', t: 'Produção', abas: ['inicio', 'os', 'cronograma', 'pedidos', 'catalogo'] },
   { v: 'montador', t: 'Montador', abas: ['inicio', 'os', 'cronograma', 'pedidos'] },
 ];
@@ -2356,7 +2356,6 @@ function FinanceiroOS({ sessao, os, toast }) {
     </div>
     <${ComprasOS} sessao=${sessao} os=${os} toast=${toast} soNota=${true} />
     <div class="row" style=${{ gap: '6px' }}>
-      <button class="btn btn-verde" onClick=${() => setNovo({ tipo: 'receber', categoria: 'Cliente — parcela', descricao: 'Parcela do cliente', valor: '', pg: pgNovo() })}>＋ Recebimento do cliente</button>
       <button class="btn btn-danger" onClick=${() => setNovo({ tipo: 'pagar', categoria: 'RT arquiteto', descricao: '', valor: '', pg: pgNovo() })}>＋ Outro custo (RT, frete, terceiro…)</button></div>
     ${novo && html`<div class="card stack">
       <div class="grid2"><input class="inp" placeholder="Descrição" value=${novo.descricao} onInput=${e => setNovo({ ...novo, descricao: e.target.value })} /><input class="inp" inputmode="decimal" placeholder="Valor total (R$)" value=${novo.valor} onInput=${e => setNovo({ ...novo, valor: e.target.value })} /></div>
@@ -2365,10 +2364,62 @@ function FinanceiroOS({ sessao, os, toast }) {
       <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setNovo(null)}>Cancelar</button><button class="btn btn-primary" style=${{ flex: 1 }} onClick=${salvarNovo}>💾 Lançar no financeiro</button></div></div>`}
     ${rec.length > 0 && Grupo('💰 Recebimentos do cliente', rec, '#16a34a')}
     ${pag.length > 0 && Grupo('💸 Contas a pagar desta OS', pag, '#dc2626')}
+    <div class="fo-gt">📦 Amostras e itens do cliente</div>
+    <${Amostras} sessao=${sessao} toast=${toast} os=${os} />
     <div class="fo-gt">🧾 Notas fiscais desta OS (${(notas || []).length})</div>
     ${notas === null ? html`<div class="dim">Carregando…</div>` : !notas.length ? html`<div class="dim">Nenhuma nota lançada nesta OS ainda.</div>` : notas.sort((a, b) => String(b.data).localeCompare(a.data)).map(n => { const ps = pag.filter(x => x.notaId === n.id); return html`<div key=${n.id} class="fo-l">
       <span style=${{ fontSize: '20px' }}>🧾</span><span class="grow"><b>NF ${n.numero || 's/n'} · ${n.fornecedor}</b><small>${[fmtData(n.data), (n.linhas || []).length + ' itens', ps.length ? ps.filter(x => x.pago).length + ' de ' + ps.length + ' pagas' : 'sem pagamento lançado'].join(' · ')}</small></span><b>${brl(numBR(n.total) || (n.linhas || []).reduce((t, l) => t + numBR(l.valorTotal), 0))}</b></div>`; })}
   </div>`;
+}
+
+/* ---------- Amostras: nossas emprestadas + itens que o cliente deixou ---------- */
+function Amostras({ sessao, toast, os }) {
+  const [l, setL] = useState(null), [f, setF] = useState(os ? 'fora' : 'fora'), [novo, setNovo] = useState(null), [oss, setOss] = useState([]);
+  const E = sessao.empresaId, hoje = isoD(new Date());
+  useEffect(() => { const { onSnapshot, query, where } = F().fsMod; const c = col('empresas', E, 'amostras');
+    const a = onSnapshot(os ? query(c, where('osId', '==', os.id)) : c, s => setL(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setL([]));
+    const b = os ? () => {} : onSnapshot(col('empresas', E, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    return () => { a(); b(); }; }, [os?.id]);
+  const fora = (l || []).filter(x => x.tipo === 'nossa' && !x.devolvidoEm), dev = (l || []).filter(x => x.devolvidoEm), cli = (l || []).filter(x => x.tipo === 'cliente' && !x.devolvidoEm);
+  const vis = f === 'fora' ? fora : f === 'cliente' ? cli : dev;
+  const salvar = async () => { const n = novo; if (!n.item.trim()) return toast('Escreva qual amostra/item.'); if (!n.quem.trim()) return toast(n.tipo === 'nossa' ? 'Quem levou?' : 'De qual cliente?');
+    const o = os || oss.find(x => x.id === n.osId);
+    try { await F().fsMod.addDoc(col('empresas', E, 'amostras'), { ...n, item: n.item.trim(), quem: n.quem.trim(), osId: o?.id || '', osCod: o ? numOS(o) : '', criadoEm: nowIso(), por: sessao.nome, devolvidoEm: '' });
+      o && registrar(sessao, o.id, '📦', (n.tipo === 'nossa' ? 'Amostra emprestada: ' : 'Cliente deixou: ') + n.item, n.quem); toast('Registrado.', 'ok'); setNovo(null); } catch (e) { toast(e.message, 'erro'); } };
+  const devolver = async (x) => { let mot = ''; if (x.devolvidoEm) { mot = await pedirMotivo('Desfazer devolução'); if (!mot) return; }
+    try { await F().fsMod.updateDoc(docRef('empresas', E, 'amostras', x.id), { devolvidoEm: x.devolvidoEm ? '' : nowIso(), devolvidoPor: x.devolvidoEm ? '' : sessao.nome }); x.osId && registrar(sessao, x.osId, x.devolvidoEm ? '↺' : '✅', (x.devolvidoEm ? 'Devolução desfeita: ' : x.tipo === 'nossa' ? 'Amostra devolvida: ' : 'Item devolvido ao cliente: ') + x.item, mot || x.quem); } catch (e) { toast(e.message, 'erro'); } };
+  const apagar = async (x) => { const m = await pedirMotivo('Apagar registro', x.item + ' — ' + x.quem); if (!m) return; await F().fsMod.deleteDoc(docRef('empresas', E, 'amostras', x.id)); };
+  const nomeCli = os ? (os.cliente?.nome || '').split(/\s[-–]\s/)[0] : '';
+  const itensAnt = [...new Set((l || []).map(x => x.item))];
+  return html`<div class="stack">
+    <div class="row" style=${{ gap: '6px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+      <div class="seg-mini">${[['fora', '📤 Fora com alguém (' + fora.length + ')'], ['cliente', '📥 Do cliente, com a gente (' + cli.length + ')'], ['dev', '✓ Devolvidas (' + dev.length + ')']].map(([v, t]) => html`<button key=${v} class=${f === v ? 'on' : ''} onClick=${() => setF(v)}>${t}</button>`)}</div>
+      <div class="row" style=${{ gap: '6px' }}>
+        <button class="btn btn-sm btn-primary" onClick=${() => setNovo({ tipo: 'nossa', item: '', quem: nomeCli, contato: '', saiu: hoje, prev: '', obs: '', osId: '' })}>📤 Emprestar amostra</button>
+        <button class="btn btn-sm" onClick=${() => setNovo({ tipo: 'cliente', item: '', quem: nomeCli, contato: '', saiu: hoje, prev: '', obs: '', osId: '' })}>📥 Cliente deixou algo</button></div></div>
+    ${novo && html`<div class="card stack">
+      <b>${novo.tipo === 'nossa' ? '📤 Nossa amostra saindo' : '📥 Item que o cliente deixou aqui'}</b>
+      <div class="grid2">
+        <input class="inp" list="amostras-ant" placeholder=${novo.tipo === 'nossa' ? 'Qual amostra? (ex: chapa Freijó, puxador…)' : 'O quê? (ex: amostra de tecido, pedra, tinta…)'} value=${novo.item} onInput=${e => setNovo({ ...novo, item: e.target.value })} />
+        <input class="inp" placeholder=${novo.tipo === 'nossa' ? 'Quem levou? (cliente, arquiteto…)' : 'Cliente'} value=${novo.quem} onInput=${e => setNovo({ ...novo, quem: e.target.value })} />
+        <input class="inp" placeholder="Telefone / contato (opcional)" value=${novo.contato} onInput=${e => setNovo({ ...novo, contato: e.target.value })} />
+        ${!os && html`<select class="inp" value=${novo.osId} onChange=${e => setNovo({ ...novo, osId: e.target.value })}><option value="">OS ligada (opcional)</option>${oss.slice().sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<option key=${o.id} value=${o.id}>${numOS(o)} ${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</option>`)}</select>`}
+        <div class="field"><span class="lbl">${novo.tipo === 'nossa' ? 'Saiu em' : 'Deixou em'}</span><input class="inp" type="date" value=${novo.saiu} onInput=${e => setNovo({ ...novo, saiu: e.target.value })} /></div>
+        <div class="field"><span class="lbl">${novo.tipo === 'nossa' ? 'Devolver até (opcional)' : 'Devolver ao cliente até (opcional)'}</span><input class="inp" type="date" value=${novo.prev} onInput=${e => setNovo({ ...novo, prev: e.target.value })} /></div>
+      </div>
+      <input class="inp" placeholder="Observação (opcional)" value=${novo.obs} onInput=${e => setNovo({ ...novo, obs: e.target.value })} />
+      <datalist id="amostras-ant">${itensAnt.map(i => html`<option key=${i} value=${i} />`)}</datalist>
+      <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setNovo(null)}>Cancelar</button><button class="btn btn-primary" style=${{ flex: 1 }} onClick=${salvar}>💾 Registrar</button></div></div>`}
+    ${l === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">${f === 'fora' ? 'Nenhuma amostra fora.' : f === 'cliente' ? 'Nada do cliente guardado aqui.' : 'Nenhuma devolução ainda.'}</div>`
+      : vis.sort((a, b) => String(a.prev || '9').localeCompare(String(b.prev || '9')) || String(b.saiu).localeCompare(a.saiu)).map(x => { const atras = !x.devolvidoEm && x.prev && x.prev < hoje; const dias = Math.round((Date.now() - new Date(x.saiu + 'T12:00')) / 864e5); return html`<div key=${x.id} class=${'fo-l' + (atras ? ' atraso' : '') + (x.devolvidoEm ? ' ok' : '')}>
+        <button class=${'dia-ck' + (x.devolvidoEm ? ' on' : '')} title=${x.devolvidoEm ? 'Desfazer' : 'Marcar como devolvida'} onClick=${() => devolver(x)}>${x.devolvidoEm ? '✓' : ''}</button>
+        <span class="grow"><b>${x.tipo === 'nossa' ? '📤' : '📥'} ${x.item}</b><small>${[(x.tipo === 'nossa' ? 'com ' : 'de ') + x.quem, x.contato, x.osCod && !os ? 'OS ' + x.osCod : '', (x.tipo === 'nossa' ? 'saiu ' : 'deixou ') + dm(x.saiu) + (x.devolvidoEm ? '' : ' (' + dias + ' dias)'), x.devolvidoEm ? 'devolvida ' + fmtData(x.devolvidoEm) + (x.devolvidoPor ? ' · ' + x.devolvidoPor : '') : x.prev ? (atras ? '⚠ atrasada — era até ' : 'até ') + dm(x.prev) : '', x.obs].filter(Boolean).join(' · ')}</small></span>
+        <button class="x-btn" onClick=${() => apagar(x)}>✕</button></div>`; })}
+  </div>`;
+}
+function TelaAmostras({ sessao, toast }) {
+  return html`<div class="fade-up stack"><div class="page-head"><div><h2>📦 Amostras</h2><div class="dim">Quem levou nossas amostras, o que já voltou, e o que clientes deixaram aqui.</div></div></div>
+    <div class="card page-card"><${Amostras} sessao=${sessao} toast=${toast} /></div></div>`;
 }
 
 /* ---------- Pedidos (peças extras, terceiros e compras) ---------- */
@@ -5372,7 +5423,7 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'amostras', 'importar', 'config']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
@@ -5380,7 +5431,7 @@ const SECOES = [
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
-const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
+const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config'], [/amostras?/, 'amostras']];
 function comandoTela(q) {
   const t = norm(q);
   if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
@@ -5991,6 +6042,7 @@ function Principal({ sessao, toast }) {
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
     { v: 'contratos', t: 'Contratos', i: '📑' },
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
+    { v: 'amostras', t: 'Amostras', i: '📦' },
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
     { v: 'equipe', t: 'Equipe', i: '👥' },
@@ -6041,6 +6093,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
         ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} toast=${toast} />`}
+        ${aba === 'amostras' && vis('amostras') && html`<${TelaAmostras} sessao=${sessao} toast=${toast} />`}
         ${aba === 'importar' && vis('importar') && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && vis('catalogo') && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && vis('equipe') && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
