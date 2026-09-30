@@ -385,9 +385,16 @@ Extraia do EMITENTE: nome fantasia (ou razão social), razão social, CNPJ, cida
 Extraia número da nota, data de emissão e TODOS os itens com código, quantidade, unidade, valor unitário e valor total do item, e o valor total da nota.
 Classifique cada item em UMA destas categorias: ${(Array.isArray(d.categorias) && d.categorias.length ? d.categorias : ['Chapas', 'Lâminas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Pedras', 'Tecidos', 'Pintura', 'Acessórios', 'Químicos', 'Outros']).join(', ')}.
 ${Array.isArray(d.exemplos) && d.exemplos.length ? 'Use estes EXEMPLOS já classificados pela empresa (siga o mesmo padrão):\n' + d.exemplos.slice(0, 120).map(e => '- ' + e.d + ' => ' + e.c).join('\n') : ''}
-Números com ponto como decimal (ex.: 1234.56). Não invente.
+COMO LER OS ITENS (as notas às vezes vêm confusas, com colunas desalinhadas ou descrição quebrada em 2 linhas):
+- Na tabela de produtos do DANFE as colunas costumam ser: CÓDIGO | DESCRIÇÃO | NCM | CST | CFOP | UN | QUANT | VALOR UNIT | VALOR TOTAL | (desconto) | BC ICMS | VALOR ICMS | VALOR IPI | alíquotas. Ignore NCM, CST, CFOP, bases e impostos.
+- Junte descrições que continuam na linha de baixo. Não crie item para linhas de "informações complementares", frete ou totais.
+- Confira sempre: QUANT × VALOR UNIT ≈ VALOR TOTAL do item (tolerância de centavos). Se não bater, você provavelmente pegou a coluna errada (ex.: valor do ICMS ou alíquota) — procure os números que fecham a conta.
+- A soma dos VALOR TOTAL dos itens deve ficar perto do "VALOR TOTAL DOS PRODUTOS" da nota. Se tiver desconto por item, use o valor líquido.
+- Quantidades podem ter vírgula (ex.: 12,500 m). Unidades comuns: CH, PC, UN, M, M2, RL, KG, CX, PR, JG.
+- Brasileiro: 1.234,56 = mil duzentos e trinta e quatro e 56 centavos. No JSON escreva 1234.56.
+Não invente.
 Responda SOMENTE com JSON:
-{"fornecedor":"","razao":"","cnpj":"","cidade":"","uf":"","endereco":"","numero":"","data":"AAAA-MM-DD","total":0,"itens":[{"codigo":"","descricao":"","categoria":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
+{"fornecedor":"","razao":"","cnpj":"","cidade":"","uf":"","endereco":"","numero":"","data":"AAAA-MM-DD","totalProdutos":0,"total":0,"itens":[{"codigo":"","descricao":"","categoria":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
 
 TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
