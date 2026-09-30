@@ -4788,13 +4788,14 @@ function Assistente({ sessao, osAberta }) {
     const p = pendRef.current; pendRef.current = null; if (!p) return;
     const res = [];
     for (let j = 0; j < p.acoes.length; j++) { marcar(p.i, j, { _st: 'rodando' }); try { const { _st, _msg, ...limpa } = p.acoes[j]; const r = await executarAcao(sessao, limpa); marcar(p.i, j, { _st: 'feita', _msg: r }); res.push(r); } catch (e) { marcar(p.i, j, { _st: 'erro', _msg: e.message }); res.push('não deu: ' + e.message); } }
-    await falar('Pronto. ' + res.join('. ') + '. Mais alguma coisa?');
+    const erros = res.filter(r => r.startsWith('não deu'));
+    if (erros.length) await falar(erros.join('. ')); else if (chamadaRef.current) setFase('ouvindo');
   };
   const processar = async (q) => {
     setOuvido('');
     if (faseRef.current === 'confirmando' && pendRef.current) {
       if (/\b(sim|pode|confirm|aplica|isso|manda|beleza|ok|claro|faz)/i.test(q)) { setFase('pensando'); return aplicarPendentes(); }
-      if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); return falar('Tudo bem, não apliquei. O que mais?'); }
+      if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); setFase('ouvindo'); return; }
       const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
     }
     setFase('pensando');
@@ -4803,17 +4804,20 @@ function Assistente({ sessao, osAberta }) {
     try {
       const contexto = await montarContexto(sessao, osAberta);
       const r = await chamarIA('assistente', { contexto, historico: hist.map(m => ({ role: m.role, content: m.content })) });
-      const navs = (r?.acoes || []).filter(a => NAV_ACOES.includes(a.tipo));
-      for (const a of navs) { try { await executarAcao(sessao, a); } catch (e) { await falar(e.message); } }
-      const acoes = (r?.acoes || []).filter(a => !NAV_ACOES.includes(a.tipo)).map(a => ({ ...a, _st: 'pendente' }));
+      const acoes = (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' }));
       const txt = String(r?.texto || '').replace(/\*\*/g, '');
       const idx = hist.length;
       setMsgs(h => [...h, { role: 'assistant', content: txt || (acoes.length ? 'Preparei estas mudanças.' : ''), acoes }]);
-      if (acoes.length) { pendRef.current = { i: idx, acoes }; await falar((txt ? txt + ' ' : '') + 'Posso aplicar?'); setFase('confirmando'); }
+      if (acoes.length) {
+        pendRef.current = { i: idx, acoes };
+        const t0 = acoes[0].tipo;
+        const perg = ['abrir_aba', 'abrir_os', 'ver_cronograma'].includes(t0) ? 'Abrir?' : t0 === 'imprimir_os' ? 'Imprimir?' : t0 === 'cronograma' ? 'Enviar agora?' : t0 === 'excluir_tarefa' ? 'Excluir agora?' : t0 === 'concluir_tarefa' ? 'Concluir agora?' : 'Aplicar agora?';
+        await falar(perg); setFase('confirmando');
+      }
       else await falar(txt || 'Não entendi, pode repetir?');
     } catch (e) { await falar('Tive um problema: ' + e.message); }
   };
-  const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(true); falar('Oi ' + (sessao.nome || '').split(' ')[0] + ', estou ouvindo. O que você precisa?'); };
+  const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(true); setFase('ouvindo'); falaCh.iniciar(); };
   const desligar = () => { setChamada(false); chamadaRef.current = false; setFase(''); clearTimeout(timerRef.current); bufRef.current = ''; falaCh.parar(); try { window.speechSynthesis.cancel(); } catch {} };
   useEffect(() => () => desligar(), []);
   const marcar = (i, j, patch) => setMsgs(h => h.map((m, k) => k !== i ? m : { ...m, acoes: m.acoes.map((a, l) => l === j ? { ...a, ...patch } : a) }));
