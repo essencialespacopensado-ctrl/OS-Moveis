@@ -1337,3 +1337,7 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @keyframes mmPop{from{opacity:0;transform:scale(.6) translateY(-10px)}to{opacity:1;transform:none}}
 @keyframes mmPulso{0%,100%{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 22%,transparent)}50%{box-shadow:0 0 0 11px color-mix(in srgb,var(--c) 8%,transparent)}}
 @keyframes mmLinha{from{height:0}to{height:22px}}
+.mm-lista{display:flex;flex-direction:column;gap:12px;width:min(720px,100%)}
+.mm-lista .mm-card{width:100%}
+.mm-card.foco{box-shadow:0 0 0 4px var(--c),0 14px 36px color-mix(in srgb,var(--c) 30%,transparent)}
+.mm-ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;line-height:1.45}

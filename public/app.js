@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['115', ['🧠 Mapa: ao tocar em qualquer balão aparecem escritas todas as possibilidades daquele nível (seção, tela e cada função com como fazer, o que muda e onde impacta).']],
   ['114', ['🧠 Manual virou mapa mental: toque em seção → tela → função e veja como fazer, o que muda e onde impacta (com atalhos).']],
   ['113', ['📖 Manual completo em Geral → Manual, com busca.', '❓ Botão "Como funciona" em cada tela, mostrando o manual daquela aba.', '🤖 Lembrete: em caso de dúvida, pergunte ao assistente.']],
   ['112', ['⏳ Ao dar mais dias no cronograma, aparece o alerta de cliente em atraso (e dos clientes empurrados junto), mostrando se passa do prazo de entrega.', '⏩ Quando alguém conclui antes do prazo, o app pergunta se quer adiantar as próximas tarefas dele ou ajudar uma OS atrasada, abatendo dias.', '🔮 Quadro geral → Previsão de finalização: por cliente e por OS, com base no cronograma, compras e parceiros, avisando prazos perto ou em risco.']],
@@ -5515,14 +5516,19 @@ function TelaManual({ abas, irPara }) {
       <div class="mm-nivel"><button class=${'mm-no mm-raiz' + (!sec ? ' ativo' : '')} onClick=${() => { setSec(null); setAba(null); setFn(null); }}>🏢 Gestão Pró</button></div>
       <div class="mm-nivel">${secs.map(([k, t, cor], i) => html`<button key=${k} class=${'mm-no' + (sec === k ? ' ativo' : '') + (sec && sec !== k ? ' apagado' : '')} style=${{ '--c': cor, animationDelay: i * 60 + 'ms' }} onClick=${() => { setSec(k); setAba(null); setFn(null); }}>${t}</button>`)}</div>
       ${S && html`<div class="mm-nivel" key=${'a' + sec}>${S[3].map((a, i) => html`<button key=${a} class=${'mm-no' + (aba === a ? ' ativo' : '') + (aba && aba !== a ? ' apagado' : '')} style=${{ '--c': S[2], animationDelay: i * 60 + 'ms' }} onClick=${() => { setAba(a); setFn(null); }}>${NOMES_ABA[a]} <small>${MAPA[a].length}</small></button>`)}</div>`}
-      ${aba && html`<div class="mm-nivel" key=${'f' + aba}>${MAPA[aba].map((f, i) => html`<button key=${f[0]} class=${'mm-no mm-fn' + (fn === i ? ' ativo' : '') + (fn !== null && fn !== i ? ' apagado' : '')} style=${{ '--c': S ? S[2] : '#64748b', animationDelay: i * 50 + 'ms' }} onClick=${() => setFn(i)}>${f[0]}</button>`)}</div>`}
-      ${F_ && html`<div class="mm-card" key=${aba + fn} style=${{ '--c': S ? S[2] : '#64748b' }}>
-        <div class="mm-card-t">${F_[0]} <small>· ${NOMES_ABA[aba]}</small></div>
-        <div class="mm-bloco"><span>👉 Como fazer</span><p>${F_[1]}</p></div>
-        <div class="mm-bloco"><span>🔄 O que muda</span><p>${F_[2]}</p></div>
-        <div class="mm-bloco"><span>🔗 Onde impacta</span><div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>${F_[3].length ? F_[3].filter(vis).map(x => html`<button key=${x} class="mm-link" onClick=${() => ir(x)}>${NOMES_ABA[x]} →</button>`) : html`<small class="dim">Só nesta tela.</small>`}</div></div>
-        <button class="btn btn-primary btn-sm" style=${{ alignSelf: 'flex-start' }} onClick=${() => irPara(aba)}>🚀 Ir para ${NOMES_ABA[aba]}</button>
-      </div>`}
+      ${aba && html`<div class="mm-nivel" key=${'f' + aba}>${MAPA[aba].map((f, i) => html`<button key=${f[0]} class=${'mm-no mm-fn' + (fn === i ? ' ativo' : '') + (fn !== null && fn !== i ? ' apagado' : '')} style=${{ '--c': S ? S[2] : '#64748b', animationDelay: i * 50 + 'ms' }} onClick=${() => { setFn(i); setTimeout(() => document.getElementById('mmf-' + i)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60); }}>${f[0]}</button>`)}</div>`}
+      ${aba ? html`<div class="mm-lista" key=${'l' + aba}>${MAPA[aba].map((f, i) => html`<div key=${f[0]} id=${'mmf-' + i} class=${'mm-card' + (fn === i ? ' foco' : '')} style=${{ '--c': S ? S[2] : '#64748b', animationDelay: i * 70 + 'ms' }}>
+        <div class="mm-card-t">${f[0]} <small>· ${NOMES_ABA[aba]}</small></div>
+        <div class="mm-bloco"><span>👉 Como fazer</span><p>${f[1]}</p></div>
+        <div class="mm-bloco"><span>🔄 O que muda</span><p>${f[2]}</p></div>
+        <div class="mm-bloco"><span>🔗 Onde impacta</span><div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>${f[3].filter(vis).length ? f[3].filter(vis).map(x => html`<button key=${x} class="mm-link" onClick=${() => ir(x)}>${NOMES_ABA[x]} →</button>`) : html`<small class="dim">Só nesta tela.</small>`}</div></div>
+      </div>`)}<button class="btn btn-primary" style=${{ alignSelf: 'center' }} onClick=${() => irPara(aba)}>🚀 Ir para ${NOMES_ABA[aba]}</button></div>`
+      : S ? html`<div class="mm-lista" key=${'s' + sec}>${S[3].map((a, i) => html`<div key=${a} class="mm-card" style=${{ '--c': S[2], animationDelay: i * 70 + 'ms' }}>
+        <div class="mm-card-t" style=${{ cursor: 'pointer' }} onClick=${() => { setAba(a); setFn(null); }}>${NOMES_ABA[a]} <small>· toque para detalhar</small></div>
+        <ul class="mm-ul">${MAPA[a].map(f => html`<li key=${f[0]}><b>${f[0]}:</b> ${f[1]}</li>`)}</ul></div>`)}</div>`
+      : html`<div class="mm-lista">${secs.map(([k, t, cor, vs], i) => html`<div key=${k} class="mm-card" style=${{ '--c': cor, animationDelay: i * 70 + 'ms' }}>
+        <div class="mm-card-t" style=${{ cursor: 'pointer' }} onClick=${() => setSec(k)}>${t}</div>
+        <ul class="mm-ul">${vs.map(a => html`<li key=${a}><b>${NOMES_ABA[a]}:</b> ${MAPA[a].map(f => f[0]).join(' · ')}</li>`)}</ul></div>`)}</div>`}
     </div>
   </div>`;
 }
