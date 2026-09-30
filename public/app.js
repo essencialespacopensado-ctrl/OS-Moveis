@@ -3534,7 +3534,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     return () => u.forEach(f => f && f());
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
-  const [modoV, setModoV] = useState('temas');
+  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'temas'; });
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
   const [todas, setTodas] = useState([]);
@@ -4630,7 +4630,8 @@ function MinhaConta({ sessao, fechar, toast }) {
    Assistente de IA (chat flutuante)
    ========================================================= */
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
-const TIPO_ACAO = { status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma' };
+ const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
+const TIPO_ACAO = { abrir_aba: '🧭 Abrir tela', abrir_os: '📋 Abrir OS', ver_cronograma: '📅 Ver no cronograma', imprimir_os: '🖨 Imprimir OS', status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma' };
 function descAcao(a) {
   const x = { ...a }; delete x.tipo; delete x.os;
   return (a.os ? 'OS ' + a.os + ' · ' : '') + Object.entries(x).map(([k, v]) => k + ': ' + (/^\d{4}-\d\d-\d\d$/.test(String(v)) ? dm(v) : v)).join(' · ');
@@ -4645,6 +4646,14 @@ async function executarAcao(sessao, a) {
   const tarDaOS = () => tars.filter(t => t.osId === o.id && t.status !== 'concluida').sort((x, y) => x.inicio.localeCompare(y.inicio))[0];
   const ia = '🤖 ';
   switch (a.tipo) {
+    case 'abrir_aba': { if (!window.__irPara) throw new Error('Não consegui navegar.'); window.__irPara(a.aba); return 'Abri ' + a.aba; }
+    case 'abrir_os': {
+      window.__abrirOS(o.id); window.__modoFicha = a.modo || 'temas';
+      if (a.modo === 'editar') setTimeout(() => window.__editarOS && window.__editarOS(o.id), 400);
+      return 'Abri a OS ' + numOS(o);
+    }
+    case 'imprimir_os': { window.__abrirOS(o.id); window.__modoFicha = 'folha'; setTimeout(() => { document.body.classList.add('imp-ficha'); window.print(); document.body.classList.remove('imp-ficha'); }, 1500); return 'Abrindo a impressão da ' + numOS(o); }
+    case 'ver_cronograma': { const t = tarDaOS(); if (!t) throw new Error('A OS ' + numOS(o) + ' ainda não está no cronograma.'); const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; window.__irCronograma(d, { p: norm(t.pessoa), d }); return 'Mostrando a ' + numOS(o) + ' no cronograma'; }
     case 'status': {
       const st = STATUS_OS.find(x => x.v === a.status || norm(x.t).includes(norm(a.status))); if (!st) throw new Error('Etapa desconhecida: ' + a.status);
       await updateDoc(refO, { status: st.v, statusHist: [...(o.statusHist || []), { st: st.v, em: nowIso(), quem: sessao.nome + ' (IA)' }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
@@ -4746,7 +4755,10 @@ function Assistente({ sessao, osAberta }) {
     try {
       const contexto = await montarContexto(sessao, osAberta);
       const r = await chamarIA('assistente', { contexto, historico: hist });
-      setMsgs(h => [...h, { role: 'assistant', content: String(r?.texto || '').replace(/\*\*/g, '') || (r?.acoes?.length ? 'Preparei estas mudanças. Confira e aplique:' : ''), acoes: (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' })) }]);
+      const navs = (r?.acoes || []).filter(a => NAV_ACOES.includes(a.tipo));
+      const muds = (r?.acoes || []).filter(a => !NAV_ACOES.includes(a.tipo));
+      setMsgs(h => [...h, { role: 'assistant', content: String(r?.texto || '').replace(/\*\*/g, '') || (muds.length ? 'Preparei estas mudanças. Confira e aplique:' : ''), acoes: muds.map(a => ({ ...a, _st: 'pendente' })) }]);
+      for (const a of navs) { try { await executarAcao(sessao, a); } catch (e) { setErro(e.message); } }
     } catch (e) { setErro(e.message); }
     setPensando(false);
   };
@@ -4758,16 +4770,19 @@ function Assistente({ sessao, osAberta }) {
   const bufRef = useRef(''); const timerRef = useRef(null); const faseRef = useRef(''); faseRef.current = fase;
   const pendRef = useRef(null); const msgsRef = useRef(msgs); msgsRef.current = msgs;
   const chamadaRef = useRef(false); chamadaRef.current = chamada;
-  const falaCh = useFala({ onFinal: t => { if (faseRef.current === 'falando') return; bufRef.current = (bufRef.current + ' ' + t).trim(); setOuvido(bufRef.current); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => { const q = bufRef.current; bufRef.current = ''; if (q) processar(q); }, 1300); }, onInterim: t => { if (faseRef.current !== 'falando' && t) setOuvido((bufRef.current + ' ' + t).trim()); } });
+  const falandoTxt = useRef('');
+  const eco = (t) => { const n = norm(t); return !n || (falandoTxt.current && falandoTxt.current.includes(n)); };
+  const interromper = () => { try { window.speechSynthesis.cancel(); } catch {} falandoTxt.current = ''; setFase('ouvindo'); };
+  const falaCh = useFala({ onFinal: t => { if (faseRef.current === 'falando') { if (eco(t)) return; interromper(); } if (faseRef.current === 'pensando') return; bufRef.current = (bufRef.current + ' ' + t).trim(); setOuvido(bufRef.current); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => { const q = bufRef.current; bufRef.current = ''; if (q) processar(q); }, 1300); }, onInterim: t => { if (!t) return; if (faseRef.current === 'falando') { if (t.trim().split(/\s+/).length < 2 || eco(t)) return; interromper(); } setOuvido((bufRef.current + ' ' + t).trim()); } });
   const falar = (txt) => new Promise(res => {
     const sy = window.speechSynthesis; if (!sy || !txt) { if (chamadaRef.current) { setFase('ouvindo'); falaCh.iniciar(); } return res(); }
-    falaCh.parar(); setFase('falando');
+    setFase('falando'); if (!falaCh.ouvindo) falaCh.iniciar();
     const u = new SpeechSynthesisUtterance(String(txt).replace(/[*#_`>]/g, '').slice(0, 600));
-    u.lang = 'pt-BR'; const v = sy.getVoices().find(x => /pt-BR/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.08;
+    u.lang = 'pt-BR'; const v = sy.getVoices().find(x => /pt-BR/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.35; falandoTxt.current = norm(txt);
     let feito = false;
-    const fim = () => { if (feito) return; feito = true; res(); if (chamadaRef.current) { setFase('ouvindo'); setTimeout(() => falaCh.iniciar(), 250); } };
+    const fim = () => { if (feito) return; feito = true; falandoTxt.current = ''; res(); if (chamadaRef.current) { if (faseRef.current === 'falando') setFase('ouvindo'); } };
     u.onend = fim; u.onerror = fim; try { sy.cancel(); sy.resume(); sy.speak(u); } catch { fim(); }
-    setTimeout(fim, Math.min(20000, 1800 + String(txt).length * 80));
+    setTimeout(fim, Math.min(20000, 1500 + String(txt).length * 60));
   });
   const aplicarPendentes = async () => {
     const p = pendRef.current; pendRef.current = null; if (!p) return;
@@ -4782,13 +4797,15 @@ function Assistente({ sessao, osAberta }) {
       if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); return falar('Tudo bem, não apliquei. O que mais?'); }
       const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
     }
-    setFase('pensando'); falaCh.parar();
+    setFase('pensando');
     const hist = [...msgsRef.current, { role: 'user', content: q }];
     setMsgs(hist);
     try {
       const contexto = await montarContexto(sessao, osAberta);
       const r = await chamarIA('assistente', { contexto, historico: hist.map(m => ({ role: m.role, content: m.content })) });
-      const acoes = (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' }));
+      const navs = (r?.acoes || []).filter(a => NAV_ACOES.includes(a.tipo));
+      for (const a of navs) { try { await executarAcao(sessao, a); } catch (e) { await falar(e.message); } }
+      const acoes = (r?.acoes || []).filter(a => !NAV_ACOES.includes(a.tipo)).map(a => ({ ...a, _st: 'pendente' }));
       const txt = String(r?.texto || '').replace(/\*\*/g, '');
       const idx = hist.length;
       setMsgs(h => [...h, { role: 'assistant', content: txt || (acoes.length ? 'Preparei estas mudanças.' : ''), acoes }]);
@@ -5186,6 +5203,8 @@ function Principal({ sessao, toast }) {
   const abrirDireto = (id) => { setFicha(null); setOsAberta(id); setAba('os'); window.scrollTo(0, 0); };
   const abrirOS = (id) => setFicha(id);
   window.__abrirOS = abrirOS;
+  window.__irPara = (v) => { setFicha(null); irPara(v); };
+  window.__editarOS = (id) => abrirDireto(id);
   const [cronoK, setCronoK] = useState(0);
   window.__irCronograma = (d, foco) => { window.__semanaIr = d || null; window.__focoAgenda = foco || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
   const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
