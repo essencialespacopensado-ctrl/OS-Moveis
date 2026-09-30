@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['107', ['📋 Folha de compras padrão aparece sempre na aba 🛒 Compras da OS, mesmo sem itens.']],
   ['106', ['⚡ Quadro geral → "Agora em andamento": tudo que está sendo feito hoje e por quem ao mesmo tempo (marcenaria, serralheria, vidros, pintura, terceirizados). Veja por OS ou por quem.']],
   ['105', ['📅 Enviar ao cronograma: escolha 👷 Internos (equipe cadastrada) ou 🤝 Terceirizados (parceiros) e toque no nome.']],
@@ -2772,7 +2773,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setPrev(null)}>Cancelar</button><button class="btn btn-verde" style=${{ flex: 1 }} onClick=${confirmar}>✓ Colocar ${prev.itens.filter(i => i.ok).length} itens na folha</button></div>`;
   return html`
     <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🛒 Folha de compras</div>
-      ${itens.length > 0 && html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
+      ${html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
     <div class="grid2">
       <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = true; inp.current?.click(); }}>${lendo && importar.det !== false ? lendo : '📐 Levantar do detalhamento do arquiteto'}</button>
       <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = false; inp.current?.click(); }}>📥 Importar folha do PCP (Dinabox)</button>
@@ -2839,6 +2840,8 @@ function ImpressaoCompras({ os, doc, empresa }) {
   return html`<div class="po" style=${varsCores(cor)}>
     <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">${doc?.parceiro ? 'Pedido de compra' : 'Folha de compras'}</div>${doc?.parceiro ? html`<div class="po-sub">Fornecedor: <b>${doc.parceiro}</b></div>` : ''}<div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div></div>
       <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${new Date().toLocaleDateString('pt-BR')}${doc?.origem ? ' · ' + doc.origem : ''}</div></div></div>
+    ${!itens.length && html`<div class="po-amb"><div class="po-amb-t"><span>—</span>Itens</div><table><thead><tr><th style=${{ width: '46px' }}>Receb.</th><th>Descrição</th><th style=${{ width: '11%' }}>Qtd</th><th style=${{ width: '11%' }}>Comprar / estoque</th><th style=${{ width: '18%' }}>Comprado com</th><th style=${{ width: '12%' }}>Prazo entrega</th></tr></thead>
+      <tbody>${Array.from({ length: 18 }, (_, k) => html`<tr key=${k} style=${{ height: '28px' }}><td class="c"><span class="caixa"></span></td><td></td><td></td><td class="c">☐ C  ☐ E</td><td></td><td></td></tr>`)}</tbody></table></div>`}
     ${CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
       <div key=${c} class="po-amb"><div class="po-amb-t"><span>${l.length}</span>${c}</div>
         <table><thead><tr><th style=${{ width: '46px' }}>Receb.</th><th>Descrição</th><th style=${{ width: '11%' }}>Qtd</th><th style=${{ width: '11%' }}>Comprar / estoque</th><th style=${{ width: '18%' }}>Comprado com</th><th style=${{ width: '12%' }}>Prazo entrega</th></tr></thead>
