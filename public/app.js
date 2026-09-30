@@ -4632,6 +4632,16 @@ function MinhaConta({ sessao, fechar, toast }) {
    ========================================================= */
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
+/* Comandos de tela resolvidos na hora, sem esperar a IA */
+const TELAS_VOZ = [[/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
+function comandoTela(q) {
+  const t = norm(q);
+  if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
+  if (!/\b(vamos|vai|vá|va|abre|abrir|abra|volta|voltar|ir|mostra|mostrar|leva|entra|entrar)\b/.test(t)) return null;
+  if (/\b\d{2}[.,]?\d{2,3}\b|\bos \d/.test(t)) return null;
+  for (const [re, v] of TELAS_VOZ) if (re.test(t)) { window.__irPara && window.__irPara(v); return v; }
+  return null;
+}
 const TIPO_ACAO = { abrir_aba: '🧭 Abrir tela', abrir_os: '📋 Abrir OS', ver_cronograma: '📅 Ver no cronograma', imprimir_os: '🖨 Imprimir OS', status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma' };
 function descAcao(a) {
   const x = { ...a }; delete x.tipo; delete x.os;
@@ -4755,6 +4765,7 @@ function Assistente({ sessao, osAberta }) {
     if (!q || pensando) return;
     fala.parar();
     setErro(''); setTexto(''); setInterim('');
+    if (comandoTela(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); return; }
     const hist = [...msgs, { role: 'user', content: q }];
     setMsgs(hist);
     setPensando(true);
@@ -4804,6 +4815,7 @@ function Assistente({ sessao, osAberta }) {
       if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); setFase('ouvindo'); return; }
       const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
     }
+    if (comandoTela(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); setFase('ouvindo'); return; }
     setFase('pensando');
     const hist = [...msgsRef.current, { role: 'user', content: q }];
     setMsgs(hist);
@@ -5214,6 +5226,7 @@ function Principal({ sessao, toast }) {
   const abrirOS = (id) => setFicha(id);
   window.__abrirOS = abrirOS;
   window.__irPara = (v) => { setFicha(null); irPara(v); };
+  window.__fecharFicha = () => setFicha(null);
   window.__editarOS = (id) => abrirDireto(id);
   const [cronoK, setCronoK] = useState(0);
   window.__irCronograma = (d, foco) => { window.__semanaIr = d || null; window.__focoAgenda = foco || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
