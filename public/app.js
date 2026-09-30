@@ -2488,7 +2488,7 @@ function ComprasOS({ sessao, os, toast }) {
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
     : modo === 'etapa' ? [['⚡ Pré-pedido (comprar já)', itens.filter(i => i.etapa === 'pre')], ['📦 Pedido principal', itens.filter(i => i.etapa !== 'pre')]].filter(([, l]) => l.length)
-    : CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length);
+    : [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length);
   const feitos = itens.filter(i => i.comprado).length;
   if (prev) return html`
     <div class="sheet-t">📥 Conferir importação</div>
@@ -4401,6 +4401,25 @@ function ImpressaoOS({ os, empresa }) {
 
 /* ---------- Compras (visão geral de todas as OSs) ---------- */
 const semAcento = (t) => norm(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+/* Categorias aprendidas pelas notas modelo + cadastro automático de parceiros por CNPJ */
+const catsEmpresa = (cfg) => [...new Set([...(cfg?.categoriasCompra || CAT_COMPRA)])];
+function categoriaPorRegra(regras, desc) { let best = null, sc = 0; (regras || []).forEach(r => { const p = parecido(desc, r.d); if (p > sc) { sc = p; best = r; } }); return sc >= 0.6 ? best.c : ''; }
+const raizCnpj = (c) => String(c || '').replace(/\D/g, '').slice(0, 8);
+function mesclarParceiro(lista, nf) {
+  const l = [...(lista || [])]; const raiz = raizCnpj(nf.cnpj);
+  const primeira = (n) => norm(n).split(' ').filter(w => w.length > 2)[0] || norm(n);
+  let k = l.findIndex(p => raiz && p.cnpjRaiz === raiz);
+  if (k < 0) k = l.findIndex(p => primeira(p.nome) && primeira(p.nome) === primeira(nf.fornecedor));
+  const unidade = { cnpj: nf.cnpj || '', cidade: nf.cidade || '', uf: nf.uf || '', endereco: nf.endereco || '' };
+  const cats = [...new Set(nf.linhas.map(x => x.categoria).filter(Boolean))];
+  if (k < 0) { l.push({ nome: nf.fornecedor, razao: nf.razao || '', esp: cats.join(', '), cnpjRaiz: raiz, unidades: nf.cnpj ? [unidade] : [], categorias: cats, desde: nowIso() }); return { lista: l, novo: true }; }
+  const p = { ...l[k], unidades: [...(l[k].unidades || [])], categorias: [...new Set([...(l[k].categorias || []), ...cats])] };
+  if (raiz && !p.cnpjRaiz) p.cnpjRaiz = raiz;
+  const novaUni = nf.cnpj && !p.unidades.some(u => u.cnpj.replace(/\D/g, '') === String(nf.cnpj).replace(/\D/g, ''));
+  if (novaUni) p.unidades.push(unidade);
+  p.esp = p.categorias.join(', ');
+  l[k] = p; return { lista: l, novo: false, novaUni };
+}
 function parecido(a, b) { const A = new Set(semAcento(a).split(' ').filter(w => w.length > 2)), B = new Set(semAcento(b).split(' ').filter(w => w.length > 2)); if (!A.size || !B.size) return 0; let n = 0; A.forEach(w => { if (B.has(w)) n++; }); return n / Math.min(A.size, B.size); }
 function TelaComprasGeral({ sessao, toast }) {
   const [docs, setDocs] = useState(null);
@@ -4421,7 +4440,11 @@ function TelaComprasGeral({ sessao, toast }) {
   const salvarItem = async (osId, ni) => { const d = docs.find(x => x.id === osId); if (!d) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'compras', osId), { itens: d.itens.map(x => x.id === ni.id ? ni : x), atualizadoEm: nowIso() }); };
   const [itemAb, setItemAb] = useState(null);
   const [parceiros, setParceiros] = useState([]);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => setParceiros(d.data()?.parceirosLista || PARC_PADRAO), () => {}), []);
+  const [cfgC, setCfgC] = useState({});
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { setParceiros(d.data()?.parceirosLista || PARC_PADRAO); setCfgC(d.data() || {}); }, () => {}), []);
+  const cats = catsEmpresa(cfgC); const regras = cfgC.regrasCategoria || [];
+  const [modelo, setModelo] = useState(false);
+  const [novaCat, setNovaCat] = useState('');
   // ranking dos parceiros: orçamentos comparados + notas
   const rank = {}; const add = (f) => (rank[f] = rank[f] || { nome: f, orcs: 0, vitorias: 0, economia: 0, compras: 0, gasto: 0, atrasos: 0, entregas: 0 });
   itens.forEach(i => { const o = (i.orcs || []).filter(x => numBR(x.valor) > 0); if (o.length >= 2) { const min = Math.min(...o.map(x => numBR(x.valor))), med = o.reduce((n, x) => n + numBR(x.valor), 0) / o.length; o.forEach(x => { const r = add(x.forn); r.orcs++; if (numBR(x.valor) === min) { r.vitorias++; r.economia += med ? (med - min) / med : 0; } }); }
@@ -4434,9 +4457,11 @@ function TelaComprasGeral({ sessao, toast }) {
     if (!file) return; setLendoNf('Lendo ' + file.name + '…');
     try {
       const r = await extrairArquivo(file); setLendoNf('A IA está lendo a nota…');
-      const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0 }, r.imagens || []);
+      const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0, categorias: cats, exemplos: regras.slice(-120) }, r.imagens || []);
+      (res.itens || []).forEach(li => { li.categoria = categoriaPorRegra(regras, li.descricao) || (cats.includes(li.categoria) ? li.categoria : 'Outros'); });
       const linhas = (res.itens || []).map(li => { let best = null, sc = 0; itens.filter(i => i._st !== 'recebido').forEach(i => { let p = parecido(li.descricao, i.descricao); if (i.parceiro && norm(res.fornecedor).includes(norm(i.parceiro).split(' ')[0])) p += .2; if (p > sc) { sc = p; best = i; } }); return { ...li, osId: best && sc >= .4 ? best.osId : '', itemId: best && sc >= .4 ? best.id : '' }; });
-      setNf({ arquivo: file.name, fornecedor: res.fornecedor || '', cnpj: res.cnpj || '', numero: res.numero || '', data: res.data || hoje, total: numBR(res.total), linhas });
+      if (lerNf.modelo) { lerNf.modelo = false; setModelo({ arquivo: file.name, fornecedor: res.fornecedor || '', linhas: (res.itens || []).map(li => ({ descricao: li.descricao, categoria: li.categoria })) }); setLendoNf(''); return; }
+      setNf({ arquivo: file.name, fornecedor: res.fornecedor || '', razao: res.razao || '', cidade: res.cidade || '', uf: res.uf || '', endereco: res.endereco || '', cnpj: res.cnpj || '', numero: res.numero || '', data: res.data || hoje, total: numBR(res.total), linhas });
     } catch (e) { toast('Não li a nota: ' + e.message, 'erro'); }
     setLendoNf('');
   };
@@ -4451,14 +4476,16 @@ function TelaComprasGeral({ sessao, toast }) {
           const v = numBR(l.valorTotal) || numBR(l.valorUnit) * numBR(l.qtd);
           const k = lista.findIndex(x => x.id === l.itemId);
           if (k >= 0) lista[k] = { ...lista[k], st: 'recebido', recebido: true, comprado: true, recebidoEm: nowIso(), parceiro: nf.fornecedor, valor: numBR(lista[k].valor && lista[k].st === 'recebido' ? lista[k].valor : 0) + v, nf: nf.numero, valorUnit: numBR(l.valorUnit) };
-          else lista.push({ id: rand(6), categoria: 'Outros', descricao: l.descricao, qtd: l.qtd, unidade: l.unidade, st: 'recebido', recebido: true, comprado: true, recebidoEm: nowIso(), parceiro: nf.fornecedor, valor: v, valorUnit: numBR(l.valorUnit), nf: nf.numero, etapa: 'pedido' });
+          else lista.push({ id: rand(6), categoria: l.categoria || 'Outros', descricao: l.descricao, qtd: l.qtd, unidade: l.unidade, st: 'recebido', recebido: true, comprado: true, recebidoEm: nowIso(), parceiro: nf.fornecedor, valor: v, valorUnit: numBR(l.valorUnit), nf: nf.numero, etapa: 'pedido' });
         });
         await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'compras', osId), { osId, osCod: o ? numOS(o) : d?.osCod || '', cliente: o?.cliente?.nome || d?.cliente || '', itens: lista, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }, { merge: true });
         registrar(sessao, osId, '🧾', 'Nota fiscal ' + nf.numero + ' — ' + nf.fornecedor, ls.length + ' itens · ' + brl(ls.reduce((n, l) => n + (numBR(l.valorTotal) || 0), 0)));
       }
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'notas'), { ...nf, criadoEm: nowIso(), por: sessao.nome });
-      if (nf.fornecedor && !parceiros.some(p => norm(p.nome) === norm(nf.fornecedor))) await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: [...parceiros, { nome: nf.fornecedor, esp: '' }] });
-      toast('Nota lançada e itens precificados.', 'ok'); setNf(null);
+      const mp = nf.fornecedor ? mesclarParceiro(parceiros, nf) : null;
+      const novasRegras = [...regras.filter(r => !nf.linhas.some(l => norm(l.descricao) === norm(r.d))), ...nf.linhas.filter(l => l.categoria).map(l => ({ d: l.descricao, c: l.categoria }))].slice(-600);
+      await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { ...(mp ? { parceirosLista: mp.lista } : {}), regrasCategoria: novasRegras });
+      toast('Nota lançada e itens precificados.' + (mp?.novo ? ' Parceiro novo cadastrado: ' + nf.fornecedor + '.' : mp?.novaUni ? ' Nova unidade de ' + nf.fornecedor + ' (' + (nf.cidade || nf.cnpj) + ') cadastrada.' : ''), 'ok'); setNf(null);
     } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
   };
   const osAbrir = abrir && oss.find(o => o.id === abrir);
@@ -4472,7 +4499,7 @@ function TelaComprasGeral({ sessao, toast }) {
       <button class=${filtro === 'pre' ? 'on' : ''} style=${{ '--c': '#7c3aed' }} onClick=${() => setFiltro(filtro === 'pre' ? 'abertos' : 'pre')}><b>${cont(i => i.etapa === 'pre' && i._st !== 'recebido')}</b><small>⚡ Pré-pedido</small></button>
       <button class=${filtro === 'atrasados' ? 'on' : ''} style=${{ '--c': '#dc2626' }} onClick=${() => setFiltro(filtro === 'atrasados' ? 'abertos' : 'atrasados')}><b>${cont(i => i._st === 'pedido' && i.previsao && i.previsao < hoje)}</b><small>Entrega atrasada</small></button>
     </div>
-    <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['itens', '📋 Itens'], ['parceiros', '🏆 Melhores parceiros'], ['notas', '🧾 Notas fiscais']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['itens', '📋 Itens'], ['parceiros', '🏆 Melhores parceiros'], ['cadastro', '🏢 Parceiros'], ['notas', '🧾 Notas fiscais'], ['categorias', '🗂 Categorias']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
     ${aba === 'itens' && html`
       <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
         <div class="seg-mini">${[['abertos', 'Em aberto'], ['todos', 'Todos']].map(([k, t]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
@@ -4494,6 +4521,29 @@ function TelaComprasGeral({ sessao, toast }) {
         <span style=${{ flex: 1 }}><b>${r.nome}</b><small>${r.orcs ? r.vitorias + ' de ' + r.orcs + ' orçamentos com melhor preço' + (r.vitorias ? ' · economia média ' + Math.round(r.economia / r.vitorias * 100) + '%' : '') : 'sem orçamentos comparados'}${r.entregas ? ' · ' + (r.entregas - r.atrasos) + '/' + r.entregas + ' entregas no prazo' : ''}</small></span>
         <span class="dim">${r.compras} compras · ${brl(r.gasto)}</span></div>`)}
     </div>`}
+    ${aba === 'cadastro' && html`<div class="card page-card stack">
+      <div class="dim">Cadastrados sozinhos a cada nota fiscal. Mesma empresa em unidades diferentes (outro CNPJ da mesma rede) fica junta.</div>
+      ${!parceiros.length ? html`<div class="vazio dim">Nenhum parceiro ainda.</div>` : parceiros.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map(p => html`<div key=${p.nome} class="parc-card">
+        <div class="row" style=${{ justifyContent: 'space-between' }}><b>🏢 ${p.nome}</b>${p.cnpjRaiz ? html`<small class="dim">rede ${p.cnpjRaiz}</small>` : ''}</div>
+        ${(p.categorias || []).length > 0 && html`<div class="tm-chips">${p.categorias.map(c => html`<span key=${c}>${ICO_CAT[c] || '📦'} ${c}</span>`)}</div>`}
+        ${(p.unidades || []).map((u, j) => html`<div key=${j} class="dim" style=${{ fontSize: '12px' }}>📍 ${u.cidade ? u.cidade + '/' + u.uf : 'unidade'} · CNPJ ${u.cnpj}${u.endereco ? ' · ' + u.endereco : ''}</div>`)}
+      </div>`)}
+    </div>`}
+    ${aba === 'categorias' && html`<div class="card page-card stack">
+      <div class="dim">As categorias de material vêm das <b>notas modelo</b>: envie uma nota, confira a categoria de cada item e salve. O app aprende e, nas próximas notas, separa sozinho.</div>
+      <button class="btn btn-grande btn-verde" disabled=${!!lendoNf} onClick=${() => { lerNf.modelo = true; inpNf.current?.click(); }}>${lendoNf || '📥 Enviar nota modelo'}</button>
+      <div class="tm-chips">${cats.map(c => html`<span key=${c}>${ICO_CAT[c] || '📦'} ${c} <small class="dim">${regras.filter(r => r.c === c).length}</small> ${!CAT_COMPRA.includes(c) ? html`<button class="x-btn" onClick=${() => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { categoriasCompra: cats.filter(x => x !== c) })}>✕</button>` : ''}</span>`)}</div>
+      <div class="row" style=${{ gap: '5px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Nova categoria (ex: Colas e químicos)" value=${novaCat} onInput=${e => setNovaCat(e.target.value)} />
+        <button class="btn btn-sm btn-primary" onClick=${async () => { const n = novaCat.trim(); if (!n || cats.includes(n)) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { categoriasCompra: [...cats, n] }); setNovaCat(''); }}>＋ Criar</button></div>
+      <div class="dim" style=${{ fontSize: '12px' }}>${regras.length} itens de nota já aprendidos.</div>
+    </div>`}
+    ${modelo && ReactDOM.createPortal(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(700px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🗂 Nota modelo — ${modelo.fornecedor}</div><button class="x-btn" onClick=${() => setModelo(false)}>✕</button></div>
+      <div class="dim">Confira a categoria de cada item. Isso vira o padrão para as próximas notas.</div>
+      <div class="nf-linhas">${modelo.linhas.map((l, k) => html`<div key=${k} class="nf-l"><div><b>${l.descricao}</b></div>
+        <select class="inp inp-sm" value=${l.categoria} onChange=${e => setModelo({ ...modelo, linhas: modelo.linhas.map((x, j) => j === k ? { ...x, categoria: e.target.value } : x) })}>${cats.map(c => html`<option key=${c}>${c}</option>`)}</select></div>`)}</div>
+      <button class="btn btn-grande btn-verde btn-block" onClick=${async () => { const nr = [...regras.filter(r => !modelo.linhas.some(l => norm(l.descricao) === norm(r.d))), ...modelo.linhas.map(l => ({ d: l.descricao, c: l.categoria }))].slice(-600); await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { regrasCategoria: nr }); toast(modelo.linhas.length + ' itens aprendidos.', 'ok'); setModelo(false); }}>💾 Salvar como modelo</button>
+    </div></div>`, document.body)}
     ${aba === 'notas' && html`<div class="card page-card stack">
       ${!notas.length ? html`<div class="vazio dim">Nenhuma nota lançada. Use 🧾 Lançar nota fiscal.</div>` : notas.sort((a, b) => String(b.data).localeCompare(String(a.data))).map(n => html`<div key=${n.id} class="fl-i"><span style=${{ flex: 1 }}><b>NF ${n.numero || '—'}</b> · ${n.fornecedor}<small> · ${n.data ? n.data.split('-').reverse().join('/') : ''} · ${(n.linhas || []).length} itens</small></span><b>${brl(n.total)}</b></div>`)}
     </div>`}
@@ -4503,9 +4553,11 @@ function TelaComprasGeral({ sessao, toast }) {
         <div class="field"><span class="lbl">Fornecedor</span><input class="inp" value=${nf.fornecedor} onInput=${e => setNf({ ...nf, fornecedor: e.target.value })} /></div>
         <div class="field"><span class="lbl">Nº da nota · data</span><div class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}><input class="inp" value=${nf.numero} onInput=${e => setNf({ ...nf, numero: e.target.value })} /><input class="inp" type="date" value=${nf.data} onInput=${e => setNf({ ...nf, data: e.target.value })} /></div></div>
       </div>
-      <div class="dim">A IA já ligou cada item ao material parecido das OSs. Confira e troque se precisar. Itens sem OS não entram em nenhuma.</div>
+      ${nf.cnpj && html`<div class="dim">🏢 ${nf.razao || nf.fornecedor} · CNPJ ${nf.cnpj}${nf.cidade ? ' · ' + nf.cidade + '/' + nf.uf : ''} ${(() => { const r = raizCnpj(nf.cnpj); const p = parceiros.find(x => r && x.cnpjRaiz === r); return p ? html`<b style=${{ color: '#15803d' }}>· parceiro já cadastrado${p.unidades?.some(u => u.cnpj.replace(/\D/g, '') === nf.cnpj.replace(/\D/g, '')) ? '' : ' (unidade nova)'}</b>` : html`<b style=${{ color: '#2563eb' }}>· parceiro novo, será cadastrado</b>`; })()}</div>`}
+      <div class="dim">A IA já ligou cada item ao material parecido das OSs e separou por categoria. Confira e troque se precisar — o app aprende com as suas correções.</div>
       <div class="nf-linhas">${nf.linhas.map((l, k) => { const doOS = itens.filter(i => i.osId === l.osId); return html`<div key=${k} class="nf-l">
-        <div><b>${l.descricao}</b><small>${l.qtd} ${l.unidade || ''} × ${brl(numBR(l.valorUnit))} = <b>${brl(numBR(l.valorTotal))}</b></small></div>
+        <div><b>${l.descricao}</b><small>${l.qtd} ${l.unidade || ''} × ${brl(numBR(l.valorUnit))} = <b>${brl(numBR(l.valorTotal))}</b></small>
+          <select class="inp inp-sm" style=${{ marginTop: '3px' }} value=${l.categoria || 'Outros'} onChange=${e => setNf({ ...nf, linhas: nf.linhas.map((x, j) => j === k ? { ...x, categoria: e.target.value } : x) })}>${cats.map(c => html`<option key=${c}>${c}</option>`)}</select></div>
         <select class="inp inp-sm" value=${l.osId} onChange=${e => setNf({ ...nf, linhas: nf.linhas.map((x, j) => j === k ? { ...x, osId: e.target.value, itemId: '' } : x) })}><option value="">— sem OS —</option>${oss.slice().sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<option key=${o.id} value=${o.id}>${numOS(o)} ${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]} · ${(o.ambientes || []).map(a => a.nome).join(', ')}</option>`)}</select>
         ${l.osId && html`<select class="inp inp-sm" value=${l.itemId} onChange=${e => setNf({ ...nf, linhas: nf.linhas.map((x, j) => j === k ? { ...x, itemId: e.target.value } : x) })}><option value="">➕ novo item</option>${doOS.map(i => html`<option key=${i.id} value=${i.id}>${i.descricao}</option>`)}</select>`}
       </div>`; })}</div>

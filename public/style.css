@@ -1182,3 +1182,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cat-bar div{height:10px;background:#f5f5f4;border-radius:5px}.cat-bar i{display:block;height:100%;background:#dc2626;border-radius:5px}
 .sec-dev{margin-left:auto;background:none!important;border:none!important;opacity:.35;font-size:14px!important;padding:6px 8px!important}
 .sec-dev:hover{opacity:1;transform:none!important;box-shadow:none!important}
+
+/* v87 — parceiros por unidade e categorias por nota modelo */
+.parc-card{border:1px solid #e7e5e4;border-left:5px solid #16a34a;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:4px;background:#fafaf9}
