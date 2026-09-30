@@ -4619,9 +4619,18 @@ function TelaComprasGeral({ sessao, toast }) {
         <div class="dim">Todos os preços das notas lançadas. Quando o mesmo material aparece em fornecedores diferentes, o mais barato ganha 🏆.</div>
         <input class="inp inp-sm" placeholder="🔍 Buscar material ou fornecedor…" value=${buscaP} onInput=${e => setBuscaP(e.target.value)} />
         <div class="tm-chips"><button class=${'pill' + (!catP ? ' on' : '')} onClick=${() => setCatP('')}>Todas (${vis0.length})</button>${catsP.map(c => html`<button key=${c} class=${'pill' + (catP === c ? ' on' : '')} onClick=${() => setCatP(c)}>${ICO_CAT[c] || '📦'} ${c} (${vis0.filter(g => g.cat === c).length})</button>`)}</div>
-        ${!vis.length ? html`<div class="vazio dim">Nenhum preço ainda. Lance notas fiscais.</div>` : vis.slice(0, 300).map((g, k) => { const porF = {}; g.l.forEach(x => { if (!porF[x.forn] || x.data > porF[x.forn].data) porF[x.forn] = x; }); const lst = Object.values(porF).sort((a, b) => a.vu - b.vu); const min = lst[0].vu;
-          return html`${k === 0 || vis[k - 1].cat !== g.cat ? html`<div class="preco-cat">${ICO_CAT[g.cat] || '📦'} ${g.cat}</div>` : ''}<div key=${k} class="preco-g"><div class="row" style=${{ justifyContent: 'space-between' }}><b>${ICO_CAT[g.cat] || '📦'} ${g.desc}</b><small class="dim">${g.cat}</small></div>
-            ${lst.map((x, j) => html`<div key=${j} class=${'preco-l' + (j === 0 && lst.length > 1 ? ' melhor' : '')}><span>${j === 0 && lst.length > 1 ? '🏆 ' : ''}${x.forn}${x.cidade ? ' · ' + x.cidade : ''}</span><small>${x.data ? dm(x.data) + '/' + String(x.data).slice(2, 4) : ''}</small><b>${brl(x.vu)}${x.unidade ? '/' + x.unidade : ''}</b><small class="dim">${numBR(x.qtd) > 1 ? numBR(x.qtd) + ' × = ' + brl(numBR(x.valorTotal)) : ''}</small>${j > 0 ? html`<em>+${Math.round((x.vu / min - 1) * 100)}%</em>` : ''}</div>`)}</div>`; })}
+        ${!vis.length ? html`<div class="vazio dim">Nenhum preço ainda. Lance notas fiscais.</div>` : [...new Set(vis.map(g => g.cat))].map((c, ci) => { const gs = vis.filter(g => g.cat === c);
+          return html`<details key=${c} class="preco-sec" open=${!!catP || ci === 0 || !!q}>
+            <summary><span>${ICO_CAT[c] || '📦'} <b>${c}</b></span><small>${gs.length} ${gs.length === 1 ? 'material' : 'materiais'}</small></summary>
+            <div class="preco-tab">
+              ${gs.map((g, k) => { const porF = {}; g.l.forEach(x => { if (!porF[x.forn] || x.data > porF[x.forn].data) porF[x.forn] = x; }); const lst = Object.values(porF).sort((a, b) => a.vu - b.vu); const m = lst[0];
+                return html`<div key=${k} class="preco-r">
+                  <span class="pr-desc" title=${g.desc}>${g.desc}</span>
+                  <span class="pr-forn">${lst.length > 1 ? '🏆 ' : ''}${m.forn}</span>
+                  <b class="pr-val">${brl(m.vu)}<small>/${(m.unidade || 'un').toLowerCase()}</small></b>
+                  <span class="pr-outros">${lst.slice(1, 3).map(x => html`<i>${x.forn.split(' ')[0]} +${Math.round((x.vu / m.vu - 1) * 100)}%</i>`)}${lst.length > 3 ? html`<i>+${lst.length - 3}</i>` : ''}<small>${m.data ? dm(m.data) : ''}</small></span>
+                </div>`; })}
+            </div></details>`; })}
       </div>`; })()}
     ${aba === 'cadastro' && html`<div class="card page-card stack">
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}><div class="dim">Cadastrados sozinhos a cada nota fiscal. Mesma empresa em unidades diferentes (outro CNPJ da mesma rede) fica junta. Toque para editar.</div>

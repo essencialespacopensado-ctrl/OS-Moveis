@@ -1191,3 +1191,19 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .preco-l.melhor{background:#dcfce7;font-weight:700}.preco-l em{font-style:normal;color:#b91c1c;font-size:11px}
 .preco-cat{font-weight:800;font-size:15px;margin-top:8px;padding:4px 0;border-bottom:2px solid #e7e5e4}
 .preco-l{grid-template-columns:1fr auto auto auto auto}
+
+/* v96 — preços compactos por categoria */
+.preco-sec{border:1px solid #e7e5e4;border-radius:10px;overflow:hidden}
+.preco-sec>summary{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafaf9;cursor:pointer;list-style:none}
+.preco-sec>summary::-webkit-details-marker{display:none}
+.preco-sec[open]>summary{border-bottom:1px solid #e7e5e4;background:#fef3c7}
+.preco-tab{display:flex;flex-direction:column}
+.preco-r{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,1.2fr) auto minmax(0,1fr);gap:8px;align-items:center;padding:5px 12px;font-size:12.5px;border-bottom:1px solid #f5f5f4}
+.preco-r:nth-child(even){background:#fcfcfb}
+.pr-desc,.pr-forn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-forn{color:#15803d;font-weight:600}
+.pr-val{white-space:nowrap}.pr-val small{color:#78716c;font-weight:400}
+.pr-outros{display:flex;gap:4px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.pr-outros i{font-style:normal;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:0 5px;font-size:11px}
+.pr-outros small{color:#a8a29e;font-size:11px}
+@media(max-width:700px){.preco-r{grid-template-columns:1fr auto;}.pr-forn,.pr-outros{grid-column:1/-1;justify-content:flex-start}.pr-desc{white-space:normal}}
