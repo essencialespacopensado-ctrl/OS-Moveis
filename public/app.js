@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['105', ['📅 Enviar ao cronograma: escolha 👷 Internos (equipe cadastrada) ou 🤝 Terceirizados (parceiros) e toque no nome.']],
   ['104', ['📅 Botões da OS (Enviar ao cronograma etc.) com o texto completo.', '📋 Folha de compras padrão na OS: item, quantidade, comprar ou estoque, com quem foi comprado, prazo de entrega e ✓ recebido (atrasados em vermelho). A impressão segue o mesmo modelo.']],
   ['103', ['📦 Nova aba Amostras (Geral): quem levou nossas amostras, o que voltou e o que o cliente deixou aqui — com atraso destacado.', '🧾 Notas & financeiro na OS: só lançar a nota, forma de pagamento e em quantas vezes — já vai para Contas a pagar.', '📦 Amostras também dentro de cada OS.', '📅 Janela "Enviar para cronograma" mais compacta.', '🆕 Esta mensagem de novidades aparece a cada atualização.']],
   ['101', ['📓 Diário de obra mais simples: escolha o tipo, fale ou fotografe e salve. Pendências com ✓ e fotos por dia.', '📓 Diário também dentro da OS.']],
@@ -3255,6 +3256,10 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
   const [pessoa, setPessoa] = useState(pessoa0 || '');
   const [grade, setGrade] = useState(grade0 || 'producao');
   const [nomes, setNomes] = useState({});
+  const [tipoExec, setTipoExec] = useState('interno');
+  const [equipeN, setEquipeN] = useState([]), [terc, setTerc] = useState([]);
+  useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'usuarios')).then(s => setEquipeN(s.docs.map(d => d.data()).filter(u => u.ativo !== false).map(u => u.nome).filter(Boolean))).catch(() => {});
+    F().fsMod.getDoc(docRef('empresas', sessao.empresaId)).then(d => setTerc((d.data()?.parceirosLista || []).map(p => p.nome).filter(Boolean))).catch(() => {}); }, []);
   useEffect(() => { if (pessoa0) return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date())))).then(d => { const g = d.data()?.grades || {}; const m = {}; Object.keys(g).forEach(k => { m[k] = [...new Set((g[k] || []).map(r => r.nome).filter(Boolean))]; }); setNomes(m); }).catch(() => {}); }, []);
   const [osSel, setOsSel] = useState(osInicial || null);
   const [aviso, setAviso] = useState('');
@@ -3304,7 +3309,9 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
         <span class="lbl">Qual cronograma?</span>
         <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${GRADES.map(([k, t]) => html`<button key=${k} class=${'pill' + (grade === k ? ' on' : '')} onClick=${() => { setGrade(k); setPessoa(''); }}>${t}</button>`)}</div>
         <span class="lbl">Quem vai executar?</span>
-        ${(nomes[grade] || []).length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomes[grade].map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => { setPessoa(n); setAviso(''); }}>${n}</button>`)}</div>`}
+        <div class="fc-orig" style=${{ alignSelf: 'flex-start' }}><button class=${tipoExec === 'interno' ? 'on' : ''} onClick=${() => { setTipoExec('interno'); setPessoa(''); }}>👷 Internos</button><button class=${tipoExec === 'terceiro' ? 'on est' : ''} onClick=${() => { setTipoExec('terceiro'); setPessoa(''); }}>🤝 Terceirizados</button></div>
+        ${(() => { const l = tipoExec === 'interno' ? [...new Set([...equipeN, ...(nomes[grade] || [])])] : terc; return l.length ? html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${l.map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => { setPessoa(n); setAviso(''); }}>${n}</button>`)}</div>` : html`<small class="dim">${tipoExec === 'interno' ? 'Ninguém cadastrado na equipe.' : 'Nenhum terceirizado cadastrado (cadastre em Compras → Parceiros).'}</small>`; })()}
+        ${false && (nomes[grade] || []).length > 0 && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${nomes[grade].map(n => html`<button key=${n} class=${'pill' + (pessoa === n ? ' on' : '')} onClick=${() => { setPessoa(n); setAviso(''); }}>${n}</button>`)}</div>`}
         <input class="inp" placeholder="Nome (ou escolha acima)" value=${pessoa} onInput=${e => setPessoa(e.target.value)} />
       </div>`}
       ${osSel ? html`<div class="tar-os" style=${{ '--cc': corOS(osSel) }}><b>${numOS(osSel)}</b> ${osSel.cliente?.nome} · ${(osSel.ambientes || []).map(a => a.nome).join(', ')} <button class="x-btn" onClick=${() => setOsSel(null)}>trocar</button></div>`
