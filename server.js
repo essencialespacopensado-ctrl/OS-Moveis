@@ -394,7 +394,7 @@ COMO LER OS ITENS (as notas às vezes vêm confusas, com colunas desalinhadas ou
 - Brasileiro: 1.234,56 = mil duzentos e trinta e quatro e 56 centavos. No JSON escreva 1234.56.
 Não invente.
 Responda SOMENTE com JSON:
-{"fornecedor":"","razao":"","cnpj":"","cidade":"","uf":"","endereco":"","numero":"","data":"AAAA-MM-DD","totalProdutos":0,"total":0,"itens":[{"codigo":"","descricao":"","categoria":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
+{"emitente":{"nome":"","razao":"","cnpj":"","cidade":"","uf":"","endereco":""},"destinatario":{"nome":"","cnpj":""},"fornecedor":"(= nome do EMITENTE)","razao":"","cnpj":"","cidade":"","uf":"","endereco":"","numero":"","data":"AAAA-MM-DD","totalProdutos":0,"total":0,"itens":[{"codigo":"","descricao":"","categoria":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
 
 TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
