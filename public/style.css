@@ -1250,3 +1250,19 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .fo-gt{font-weight:700;margin-top:6px}.fo-gt small{font-weight:500;opacity:.75;margin-left:6px}
 .fo-l{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line);margin-top:5px}
 .fo-l small{display:block;opacity:.7;font-size:12.5px}.fo-l.ok{opacity:.6}.fo-l.atraso{border-color:#dc2626}
+/* v102 */
+.nt-compacto{gap:8px!important;padding:14px!important}
+.nt-compacto .pill{padding:4px 10px;font-size:12.5px}
+.nt-compacto .inp{padding:7px 10px;font-size:14px}
+.nt-compacto .lbl{font-size:12px;margin:0}
+.nt-compacto .btn-grande{padding:10px;font-size:15px}
+.nt-compacto .os-picker-lista{max-height:22vh!important}
+.novid{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+/* v102 */
+.nt-compacto{gap:8px!important;padding:14px!important}
+.nt-compacto .pill{padding:4px 10px;font-size:12.5px}
+.nt-compacto .inp{padding:7px 10px;font-size:14px}
+.nt-compacto .lbl{font-size:12px;margin:0}
+.nt-compacto .btn-grande{padding:10px;font-size:15px}
+.nt-compacto .os-picker-lista{max-height:22vh!important}
+.novid{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}

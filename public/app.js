@@ -44,6 +44,24 @@ async function garantirCoresClientes(sessao, nomes) {
   if (mudou) { window.__CORES_CLI = m; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { coresClientes: m }); } catch {} }
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
+const NOVIDADES = [
+  ['103', ['📦 Nova aba Amostras (Geral): quem levou nossas amostras, o que voltou e o que o cliente deixou aqui — com atraso destacado.', '🧾 Notas & financeiro na OS: só lançar a nota, forma de pagamento e em quantas vezes — já vai para Contas a pagar.', '📦 Amostras também dentro de cada OS.', '📅 Janela "Enviar para cronograma" mais compacta.', '🆕 Esta mensagem de novidades aparece a cada atualização.']],
+  ['101', ['📓 Diário de obra mais simples: escolha o tipo, fale ou fotografe e salve. Pendências com ✓ e fotos por dia.', '📓 Diário também dentro da OS.']],
+  ['100', ['🔐 Grupos e permissões: escolha quem vê cada tela (Equipe → Grupos e permissões).']],
+  ['99', ['⏸ Pausar / ✖ Cancelar envios e 🔁 tentar de novo quando a IA falha.']],
+];
+function Novidades() {
+  const atual = NOVIDADES[0][0];
+  const [ver, setVer] = useState(() => { try { const v = localStorage.getItem('gp-versao-vista') || '101'; return v !== atual ? v : null; } catch { return null; } });
+  if (!ver) return null;
+  const lista = NOVIDADES.filter(([v]) => Number(v) > Number(ver));
+  const ok = () => { try { localStorage.setItem('gp-versao-vista', atual); } catch {} setVer(null); };
+  if (!lista.length) return null;
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && ok()}><div class="card modal-caixa stack" style=${{ width: 'min(480px,100%)' }}>
+    <div class="sec-title">🆕 O que mudou</div>
+    ${lista.map(([v, itens]) => html`<div key=${v}><small class="dim">Versão ${v}</small><ul class="novid">${itens.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`)}
+    <button class="btn btn-primary btn-block" onClick=${ok}>Entendi</button></div></div>`, document.body);
+}
 const recarregarApp = async () => { try { const ks = await caches?.keys?.(); ks && ks.forEach(k => caches.delete(k)); } catch {} location.reload(); };
 
 if (window.pdfjsLib) {
@@ -2301,21 +2319,15 @@ function DiarioOS({ sessao, os, toast }) {
 
 /* ---------- Pagamento de nota / conta ligado à OS ---------- */
 const pgNovo = () => ({ lancar: true, forma: '', conta: '', parcelas: 1, venc: isoD(new Date()), pago: false });
-function PagamentoBox({ pg, setPg, total, titulo = '💳 Como vai pagar?' }) {
+function PagamentoBox({ pg, setPg, total }) {
   const n = Math.max(1, parseInt(pg.parcelas, 10) || 1);
   return html`<div class="pg-box">
-    <label class="row" style=${{ gap: '8px', alignItems: 'center' }}><input type="checkbox" checked=${pg.lancar} onChange=${e => setPg({ ...pg, lancar: e.target.checked })} /><b>${titulo}</b> <small class="dim">(vai para Contas a pagar no Financeiro)</small></label>
-    ${pg.lancar && html`
-      <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${FORMAS_PG.map(f => html`<button key=${f} class=${'pill' + (pg.forma === f ? ' on' : '')} onClick=${() => setPg({ ...pg, forma: pg.forma === f ? '' : f })}>${f}</button>`)}</div>
-      <div class="row" style=${{ gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}><span class="lbl">Parcelas</span>
-        ${[1, 2, 3, 4, 5, 6, 10, 12].map(k => html`<button key=${k} class=${'pill' + (n === k ? ' on' : '')} onClick=${() => setPg({ ...pg, parcelas: k, pago: k === 1 ? pg.pago : false })}>${k === 1 ? 'À vista' : k + 'x'}</button>`)}
-        <input class="inp inp-sm" style=${{ width: '56px' }} inputmode="numeric" value=${pg.parcelas} onInput=${e => setPg({ ...pg, parcelas: e.target.value })} /></div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">${n > 1 ? '1º vencimento' : 'Vencimento'}</span><input class="inp" type="date" value=${pg.venc} onInput=${e => setPg({ ...pg, venc: e.target.value })} /></div>
-        <div class="field"><span class="lbl">Conta / banco (opcional)</span><input class="inp" value=${pg.conta} onInput=${e => setPg({ ...pg, conta: e.target.value })} /></div>
-      </div>
-      ${n === 1 ? html`<label class="row" style=${{ gap: '8px' }}><input type="checkbox" checked=${pg.pago} onChange=${e => setPg({ ...pg, pago: e.target.checked })} /> Já está pago</label>` : null}
-      <div class="pg-resumo">${n > 1 ? n + ' × ' + brl(Math.round(total / n * 100) / 100) + ' · todo mês a partir de ' + dm(pg.venc) : brl(total) + (pg.pago ? ' · pago' : ' · vence ' + dm(pg.venc))}${pg.forma ? ' · ' + pg.forma : ''}</div>`}
+    <span class="lbl">Forma de pagamento</span>
+    <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${FORMAS_PG.map(f => html`<button key=${f} class=${'pill' + (pg.forma === f ? ' on' : '')} onClick=${() => setPg({ ...pg, forma: f })}>${f}</button>`)}</div>
+    <span class="lbl">Em quantas vezes</span>
+    <div class="row" style=${{ gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>${[1, 2, 3, 4, 5, 6, 10, 12].map(k => html`<button key=${k} class=${'pill' + (n === k ? ' on' : '')} onClick=${() => setPg({ ...pg, parcelas: k })}>${k === 1 ? 'À vista' : k + 'x'}</button>`)}
+      <span class="dim" style=${{ marginLeft: '6px' }}>1º venc.</span><input class="inp inp-sm" style=${{ width: '140px' }} type="date" value=${pg.venc} onInput=${e => setPg({ ...pg, venc: e.target.value })} /></div>
+    <div class="pg-resumo">${n > 1 ? n + ' × ' + brl(Math.round(total / n * 100) / 100) : brl(total) + ' à vista'}${pg.forma ? ' · ' + pg.forma : ''}</div>
   </div>`;
 }
 async function lancarPagamentoOS(sessao, os, { descricao, categoria, total, tipo = 'pagar', notaId = '', nf = '' }, pg) {
@@ -2323,7 +2335,7 @@ async function lancarPagamentoOS(sessao, os, { descricao, categoria, total, tipo
   const n = Math.max(1, parseInt(pg.parcelas, 10) || 1), grupo = n > 1 ? rand(8) : '';
   const vp = Math.round(numBR(total) / n * 100) / 100;
   const b = F().fsMod.writeBatch(F().db);
-  for (let k = 0; k < n; k++) b.set(F().fsMod.doc(col('empresas', sessao.empresaId, 'lancamentos')), { tipo, categoria, descricao, valor: k === n - 1 ? Math.round((numBR(total) - vp * (n - 1)) * 100) / 100 : vp, venc: addMes(pg.venc, k), parcela: n > 1 ? (k + 1) + '/' + n : '', recorrente: false, grupo, forma: pg.forma || '', conta: pg.conta || '', pago: n === 1 && !!pg.pago, pagoEm: n === 1 && pg.pago ? nowIso() : '', osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', notaId, nf, criadoEm: nowIso(), por: sessao.nome });
+  for (let k = 0; k < n; k++) b.set(F().fsMod.doc(col('empresas', sessao.empresaId, 'lancamentos')), { tipo, categoria, descricao, valor: k === n - 1 ? Math.round((numBR(total) - vp * (n - 1)) * 100) / 100 : vp, venc: addMes(pg.venc, k), parcela: n > 1 ? (k + 1) + '/' + n : '', recorrente: false, grupo, forma: pg.forma || '', conta: pg.conta || '', pago: false, pagoEm: '', osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', notaId, nf, criadoEm: nowIso(), por: sessao.nome });
   await b.commit();
   registrar(sessao, os.id, tipo === 'pagar' ? '💸' : '💰', (tipo === 'pagar' ? 'Conta a pagar: ' : 'A receber: ') + descricao, n + 'x · ' + brl(numBR(total)) + (pg.forma ? ' · ' + pg.forma : ''));
   return n;
@@ -2345,30 +2357,10 @@ function FinanceiroOS({ sessao, os, toast }) {
     <span class="grow"><b>${x.descricao}</b><small>${[x.parcela, x.forma, x.conta, x.pago ? (x.tipo === 'pagar' ? 'pago' : 'recebido') : 'vence ' + dm(x.venc)].filter(Boolean).join(' · ')}</small></span><b>${brl(x.valor)}</b></div>`;
   const Grupo = (tit, l, cor) => { const pg = l.filter(x => x.pago); return html`<div class="fo-g"><div class="fo-gt" style=${{ color: cor }}>${tit} <small>${pg.length} de ${l.length} · ${brl(soma(pg))} feito · falta ${brl(soma(l) - soma(pg))}</small></div>${l.sort((a, b) => String(a.venc).localeCompare(b.venc)).map(Linha)}</div>`; };
   return html`<div class="stack">
-    <div class="fo-kpis">
-      <div><small>Contrato</small><b>${brl(contrato)}</b></div>
-      <div><small>Recebido</small><b class="ok-txt">${brl(soma(rec.filter(x => x.pago)))}</b></div>
-      <div><small>A receber</small><b>${brl(soma(rec.filter(x => !x.pago)))}</b></div>
-      <div><small>Material (compras)</small><b>${brl(material)}</b></div>
-      <div><small>Pago</small><b>${brl(soma(pag.filter(x => x.pago)))}</b></div>
-      <div><small>A pagar</small><b style=${{ color: 'var(--danger)' }}>${brl(soma(pag.filter(x => !x.pago)))}</b></div>
-      <div class="fo-res"><small>Resultado previsto</small><b>${brl(contrato - material - soma(pag.filter(x => !x.notaId)))}</b></div>
-    </div>
     <${ComprasOS} sessao=${sessao} os=${os} toast=${toast} soNota=${true} />
-    <div class="row" style=${{ gap: '6px' }}>
-      <button class="btn btn-danger" onClick=${() => setNovo({ tipo: 'pagar', categoria: 'RT arquiteto', descricao: '', valor: '', pg: pgNovo() })}>＋ Outro custo (RT, frete, terceiro…)</button></div>
-    ${novo && html`<div class="card stack">
-      <div class="grid2"><input class="inp" placeholder="Descrição" value=${novo.descricao} onInput=${e => setNovo({ ...novo, descricao: e.target.value })} /><input class="inp" inputmode="decimal" placeholder="Valor total (R$)" value=${novo.valor} onInput=${e => setNovo({ ...novo, valor: e.target.value })} /></div>
-      ${novo.tipo === 'pagar' && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${['RT arquiteto', 'Comissão', 'Frete', 'Terceirizado', 'Montagem', 'Outros'].map(c => html`<button key=${c} class=${'pill' + (novo.categoria === c ? ' on' : '')} onClick=${() => setNovo({ ...novo, categoria: c, descricao: novo.descricao || c })}>${c}</button>`)}</div>`}
-      <${PagamentoBox} pg=${novo.pg} setPg=${pg => setNovo({ ...novo, pg: { ...pg, lancar: true } })} total=${numBR(novo.valor)} titulo=${novo.tipo === 'receber' ? '💰 Como o cliente vai pagar?' : '💳 Como vai pagar?'} />
-      <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setNovo(null)}>Cancelar</button><button class="btn btn-primary" style=${{ flex: 1 }} onClick=${salvarNovo}>💾 Lançar no financeiro</button></div></div>`}
-    ${rec.length > 0 && Grupo('💰 Recebimentos do cliente', rec, '#16a34a')}
-    ${pag.length > 0 && Grupo('💸 Contas a pagar desta OS', pag, '#dc2626')}
-    <div class="fo-gt">📦 Amostras e itens do cliente</div>
-    <${Amostras} sessao=${sessao} toast=${toast} os=${os} />
-    <div class="fo-gt">🧾 Notas fiscais desta OS (${(notas || []).length})</div>
-    ${notas === null ? html`<div class="dim">Carregando…</div>` : !notas.length ? html`<div class="dim">Nenhuma nota lançada nesta OS ainda.</div>` : notas.sort((a, b) => String(b.data).localeCompare(a.data)).map(n => { const ps = pag.filter(x => x.notaId === n.id); return html`<div key=${n.id} class="fo-l">
-      <span style=${{ fontSize: '20px' }}>🧾</span><span class="grow"><b>NF ${n.numero || 's/n'} · ${n.fornecedor}</b><small>${[fmtData(n.data), (n.linhas || []).length + ' itens', ps.length ? ps.filter(x => x.pago).length + ' de ' + ps.length + ' pagas' : 'sem pagamento lançado'].join(' · ')}</small></span><b>${brl(numBR(n.total) || (n.linhas || []).reduce((t, l) => t + numBR(l.valorTotal), 0))}</b></div>`; })}
+    ${(notas || []).length > 0 && html`<div class="fo-gt">🧾 Notas desta OS</div>`}
+    ${(notas || []).sort((a, b) => String(b.data).localeCompare(a.data)).map(n => { const ps = pag.filter(x => x.notaId === n.id); return html`<div key=${n.id} class="fo-l">
+      <span class="grow"><b>NF ${n.numero || 's/n'} · ${n.fornecedor}</b><small>${[fmtData(n.data), n.pagamento?.forma, ps.length ? (ps.length > 1 ? ps.length + 'x · ' : '') + ps.filter(x => x.pago).length + ' de ' + ps.length + ' pagas' : ''].filter(Boolean).join(' · ')}</small></span><b>${brl(numBR(n.total) || (n.linhas || []).reduce((t, l) => t + numBR(l.valorTotal), 0))}</b></div>`; })}
   </div>`;
 }
 
@@ -2748,7 +2740,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
       </div>`)}</div>
       <div>Soma dos itens: <b>${brl(nfOS.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0))}</b> · total da nota ${brl(nfOS.total)}</div>
       <${PagamentoBox} pg=${nfOS.pg} setPg=${pg => setNfOS({ ...nfOS, pg })} total=${numBR(nfOS.total) || nfOS.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0)} />
-      <button class="btn btn-grande btn-verde btn-block" onClick=${confirmarNfOS}>💾 Lançar na OS${nfOS.pg.lancar ? ', no financeiro' : ''} e atualizar preços</button>
+      <button class="btn btn-grande btn-verde btn-block" onClick=${() => { if (!nfOS.pg.forma) return toast('Escolha a forma de pagamento.'); confirmarNfOS(); }}>💾 Lançar nota</button>
     </div></div>`, document.body)}
   `;
   if (soNota) return blocoNF;
@@ -3289,7 +3281,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
     } catch (e) { avisar('Não salvou: ' + e.message); }
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
-    <div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+    <div class="card modal-caixa stack nt-compacto" style=${{ width: 'min(460px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">📅 ${pessoa0 ? 'Nova tarefa · ' + pessoa0 : 'Enviar para o cronograma'}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
       ${!pessoa0 && html`<div class="stack" style=${{ gap: '6px' }}>
         <span class="lbl">Qual cronograma?</span>
@@ -3898,10 +3890,11 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
+      ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
@@ -6110,6 +6103,7 @@ function Principal({ sessao, toast }) {
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
       <${BarraTransferencia} />
+      <${Novidades} />
       ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
