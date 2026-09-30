@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['109', ['👥 Clientes com nome quase igual (ex.: Silmara x Sillmara) aparecem em aviso no Quadro geral com botão para juntar.', '👥 Ao criar ou importar OS com nome parecido com um cliente existente, o app pergunta se é o mesmo.', '🤖 A IA também organiza: diga "junta a Sillmara com a Silmara".']],
   ['107', ['📋 Folha de compras padrão aparece sempre na aba 🛒 Compras da OS, mesmo sem itens.']],
   ['106', ['⚡ Quadro geral → "Agora em andamento": tudo que está sendo feito hoje e por quem ao mesmo tempo (marcenaria, serralheria, vidros, pintura, terceirizados). Veja por OS ou por quem.']],
   ['105', ['📅 Enviar ao cronograma: escolha 👷 Internos (equipe cadastrada) ou 🤝 Terceirizados (parceiros) e toque no nome.']],
@@ -376,9 +377,43 @@ function escolher(titulo, texto, opcoes, links) {
     </div></div>`);
   });
 }
+/* ---------- Clientes com nome quase igual (ex.: Silmara x Sillmara) ---------- */
+const baseCli = (n) => String(n || '').split(/\s[-–]\s/)[0].trim();
+const chaveSom = (n) => norm(baseCli(n)).replace(/[^a-z0-9]/g, '').replace(/(.)\1+/g, '$1');
+function lev(a, b) { const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9; let p = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const c = [i]; for (let j = 1; j <= n; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); p = c; } return p[n]; }
+function cliParecido(a, b) { const x = baseCli(a), y = baseCli(b); if (!x || !y || x === y) return false; const kx = chaveSom(x), ky = chaveSom(y); if (kx === ky) return true;
+  return Math.min(kx.length, ky.length) >= 6 && lev(kx, ky) <= 1; }
+function gruposClientesParecidos(oss) {
+  const nomes = [...new Set((oss || []).map(o => baseCli(o.cliente?.nome)).filter(Boolean))]; const vistos = new Set(), grupos = [];
+  nomes.forEach(n => { if (vistos.has(n)) return; const g = [n, ...nomes.filter(m => m !== n && !vistos.has(m) && cliParecido(n, m))]; if (g.length > 1) { g.forEach(x => vistos.add(x)); grupos.push(g.map(x => [x, oss.filter(o => baseCli(o.cliente?.nome) === x).length]).sort((a, b) => b[1] - a[1])); } });
+  return grupos;
+}
+async function unificarCliente(sessao, oss, de, para, quem = '') {
+  const { writeBatch, getDocs } = F().fsMod; const E = sessao.empresaId; const b = writeBatch(F().db); let n = 0;
+  const troca = (nome) => { const r = String(nome || ''); return baseCli(r) === de ? para + r.slice(baseCli(r).length + (r.length - r.trimStart().length)) : r; };
+  oss.filter(o => baseCli(o.cliente?.nome) === de).forEach(o => { b.update(docRef('empresas', E, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: troca(o.cliente.nome) }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); n++; });
+  try { (await getDocs(col('empresas', E, 'tarefas'))).docs.forEach(d => { const t = d.data(); if (t.cliente && baseCli(t.cliente) === de) b.update(d.ref, { cliente: troca(t.cliente) }); }); } catch {}
+  await b.commit();
+  oss.filter(o => baseCli(o.cliente?.nome) === de).forEach(o => registrar(sessao, o.id, quem + '👤', 'Nome do cliente unificado', de + ' → ' + para));
+  return n;
+}
+function AvisoClientes({ sessao, lista, toast }) {
+  const grupos = gruposClientesParecidos(lista);
+  if (!grupos.length) return null;
+  const unir = async (g, para) => { try { let n = 0; for (const [de] of g) if (de !== para) n += await unificarCliente(sessao, lista, de, para); toast(n + ' OS agora com o nome "' + para + '".', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
+  return html`<div class="card aviso-cli"><b>⚠ Clientes com nome quase igual — é a mesma pessoa?</b>
+    ${grupos.map((g, k) => html`<div key=${k} class="aviso-g"><span>${g.map(([n, q]) => html`<span class="aviso-n">${n} <small>(${q} OS)</small></span>`)}</span>
+      <span class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${g.map(([n]) => html`<button key=${n} class="btn btn-sm btn-primary" onClick=${() => unir(g, n)}>Juntar como "${n}"</button>`)}</span></div>`)}
+  </div>`;
+}
+
 async function criarOS(sessao, conteudo, extras = {}) {
   const { fsMod } = F();
   const os = sanearOS(conteudo);
+  try { const nm = baseCli(os.cliente?.nome); if (nm) { const lst = (await fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => d.data()); const par = [...new Set(lst.map(o => baseCli(o.cliente?.nome)).filter(x => cliParecido(nm, x)))];
+    if (par.length) { const r = await escolher('Cliente parecido', 'Já existe cliente com nome quase igual:\n"' + par.join('", "') + '"\nNovo: "' + nm + '"', [...par.map(x => ({ v: x, t: 'É o mesmo — usar "' + x + '"', cls: 'btn-primary' })), { v: '__novo', t: 'É outro cliente — manter "' + nm + '"' }]);
+      if (r && r !== '__novo') os.cliente = { ...os.cliente, nome: r + String(os.cliente.nome).slice(baseCli(os.cliente.nome).length) }; } } } catch {}
   const fp = await impressaoDigital(os);
   const dup = await acharDuplicada(sessao.empresaId, fp);
   if (dup) {
@@ -3007,6 +3042,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   return html`
     <div class="fade-up stack qg">
       <div><h2>Quadro geral</h2><div class="dim">Toque no cliente para ver o andamento de cada ambiente, parceiros e o diário de obra.</div></div>
+      <${AvisoClientes} sessao=${sessao} lista=${lista} toast=${toast} />
       <${AgoraAndamento} sessao=${sessao} lista=${lista} abrirOS=${abrirOS} />
       <div class="qg-filtros">
         ${[['todas', 'Todas', ativas.length], ['parceiros', 'Pendências de parceiro', cont.parceiros], ['aprovacao', 'Aguard. aprovação', cont.aprovacao], ['atrasadas', 'Atrasadas', cont.atrasadas]].map(([v, t, n]) => html`
@@ -5492,7 +5528,7 @@ function comandoTela(q) {
   for (const [re, v] of TELAS_VOZ) if (re.test(t)) { window.__irPara && window.__irPara(v); return v; }
   return null;
 }
-const TIPO_ACAO = { abrir_aba: '🧭 Abrir tela', abrir_os: '📋 Abrir OS', ver_cronograma: '📅 Ver no cronograma', imprimir_os: '🖨 Imprimir OS', status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma' };
+const TIPO_ACAO = { abrir_aba: '🧭 Abrir tela', abrir_os: '📋 Abrir OS', ver_cronograma: '📅 Ver no cronograma', imprimir_os: '🖨 Imprimir OS', status: '➡️ Mudar etapa', prazo_entrega: '🚚 Prazo de entrega', observacao: '📝 Observação', pendencia: '⚠️ Pendência', cliente: '👤 Dados do cliente', cronograma: '📅 Enviar ao cronograma', concluir_tarefa: '✅ Concluir tarefa', mais_dias: '⏳ Mais dias', mover_tarefa: '↔️ Mover tarefa', excluir_tarefa: '🗑 Excluir do cronograma', unificar_clientes: '👥 Juntar clientes' };
 function descAcao(a) {
   const x = { ...a }; delete x.tipo; delete x.os;
   return (a.os ? 'OS ' + a.os + ' · ' : '') + Object.entries(x).map(([k, v]) => k + ': ' + (/^\d{4}-\d\d-\d\d$/.test(String(v)) ? dm(v) : v)).join(' · ');
@@ -5505,6 +5541,7 @@ async function executarAcao(sessao, a) {
   const o = a.os ? achar(a.os) : (window.__ultimaOS ? oss.find(x => x.id === window.__ultimaOS) : null);
   if (o) window.__ultimaOS = o.id;
   if (a.pessoa) { try { const ag = await F().fsMod.getDoc(docRef('empresas', E, 'agenda', iso(segundaDe(new Date())))); const nomes = Object.values(ag.data()?.grades || {}).flat().map(r => r.nome).filter(Boolean); const np = norm(a.pessoa); a.pessoa = nomes.find(x => norm(x) === np) || nomes.find(x => norm(x).includes(np) || np.includes(norm(x).split(/[\s+]/)[0])) || a.pessoa; } catch {} }
+  if (a.tipo === 'unificar_clientes') { const de = baseCli(a.de), para = baseCli(a.para); if (!de || !para) throw new Error('Faltou o nome.'); const real = [...new Set(oss.map(x => baseCli(x.cliente?.nome)))].find(x => norm(x) === norm(de)); if (!real) throw new Error('Não achei o cliente ' + de + '.'); const n = await unificarCliente(sessao, oss, real, para, '🤖 '); return n + ' OS: ' + real + ' → ' + para; }
   if (a.tipo !== 'abrir_aba' && !o) throw new Error('Não achei a OS ' + (a.os || '') + '.');
   const refO = o && docRef('empresas', E, 'os', o.id);
   const tars = (await getDocs(col('empresas', E, 'tarefas'))).docs.map(d => ({ id: d.id, ...d.data() }));
@@ -5562,7 +5599,8 @@ async function executarAcao(sessao, a) {
 }
 async function montarContexto(sessao, osAbertaId) {
   const { getDocs, getDoc, query, orderBy, limit } = F().fsMod;
-  const linhas = [`Empresa: ${sessao.empresaNome}. Usuário: ${sessao.nome} (${(PAPEIS.find(p => p.v === sessao.papel) || {}).t || sessao.papel}). Hoje: ${new Date().toLocaleDateString('pt-BR')}.`];
+  const linhas = [];
+  linhas.push(`Empresa: ${sessao.empresaNome}. Usuário: ${sessao.nome} (${(PAPEIS.find(p => p.v === sessao.papel) || {}).t || sessao.papel}). Hoje: ${new Date().toLocaleDateString('pt-BR')}.`);
   try {
     const ps = await getDocs(query(col('empresas', sessao.empresaId, 'projetos'), orderBy('criadoEm', 'desc'), limit(60)));
     linhas.push(`\nPROJETOS (${ps.size}):`);
@@ -5575,6 +5613,7 @@ async function montarContexto(sessao, osAbertaId) {
       const amb = (o.ambientes || []).map(a => `${a.nome} [${(a.moveis || []).map(m => m.nome).join(', ')}]`).join('; ');
       linhas.push(`- OS ${numOS(o)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
     });
+    { const gp = gruposClientesParecidos(os.docs.map(d => d.data())); if (gp.length) linhas.push('\nCLIENTES COM NOME QUASE IGUAL (provável erro de digitação): ' + gp.map(g => g.map(([n, q]) => '"' + n + '" (' + q + ' OS)').join(' x ')).join('; ')); }
     const foco = osAbertaId || window.__ultimaOS; if (foco) { const fo = os.docs.find(d => d.id === foco); if (fo) linhas.push('\nOS EM FOCO (a última aberta/mencionada): ' + numOS(fo.data()) + ' ' + (fo.data().cliente?.nome || '')); }
     linhas.push('\nETAPAS DA OS (valor = nome): ' + STATUS_OS.map(x => x.v + ' = ' + x.t.replace(/^\d+\. /, '')).join('; '));
     linhas.push('CATEGORIAS DO CRONOGRAMA (chave = nome): ' + GRADES.map(g => g[0] + ' = ' + g[1]).join('; '));

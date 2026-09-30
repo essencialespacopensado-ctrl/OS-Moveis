@@ -1288,3 +1288,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .ag-tit{font-weight:700;cursor:pointer}.ag-tit small{font-weight:500;opacity:.65;margin-left:4px}
 .ag-chip{display:flex;gap:8px;align-items:center;background:var(--surface-solid);border-radius:10px;padding:6px 8px;border-left:4px solid var(--c);animation:fadeUp .3s}
 .ag-chip small{display:block;opacity:.7;font-size:12px}
+.aviso-cli{border-left:5px solid #dc2626;display:flex;flex-direction:column;gap:8px}
+.aviso-g{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.aviso-n{background:var(--surface2);border-radius:8px;padding:3px 8px;margin-right:5px;font-weight:600}
