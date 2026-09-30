@@ -1137,3 +1137,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .mais-grp button:hover{background:#f5f5f4}.mais-grp button.on{background:#fef3c7}
 .mais-grp button span{width:22px;text-align:center}
 @media(max-width:700px){.mais-menu{position:fixed;left:12px;right:12px;top:auto;bottom:80px;min-width:0}}
+/* v83 — menu Mais fora do corte da barra */
+.mais-menu{position:fixed;top:64px;right:max(16px,calc((100vw - 1200px)/2));max-height:calc(100vh - 90px);overflow:auto}
