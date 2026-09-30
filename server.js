@@ -350,6 +350,30 @@ TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
 ${d.temImagens ? 'As imagens são a folha; leia tudo.' : ''}`;
 
+    case 'levantar_materiais':
+      return `Você é comprador de uma marcenaria de móveis planejados de alto padrão. Leia o DETALHAMENTO/PROJETO DO ARQUITETO e faça o LEVANTAMENTO DE MATERIAIS para compra.
+Liste tudo que precisa ser comprado/orçado: chapas de MDF (cor, fabricante, espessura), lâminas de madeira natural, fitas de borda, ferragens (dobradiças, corrediças, articuladores, sistemas de correr — com marca/modelo, ex.: Blum, Hettich, Häfele, Grass), puxadores e perfis, vidros e espelhos, pedras, iluminação/LED, tecidos/couro, pintura/laca, acessórios.
+Estime quantidades quando der (ex.: nº de dobradiças por porta), senão deixe qtd vazio.
+Marque "etapa":"pre" (PRÉ-PEDIDO, comprar já) para o que NÃO tem pronta entrega ou tem prazo longo: lâminas naturais, chapas especiais/laminadas, ferragens importadas (Blum, Hettich, Grass, Salice), sistemas de correr especiais, vidros especiais, pedras, tecidos importados. O resto "etapa":"pedido".
+Categorias: "Chapas", "Lâminas", "Fitas de borda", "Ferragens", "Puxadores", "Perfis", "Iluminação", "Vidros", "Pedras", "Tecidos", "Pintura", "Acessórios", "Outros".
+Não invente o que não está no projeto. Responda SOMENTE com JSON:
+{"itens":[{"categoria":"","descricao":"","marca":"","qtd":"","unidade":"un|m|m²|chapa|rolo|par|cx","etapa":"pre|pedido","ambiente":"","obs":""}]}
+
+TEXTO:
+"""${String(d.texto || '').slice(0, 45000)}"""
+${d.temImagens ? 'As imagens são o detalhamento; leia tudo, inclusive legendas e tabelas.' : ''}`;
+
+    case 'nota_fiscal':
+      return `Leia esta NOTA FISCAL (DANFE/NF-e ou cupom) de compra de materiais de marcenaria.
+Extraia fornecedor (razão social ou nome fantasia), CNPJ, número da nota, data de emissão e TODOS os itens com quantidade, unidade, valor unitário e valor total do item, e o valor total da nota.
+Números com ponto como decimal (ex.: 1234.56). Não invente.
+Responda SOMENTE com JSON:
+{"fornecedor":"","cnpj":"","numero":"","data":"AAAA-MM-DD","total":0,"itens":[{"descricao":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
+
+TEXTO:
+"""${String(d.texto || '').slice(0, 45000)}"""
+${d.temImagens ? 'As imagens são a nota fiscal.' : ''}`;
+
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
@@ -407,7 +431,7 @@ e no FINAL coloque as ações entre <acoes> e </acoes> como um array JSON. O usu
 - {"tipo":"mais_dias","os":"26.010","dias":2,"motivo":"..."}
 - {"tipo":"mover_tarefa","os":"26.010","pessoa":"opcional","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD","motivo":"..."}
 - {"tipo":"excluir_tarefa","os":"26.010","motivo":"..."}
-- {"tipo":"abrir_aba","aba":"inicio|quadro|pedidos|os|contratos|projetos|importar|catalogo|equipe|cronograma|excluir|config|compras|financeiro"}  (abre a tela; executa na hora, sem confirmação)
+- {"tipo":"abrir_aba","aba":"inicio|quadro|pedidos|os|contratos|projetos|importar|catalogo|equipe|cronograma|excluir|config|compras|financeiro|contas"}  (abre a tela; executa na hora, sem confirmação)
 - {"tipo":"abrir_os","os":"26.010","modo":"temas|folha|calendario|editar"}  (abre a OS na primeira tela; NÃO use modo "editar" a não ser que o usuário diga editar/alterar/mexer na OS; sem pedido específico, omita o modo)
 - {"tipo":"ver_cronograma","os":"26.010"}  (vai direto para a linha da OS no cronograma; executa na hora)
 - {"tipo":"imprimir_os","os":"26.010"}
