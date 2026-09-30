@@ -1266,3 +1266,17 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .nt-compacto .btn-grande{padding:10px;font-size:15px}
 .nt-compacto .os-picker-lista{max-height:22vh!important}
 .novid{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+/* v104 — folha de compras padrão */
+.fc-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.fc-tab{width:100%;border-collapse:collapse;font-size:13.5px;min-width:720px}
+.fc-tab th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;opacity:.7;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.fc-tab td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.fc-tab td small{display:block;opacity:.65;font-size:12px}.fc-tab .c{text-align:center}
+.fc-tab tr.ok td{opacity:.6}.fc-tab tr.atraso td{background:color-mix(in srgb,#dc2626 9%,transparent)}
+.fc-cat td{background:var(--surface2);font-weight:700}.fc-cat small{display:inline!important;margin-left:6px}
+.fc-orig{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.fc-orig button{border:0;background:transparent;color:var(--text);padding:5px 8px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.fc-orig button.on{background:#2563eb;color:#fff}.fc-orig button.on.est{background:#0d9488}
+.fc-atr{color:#dc2626!important;opacity:1!important;font-weight:700}
+.ficha-acoes{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:8px}
+.ficha-acoes .btn{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.2;min-height:48px;font-size:14.5px}

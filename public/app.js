@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['104', ['📅 Botões da OS (Enviar ao cronograma etc.) com o texto completo.', '📋 Folha de compras padrão na OS: item, quantidade, comprar ou estoque, com quem foi comprado, prazo de entrega e ✓ recebido (atrasados em vermelho). A impressão segue o mesmo modelo.']],
   ['103', ['📦 Nova aba Amostras (Geral): quem levou nossas amostras, o que voltou e o que o cliente deixou aqui — com atraso destacado.', '🧾 Notas & financeiro na OS: só lançar a nota, forma de pagamento e em quantas vezes — já vai para Contas a pagar.', '📦 Amostras também dentro de cada OS.', '📅 Janela "Enviar para cronograma" mais compacta.', '🆕 Esta mensagem de novidades aparece a cada atualização.']],
   ['101', ['📓 Diário de obra mais simples: escolha o tipo, fale ou fotografe e salve. Pendências com ✓ e fotos por dia.', '📓 Diário também dentro da OS.']],
   ['100', ['🔐 Grupos e permissões: escolha quem vê cada tela (Equipe → Grupos e permissões).']],
@@ -2656,7 +2657,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
   const [prev, setPrev] = useState(null);
   const [novo, setNovo] = useState({ categoria: 'Ferragens', descricao: '', qtd: '', unidade: 'un' });
   const [imprimir, setImprimir] = useState(false);
-  const [modo, setModo] = useState('categoria');
+  const [modo, setModo] = useState('folha');
   const [escolher, setEscolher] = useState(null); // {ids:[...]} para escolher parceiro
   const [itemAb, setItemAb] = useState(null);
   const inpDet = useRef(null);
@@ -2718,6 +2719,22 @@ function ComprasOS({ sessao, os, toast, soNota }) {
   const marcarSt = null;
   const marcar = async (id) => { const it = itens.find(i => i.id === id); let mot = ''; if (it?.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; } registrar(sessao, os.id, it?.comprado ? '↺' : '🛒', (it?.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + (it?.descricao || '') + (it?.parceiro ? ' · ' + it.parceiro : ''), mot); return gravar(itens.map(i => i.id === id ? { ...i, st: !i.comprado ? 'pedido' : 'orcar', recebido: false, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i)); };
   const remover = (id) => gravar(itens.filter(i => i.id !== id));
+  const mudar = (id, patch) => gravar(itens.map(i => i.id === id ? { ...i, ...patch } : i));
+  const receber = async (i) => { let mot = ''; if (i.recebido) { mot = await pedirMotivo('Desmarcar recebido', i.descricao); if (!mot) return; }
+    registrar(sessao, os.id, i.recebido ? '↺' : '📦', (i.recebido ? 'Recebimento desfeito: ' : i.origem === 'estoque' ? 'Separado do estoque: ' : 'Recebido: ') + i.descricao + (i.parceiro && i.origem !== 'estoque' ? ' · ' + i.parceiro : ''), mot);
+    mudar(i.id, i.recebido ? { recebido: false, st: i.comprado ? 'pedido' : 'orcar', recebidoEm: '' } : { recebido: true, comprado: true, st: 'recebido', recebidoEm: nowIso(), recebidoPor: sessao.nome }); };
+  const hojeC = isoD(new Date());
+  const folhaPadrao = () => html`<div class="fc-wrap"><table class="fc-tab"><thead><tr><th>Recebido</th><th>Item</th><th>Qtd</th><th>Comprar / estoque</th><th>Comprado com</th><th>Prazo de entrega</th><th></th></tr></thead>
+    <tbody>${[...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
+      <tr key=${'c' + c} class="fc-cat"><td colspan="7">${ICO_CAT[c] || '📦'} ${c} <small>${l.filter(i => i.recebido).length}/${l.length} recebidos</small></td></tr>
+      ${l.map(i => { const est = i.origem === 'estoque'; const atr = !i.recebido && !est && i.previsao && i.previsao < hojeC; return html`<tr key=${i.id} class=${(i.recebido ? 'ok' : '') + (atr ? ' atraso' : '')}>
+        <td class="c"><button class=${'dia-ck' + (i.recebido ? ' on' : '')} title=${est ? 'Separado do estoque' : 'Recebido'} onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button></td>
+        <td><b style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b>${i.codigo || i.marca ? html`<small>${[i.codigo, i.marca].filter(Boolean).join(' · ')}</small>` : ''}</td>
+        <td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td>
+        <td><div class="fc-orig"><button class=${!est ? 'on' : ''} onClick=${() => est && mudar(i.id, { origem: 'comprar' })}>🛒 Comprar</button><button class=${est ? 'on est' : ''} onClick=${() => !est && mudar(i.id, { origem: 'estoque', parceiro: '' })}>📦 Estoque</button></div></td>
+        <td>${est ? html`<span class="dim">—</span>` : html`<button class=${'parc-chip' + (i.parceiro ? ' tem' : '')} onClick=${() => setEscolher({ ids: [i.id] })}>${i.parceiro ? '🤝 ' + i.parceiro : '＋ fornecedor'}</button>`}</td>
+        <td>${est ? html`<span class="dim">—</span>` : html`<input class="inp inp-sm" type="date" value=${i.previsao || ''} onChange=${e => mudar(i.id, { previsao: e.target.value, ...(e.target.value && !i.comprado ? { comprado: true, st: 'pedido', compradoEm: nowIso(), compradoPor: sessao.nome } : {}) })} />${atr ? html`<small class="fc-atr">⚠ atrasado</small>` : ''}`}</td>
+        <td><button class="x-btn" onClick=${() => remover(i.id)}>✕</button></td></tr>`; })}`)}</tbody></table></div>`;
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
     : modo === 'etapa' ? [['⚡ Pré-pedido (comprar já)', itens.filter(i => i.etapa === 'pre')], ['📦 Pedido principal', itens.filter(i => i.etapa !== 'pre')]].filter(([, l]) => l.length)
@@ -2772,11 +2789,11 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     <small class="dim">O detalhamento do arquiteto já separa o que é <b>⚡ pré-pedido</b> (lâminas, Blum, itens sem pronta entrega). A folha do Dinabox traz o pedido grosso (chapas, fitas, ferragens).</small>
     ${itens.length > 0 && html`<div class="st-resumo">${ST_COMPRA.map(([v, t, c]) => { const n = itens.filter(i => stCompra(i) === v).length; return n ? html`<span key=${v} style=${{ background: c }}>${t}: ${n}</span>` : null; })}<span style=${{ background: '#1f2937' }}>Total: ${brl(itens.reduce((n, i) => n + numBR(i.valor), 0))}</span></div>`}
     ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="vazio dim">Nenhum item ainda.</div>` : html`
-      <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados</span></div>
+      <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados · ${itens.filter(i => i.recebido).length} recebidos · ${itens.filter(i => i.origem === 'estoque').length} do estoque</span></div>
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
-        <div class="seg-mini"><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
+        <div class="seg-mini"><button class=${modo === 'folha' ? 'on' : ''} onClick=${() => setModo('folha')}>📋 Folha padrão</button><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
       </div>
-      ${grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
+      ${modo === 'folha' ? folhaPadrao() : grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
           <span class="row" style=${{ gap: '4px' }}>
             <button class="btn btn-sm btn-ghost" onClick=${() => setEscolher({ ids: l.map(i => i.id) })}>🤝 ${modo === 'parceiro' ? 'Trocar' : 'Parceiro p/ todos'}</button>
             ${modo === 'parceiro' && parcNome && html`<button class="btn btn-sm" onClick=${() => { setImprimir(parcNome); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Pedido p/ ${parcNome}</button>`}
@@ -2821,8 +2838,8 @@ function ImpressaoCompras({ os, doc, empresa }) {
       <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${new Date().toLocaleDateString('pt-BR')}${doc?.origem ? ' · ' + doc.origem : ''}</div></div></div>
     ${CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
       <div key=${c} class="po-amb"><div class="po-amb-t"><span>${l.length}</span>${c}</div>
-        <table><thead><tr><th style=${{ width: '26px' }}>✓</th><th style=${{ width: '14%' }}>Código</th><th>Descrição</th><th style=${{ width: '14%' }}>Marca</th><th style=${{ width: '12%' }}>Qtd</th><th style=${{ width: '16%' }}>Fornecedor / valor</th></tr></thead>
-          <tbody>${l.map(i => html`<tr key=${i.id}><td>${i.comprado ? '✔' : html`<span class="caixa"></span>`}</td><td class="mono">${i.codigo || ''}</td><td><b>${i.descricao}</b>${i.obs ? html`<br/><small>${i.obs}</small>` : ''}</td><td>${i.marca || ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td>${i.parceiro || ''}</td></tr>`)}</tbody></table></div>`)}
+        <table><thead><tr><th style=${{ width: '46px' }}>Receb.</th><th>Descrição</th><th style=${{ width: '11%' }}>Qtd</th><th style=${{ width: '11%' }}>Comprar / estoque</th><th style=${{ width: '18%' }}>Comprado com</th><th style=${{ width: '12%' }}>Prazo entrega</th></tr></thead>
+          <tbody>${l.map(i => html`<tr key=${i.id}><td class="c">${i.recebido ? '✔' : html`<span class="caixa"></span>`}</td><td><b>${i.descricao}</b>${i.codigo || i.marca || i.obs ? html`<br/><small>${[i.codigo, i.marca, i.obs].filter(Boolean).join(' · ')}</small>` : ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td class="c">${i.origem === 'estoque' ? 'Estoque' : 'Comprar'}</td><td>${i.origem === 'estoque' ? '—' : (i.parceiro || '')}</td><td class="c">${i.origem === 'estoque' ? '—' : dm(i.previsao || '')}</td></tr>`)}</tbody></table></div>`)}
     <div class="po-ass">${['Solicitado por', 'Compras', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
     <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
   </div>`;
@@ -3887,7 +3904,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         <button class="btn btn-grande btn-primary" onClick=${editarMot}>✏️ Editar OS</button>
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
         ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📅 Ver no cronograma</button>`
-          : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>`}
+          : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
       <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
