@@ -2470,7 +2470,7 @@ function ComprasOS({ sessao, os, toast }) {
       const r = await extrairArquivo(file); const cats = catsEmpresa(cfgE), regras = cfgE.regrasCategoria || [];
       const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0, categorias: cats, exemplos: regras.slice(-120), empresa: sessao.empresaNome || '' }, r.imagens || []);
       const linhas = (res.itens || []).map(arrumarLinhaNF).map(li => { let best = '', sc = 0; itens.forEach(i => { const p = parecido(li.descricao, i.descricao); if (p > sc) { sc = p; best = i.id; } }); return { ...li, categoria: categoriaPorRegra(regras, li.descricao) || (cats.includes(li.categoria) ? li.categoria : 'Outros'), osId: os.id, itemId: sc >= 0.5 ? best : '' }; });
-      setNfOS({ arquivo: file.name, fornecedor: res.fornecedor || '', razao: res.razao || '', cnpj: res.cnpj || '', cidade: res.cidade || '', uf: res.uf || '', endereco: res.endereco || '', numero: res.numero || '', data: res.data || isoD(new Date()), total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas });
+      setNfOS({ arquivo: file.name, ...fornecedorDaNota(res, sessao, cfgE), numero: res.numero || '', data: res.data || isoD(new Date()), total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas });
     } catch (e2) { toast('Não li a nota: ' + e2.message, 'erro'); }
     setLendo('');
   };
@@ -2534,7 +2534,9 @@ function ComprasOS({ sessao, os, toast }) {
     <button class="btn btn-grande btn-verde btn-block" disabled=${!!lendo} onClick=${() => inpNfOS.current?.click()}>🧾 Lançar nota fiscal desta OS (recebimento + preços)</button>
     <input ref=${inpNfOS} type="file" hidden accept=".pdf,.xml,.txt,image/*" onChange=${e => { lerNfOS(e.target.files[0]); e.target.value = ''; }} />
     ${nfOS && ReactDOM.createPortal(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(820px,100%)' }}>
-      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧾 NF ${nfOS.numero} · ${nfOS.fornecedor} → OS ${numOS(os)}</div><button class="x-btn" onClick=${() => setNfOS(null)}>✕</button></div>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧾 NF ${nfOS.numero} → OS ${numOS(os)}</div><button class="x-btn" onClick=${() => setNfOS(null)}>✕</button></div>
+      <div class="field"><span class="lbl">Fornecedor (quem vendeu)</span><input class="inp" value=${nfOS.fornecedor} onInput=${e => setNfOS({ ...nfOS, fornecedor: e.target.value, suspeito: false })} /></div>
+      ${nfOS.suspeito && html`<div class="error-box">⚠️ Esse nome parece ser a sua própria empresa. Troque pelo nome do fornecedor.</div>`}
       <div class="dim">Confira quantidade e total de cada item (o preço unitário é calculado sozinho) e a qual material da lista ele corresponde.</div>
       <div class="nf-linhas">${nfOS.linhas.map((l, k) => html`<div key=${k} class="nf-l">
         <div><b>${l.descricao}</b>
@@ -4454,6 +4456,16 @@ function ImpressaoOS({ os, empresa }) {
 
 /* ---------- Compras (visão geral de todas as OSs) ---------- */
 const semAcento = (t) => norm(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+/* Garante que o fornecedor é quem VENDEU (emitente), nunca a empresa que comprou */
+function fornecedorDaNota(res, sessao, cfg) {
+  const em = res.emitente || {}, de = res.destinatario || {};
+  let f = { fornecedor: em.nome || em.razao || res.fornecedor || '', razao: em.razao || res.razao || '', cnpj: em.cnpj || res.cnpj || '', cidade: em.cidade || res.cidade || '', uf: em.uf || res.uf || '', endereco: em.endereco || res.endereco || '' };
+  const proprios = [sessao.empresaNome || '', ...((cfg && cfg.nomesProprios) || [])].filter(Boolean);
+  const ehProprio = (n) => n && proprios.some(p => parecido(n, p) >= 0.5 || norm(n).includes(norm(p).split(' ')[0]) && norm(p).split(' ')[0].length > 3);
+  if (ehProprio(f.fornecedor) && de.nome && !ehProprio(de.nome)) f = { fornecedor: de.nome, razao: de.nome, cnpj: de.cnpj || '', cidade: '', uf: '', endereco: '' };
+  f.suspeito = ehProprio(f.fornecedor);
+  return f;
+}
 /* Conserta valores de nota confusa: qtd × unitário tem que fechar com o total do item */
 function arrumarLinhaNF(l) {
   const q = numBR(l.qtd), vu = numBR(l.valorUnit), vt = numBR(l.valorTotal);
@@ -4533,8 +4545,9 @@ function TelaComprasGeral({ sessao, toast }) {
       res.itens = (res.itens || []).map(arrumarLinhaNF);
       (res.itens || []).forEach(li => { li.categoria = categoriaPorRegra(regras, li.descricao) || (cats.includes(li.categoria) ? li.categoria : 'Outros'); });
       const linhas = (res.itens || []).map(li => { let best = null, sc = 0; itens.filter(i => i._st !== 'recebido').forEach(i => { let p = parecido(li.descricao, i.descricao); if (i.parceiro && norm(res.fornecedor).includes(norm(i.parceiro).split(' ')[0])) p += .2; if (p > sc) { sc = p; best = i; } }); return { ...li, osId: best && sc >= .4 ? best.osId : '', itemId: best && sc >= .4 ? best.id : '' }; });
-      if (lerNf.modelo) { lerNf.modelo = false; setModelo({ arquivo: file.name, fornecedor: res.fornecedor || '', linhas: (res.itens || []).map(li => ({ descricao: li.descricao, categoria: li.categoria })) }); setLendoNf(''); return; }
-      setNf({ arquivo: file.name, fornecedor: res.fornecedor || '', razao: res.razao || '', cidade: res.cidade || '', uf: res.uf || '', endereco: res.endereco || '', cnpj: res.cnpj || '', numero: res.numero || '', data: res.data || hoje, total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas });
+      if (lerNf.modelo) { lerNf.modelo = false; setModelo({ arquivo: file.name, fornecedor: fornecedorDaNota(res, sessao, cfgC).fornecedor, linhas: (res.itens || []).map(li => ({ descricao: li.descricao, categoria: li.categoria })) }); setLendoNf(''); return; }
+      const fz = fornecedorDaNota(res, sessao, cfgC);
+      setNf({ arquivo: file.name, ...fz, numero: res.numero || '', data: res.data || hoje, total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas });
     } catch (e) { toast('Não li a nota: ' + e.message, 'erro'); }
     setLendoNf('');
   };
@@ -4660,7 +4673,7 @@ function TelaComprasGeral({ sessao, toast }) {
       <button class="btn btn-grande btn-verde btn-block" onClick=${async () => { const nr = [...regras.filter(r => !modelo.linhas.some(l => norm(l.descricao) === norm(r.d))), ...modelo.linhas.map(l => ({ d: l.descricao, c: l.categoria }))].slice(-600); const mid = rand(6); const nr2 = [...regras.filter(r => !modelo.linhas.some(l => norm(l.descricao) === norm(r.d))), ...modelo.linhas.map(l => ({ d: l.descricao, c: l.categoria, m: mid }))].slice(-600); await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { regrasCategoria: nr2, modelosNota: [...(cfgC.modelosNota || []), { id: mid, fornecedor: modelo.fornecedor, arquivo: modelo.arquivo, n: modelo.linhas.length, em: nowIso() }] }); toast(modelo.linhas.length + ' itens aprendidos.', 'ok'); setModelo(false); }}>💾 Salvar como modelo</button>
     </div></div>`, document.body)}
     ${aba === 'notas' && html`<div class="card page-card stack">
-      ${!notas.length ? html`<div class="vazio dim">Nenhuma nota lançada. Use 🧾 Lançar nota fiscal.</div>` : notas.sort((a, b) => String(b.data).localeCompare(String(a.data))).map(n => html`<div key=${n.id} class="fl-i"><span style=${{ flex: 1 }}><b>NF ${n.numero || '—'}</b> · ${n.fornecedor}<small> · ${n.data ? n.data.split('-').reverse().join('/') : ''} · ${(n.linhas || []).length} itens</small></span><b>${brl(n.total)}</b><button class="x-btn" title="Excluir nota" onClick=${async () => { if ((await escolher('Excluir nota', 'Excluir a NF ' + (n.numero || '') + ' de ' + n.fornecedor + '? Os preços dela saem da aba Preços. Itens já lançados nas OSs continuam.', [{ v: 's', t: 'Excluir nota', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }])) !== 's') return; await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'notas', n.id)); toast('Nota excluída.', 'ok'); }}>🗑</button></div>`)}
+      ${!notas.length ? html`<div class="vazio dim">Nenhuma nota lançada. Use 🧾 Lançar nota fiscal.</div>` : notas.sort((a, b) => String(b.data).localeCompare(String(a.data))).map(n => html`<div key=${n.id} class="fl-i"><span style=${{ flex: 1 }}><b>NF ${n.numero || '—'}</b> · ${n.fornecedor}<small> · ${n.data ? n.data.split('-').reverse().join('/') : ''} · ${(n.linhas || []).length} itens</small></span><b>${brl(n.total)}</b><button class="x-btn" title="Corrigir fornecedor" onClick=${async () => { const nome = (await pedirTexto('Fornecedor correto desta nota', n.fornecedor)).trim(); if (!nome) return; const antigo = n.fornecedor; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'notas', n.id), { fornecedor: nome }); const ainda = notas.some(x => x.id !== n.id && x.fornecedor === antigo); const lista = parceiros.map(p => p.nome === antigo && !ainda ? { ...p, nome } : p); const mp = parceiros.some(p => p.nome === antigo) && !ainda ? { lista } : mesclarParceiro(lista, { ...n, fornecedor: nome, cnpj: '', linhas: n.linhas || [] }); await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: mp.lista, nomesProprios: [...new Set([...(cfgC.nomesProprios || []), antigo])] }); toast('Fornecedor corrigido para ' + nome + '.', 'ok'); }}>✏️</button><button class="x-btn" title="Excluir nota" onClick=${async () => { if ((await escolher('Excluir nota', 'Excluir a NF ' + (n.numero || '') + ' de ' + n.fornecedor + '? Os preços dela saem da aba Preços. Itens já lançados nas OSs continuam.', [{ v: 's', t: 'Excluir nota', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }])) !== 's') return; await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'notas', n.id)); toast('Nota excluída.', 'ok'); }}>🗑</button></div>`)}
     </div>`}
     ${nf && ReactDOM.createPortal(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(820px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧾 Nota fiscal — separar por OS</div><button class="x-btn" onClick=${() => setNf(null)}>✕</button></div>
@@ -4669,6 +4682,8 @@ function TelaComprasGeral({ sessao, toast }) {
         <div class="field"><span class="lbl">Nº da nota · data</span><div class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}><input class="inp" value=${nf.numero} onInput=${e => setNf({ ...nf, numero: e.target.value })} /><input class="inp" type="date" value=${nf.data} onInput=${e => setNf({ ...nf, data: e.target.value })} /></div></div>
       </div>
       ${nf.cnpj && html`<div class="dim">🏢 ${nf.razao || nf.fornecedor} · CNPJ ${nf.cnpj}${nf.cidade ? ' · ' + nf.cidade + '/' + nf.uf : ''} ${(() => { const r = raizCnpj(nf.cnpj); const p = parceiros.find(x => r && x.cnpjRaiz === r); return p ? html`<b style=${{ color: '#15803d' }}>· parceiro já cadastrado${p.unidades?.some(u => u.cnpj.replace(/\D/g, '') === nf.cnpj.replace(/\D/g, '')) ? '' : ' (unidade nova)'}</b>` : html`<b style=${{ color: '#2563eb' }}>· parceiro novo, será cadastrado</b>`; })()}</div>`}
+      ${nf.suspeito && html`<div class="error-box">⚠️ "${nf.fornecedor}" parece ser a sua própria empresa (quem comprou). Corrija o nome do fornecedor acima.</div>`}
+      <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" onChange=${async e => { if (e.target.checked && nf.fornecedor) { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { nomesProprios: [...new Set([...(cfgC.nomesProprios || []), nf.fornecedor])] }); toast('Anotado: "' + nf.fornecedor + '" é a sua empresa. Nunca mais vira fornecedor.', 'ok'); setNf({ ...nf, fornecedor: '', suspeito: true }); } }} /> Esse nome é da minha empresa (quem comprou), não do fornecedor</label>
       <div class="dim">A IA já ligou cada item ao material parecido das OSs e separou por categoria. Confira e troque se precisar — o app aprende com as suas correções.</div>
       <div class="nf-linhas">${nf.linhas.map((l, k) => { const doOS = itens.filter(i => i.osId === l.osId); return html`<div key=${k} class="nf-l">
         <div><b>${l.descricao}</b>
