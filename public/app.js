@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['111', ['📈 Quadro geral: barra de conclusão em % por cliente, por OS e o andamento geral de todas as obras (etapa da OS + produção + parceiros).']],
   ['110', ['✏️ Nome do cliente editável direto na OS (lápis ao lado do nome). Se o cliente tiver outras OS, dá para trocar em todas de uma vez.']],
   ['109', ['👥 Clientes com nome quase igual (ex.: Silmara x Sillmara) aparecem em aviso no Quadro geral com botão para juntar.', '👥 Ao criar ou importar OS com nome parecido com um cliente existente, o app pergunta se é o mesmo.', '🤖 A IA também organiza: diga "junta a Sillmara com a Silmara".']],
   ['107', ['📋 Folha de compras padrão aparece sempre na aba 🛒 Compras da OS, mesmo sem itens.']],
@@ -2971,6 +2972,17 @@ function AgoraAndamento({ sessao, lista, abrirOS }) {
   </div>`;
 }
 
+/* % de conclusão da obra: etapa da OS (40%) + produção na fábrica (40%) + parceiros recebidos (20%) */
+function pctObra(o) {
+  if (o.status === 'concluida') return 100;
+  const i = Math.max(0, STATUS_OS.findIndex(x => x.v === o.status)), nS = Math.max(1, STATUS_OS.length - 1);
+  const et = o.execucao?.etapas || {}; const fab = ETAPAS_FAB.reduce((n, [k]) => n + (et[k]?.status === 'pronto' ? 1 : et[k]?.status === 'andamento' ? 0.5 : 0), 0) / ETAPAS_FAB.length;
+  const pr = parceirosDaOS(o); const par = pr.length ? pr.filter(p => p.st === 'recebido').length / pr.length : 1;
+  return Math.round((i / nS) * 40 + fab * 40 + par * 20);
+}
+const corPct = (p) => p >= 100 ? '#16a34a' : p >= 70 ? '#65a30d' : p >= 40 ? '#d97706' : '#dc2626';
+function BarraPct({ p, grande }) { return html`<div class=${'pct-barra' + (grande ? ' g' : '')}><i style=${{ width: p + '%', background: corPct(p) }}></i><span>${p}%</span></div>`; }
+
 function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   const [lista, setLista] = useState(null);
   const [filtro, setFiltro] = useState('todas');
@@ -3054,14 +3066,16 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
       ${lista === null ? html`<div class="card">Carregando…</div>` : cards.length === 0 ? html`<div class="card vazio dim">Nada por aqui.</div>` : !cliSel ? (() => {
         const grupos = {};
         cards.forEach(c => { const k = norm(c.o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: c.o.cliente?.nome || 'Sem cliente', cards: [] }).cards.push(c); });
-        return Object.entries(grupos).sort((a, b) => b[1].cards.some(c => c.atras) - a[1].cards.some(c => c.atras) || a[1].nome.localeCompare(b[1].nome)).map(([k, g]) => {
+        const todasP = cards.map(c => pctObra(c.o)); const geral = todasP.length ? Math.round(todasP.reduce((a, b) => a + b, 0) / todasP.length) : 0;
+        return [html`<div key="__geral" class="card pct-geral"><div class="row" style=${{ justifyContent: 'space-between' }}><b>📈 Andamento geral das obras</b><small class="dim">${Object.keys(grupos).length} clientes · ${cards.length} OS</small></div><${BarraPct} p=${geral} grande=${true} />
+          <div class="pct-mini">${Object.values(grupos).map(g => { const p = Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length); return { g, p }; }).sort((a, b) => a.p - b.p).map(({ g, p }) => html`<div key=${g.nome} class="pct-lin" onClick=${() => setCliSel(norm(g.cards[0].o.cliente?.nome) || '—')}><span>${g.nome.split(/\s[-–]\s/)[0]}</span><${BarraPct} p=${p} /></div>`)}</div></div>`, ...Object.entries(grupos).sort((a, b) => b[1].cards.some(c => c.atras) - a[1].cards.some(c => c.atras) || a[1].nome.localeCompare(b[1].nome)).map(([k, g]) => {
           const tot = g.cards.length * 6, feitas = g.cards.reduce((n, c) => n + c.feitas, 0);
           const pend = g.cards.reduce((n, c) => n + c.pendParc.length, 0), atr = g.cards.filter(c => c.atras).length, pendD = g.cards.reduce((n, c) => n + (c.o.pendAbertas || 0), 0);
           const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
           const cor = corCliente(g.nome);
           return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor }} onClick=${() => setCliSel(k)}>
             <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
-            <div class="qg-barra"><i style=${{ width: (tot ? feitas / tot * 100 : 0) + '%' }}></i></div>
+            <div class="pct-rot"><small>Conclusão da obra</small><${BarraPct} p=${Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length)} /></div>
             <div class="qg-badges">
               <span title="Produção">🏭 ${Math.round(tot ? feitas / tot * 100 : 0)}%</span>
               ${pend > 0 && html`<span class="b-par" title="Parceiros pendentes">🤝 ${pend}</span>`}
@@ -3069,7 +3083,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
               ${atr > 0 && html`<span class="b-atr">⚠ ${atr}</span>`}
               ${prazos[0] && html`<span>🚚 ${prazos[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>`}
             </div>
-          </button>`; });
+          </button>`; })];
       })() : html`
         <div class="row" style=${{ gap: '8px', justifyContent: 'space-between' }}><span class="row" style=${{ gap: '8px' }}><button class="btn btn-sm" onClick=${() => setCliSel(null)}>← Clientes</button><b class="qg-cli-nome" style=${{ '--cc': corCliente(cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || '') }}>${cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || ''}</b></span>
           <button class="btn btn-sm" onClick=${() => imprimirFolha(cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(c => c.o))}>🖨 Folha de pendências</button></div>
@@ -3081,6 +3095,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
             <span class=${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).c + ' qg-st'}>${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
             <div class=${'qg-prazo' + (atras ? ' atras' : '')}>${o.prazoEntrega ? (atras ? '⚠ ' : '🚚 ') + o.prazoEntrega.slice(0, 5) : '—'}</div>
           </div>
+          <div class="pct-rot"><small>Conclusão</small><${BarraPct} p=${pctObra(o)} /></div>
           <button class="qg-prod" onClick=${() => setSheet({ osId: o.id, tipo: 'prod' })}>
             ${ETAPAS_FAB.map(([k, t]) => { const s = et[k]?.status || 'pendente'; return html`<span key=${k} class=${'qg-seg ' + s}><i></i><small>${t.split(' ')[0]}</small></span>`; })}
             <em>${feitas}/6</em>
