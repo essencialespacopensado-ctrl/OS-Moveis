@@ -3543,6 +3543,8 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   if (!o) return null;
   const fin = o.status === 'concluida';
   const editarMot = async () => {
+    const revisada = o.revisao?.em && (!o.atualizadoEm || o.revisao.em >= o.atualizadoEm);
+    if (!revisada) return editar(osId);
     const mot = await pedirMotivo('Abrir OS ' + numOS(o) + ' para edição', 'A OS já está salva. Informe o motivo da edição.');
     if (!mot) return;
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { reaberturas: [...(o.reaberturas || []), { oque: 'Aberta para edição', motivo: mot, quem: sessao.nome, quando: nowIso() }] }); } catch {}
@@ -4758,12 +4760,14 @@ function Assistente({ sessao, osAberta }) {
   const chamadaRef = useRef(false); chamadaRef.current = chamada;
   const falaCh = useFala({ onFinal: t => { if (faseRef.current === 'falando') return; bufRef.current = (bufRef.current + ' ' + t).trim(); setOuvido(bufRef.current); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => { const q = bufRef.current; bufRef.current = ''; if (q) processar(q); }, 1300); }, onInterim: t => { if (faseRef.current !== 'falando' && t) setOuvido((bufRef.current + ' ' + t).trim()); } });
   const falar = (txt) => new Promise(res => {
-    const sy = window.speechSynthesis; if (!sy || !txt) return res();
+    const sy = window.speechSynthesis; if (!sy || !txt) { if (chamadaRef.current) { setFase('ouvindo'); falaCh.iniciar(); } return res(); }
     falaCh.parar(); setFase('falando');
     const u = new SpeechSynthesisUtterance(String(txt).replace(/[*#_`>]/g, '').slice(0, 600));
     u.lang = 'pt-BR'; const v = sy.getVoices().find(x => /pt-BR/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.08;
-    const fim = () => { res(); if (chamadaRef.current) { setFase('ouvindo'); falaCh.iniciar(); } };
-    u.onend = fim; u.onerror = fim; sy.cancel(); sy.speak(u);
+    let feito = false;
+    const fim = () => { if (feito) return; feito = true; res(); if (chamadaRef.current) { setFase('ouvindo'); setTimeout(() => falaCh.iniciar(), 250); } };
+    u.onend = fim; u.onerror = fim; try { sy.cancel(); sy.resume(); sy.speak(u); } catch { fim(); }
+    setTimeout(fim, Math.min(20000, 1800 + String(txt).length * 80));
   });
   const aplicarPendentes = async () => {
     const p = pendRef.current; pendRef.current = null; if (!p) return;
