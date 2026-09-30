@@ -4632,6 +4632,8 @@ function MinhaConta({ sessao, fechar, toast }) {
    ========================================================= */
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
+const PRINCIPAIS = ['inicio', 'os', 'cronograma', 'quadro', 'pedidos'];
+const GRUPOS_MENU = [['Documentos', ['contratos', 'projetos', 'importar']], ['Cadastros', ['catalogo', 'equipe']], ['Administração', ['excluir', 'config']]];
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
 const TELAS_VOZ = [[/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
 function comandoTela(q) {
@@ -5244,10 +5246,11 @@ function Principal({ sessao, toast }) {
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
-    { v: 'cronograma', t: 'Cronogramas', i: '📅' },
+    { v: 'cronograma', t: 'Cronograma', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
     ...(sessao.papel === 'admin' ? [{ v: 'config', t: 'Configurações', i: '⚙' }] : []),
   ];
+  const [mais, setMais] = useState(false);
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
@@ -5261,8 +5264,14 @@ function Principal({ sessao, toast }) {
               <div class="dim topo-emp" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
             </div>
           </div>
-          <nav class="pillnav">
-            ${abas.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span class="ico">${a.i}</span>${a.t}</button>`)}
+          <nav class="pillnav nav-org">
+            ${abas.filter(a => PRINCIPAIS.includes(a.v)).sort((x, y) => PRINCIPAIS.indexOf(x.v) - PRINCIPAIS.indexOf(y.v)).map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => { setMais(false); irPara(a.v); }}><span class="ico">${a.i}</span>${a.t}</button>`)}
+            <div class="mais-wrap">
+              <button class=${'mais-btn' + (!PRINCIPAIS.includes(aba) ? ' on' : '') + (mais ? ' aberto' : '')} onClick=${() => setMais(!mais)}><span class="ico">☰</span>${!PRINCIPAIS.includes(aba) ? (abas.find(a => a.v === aba) || {}).t || 'Mais' : 'Mais'} ▾</button>
+              ${mais && html`<div class="mais-fundo" onClick=${() => setMais(false)}></div><div class="mais-menu">
+                ${GRUPOS_MENU.map(([tit, vs]) => { const it = abas.filter(a => vs.includes(a.v)); return it.length ? html`<div key=${tit} class="mais-grp"><small>${tit}</small>${it.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => { setMais(false); irPara(a.v); }}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })}
+              </div>`}
+            </div>
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
@@ -5270,7 +5279,6 @@ function Principal({ sessao, toast }) {
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
-            ${sessao.papel === 'admin' && html`<button class=${'btn btn-ghost btn-sm' + (aba === 'config' ? ' on-cfg' : '')} title="Configurações" onClick=${() => irPara('config')}>⚙<span class="txt-desk"> Configurações</span></button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
