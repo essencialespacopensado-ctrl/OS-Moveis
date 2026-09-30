@@ -2211,7 +2211,8 @@ function DiarioOS({ sessao, os, toast }) {
   const [texto, setTexto] = useState('');
   const [interim, setInterim] = useState('');
   const [fotos, setFotos] = useState([]);
-  const [tipo, setTipo] = useState('pendencia');
+  const [tipo, setTipo] = useState('');
+  const [filtroD, setFiltroD] = useState('abertas');
   const [salvando, setSalvando] = useState(false);
   const [verFoto, setVerFoto] = useState(null);
   const cam = useRef(null), gal = useRef(null);
@@ -2241,7 +2242,7 @@ function DiarioOS({ sessao, os, toast }) {
       const r = await F().fsMod.addDoc(col(...base), doc);
       if (tipo === 'final') await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { ultimoFinal: { em: doc.em, quem: sessao.nome, foto: fotos[0], texto: t } });
       await contar([{ id: r.id, ...doc }, ...(itens || [])]);
-      setTexto(''); setInterim(''); setFotos([]);
+      setTexto(''); setInterim(''); setFotos([]); setTipo('');
       registrar(sessao, os.id, tipo === 'pendencia' ? '⚠️' : tipo === 'final' ? '🌇' : '📓', tipo === 'pendencia' ? 'Pendência no diário de obra' : tipo === 'final' ? 'Foto do final do dia' : 'Registro no diário de obra', t.slice(0, 160));
       toast(tipo === 'pendencia' ? 'Pendência registrada.' : 'Registro salvo no diário.', 'ok');
     } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
@@ -2255,33 +2256,119 @@ function DiarioOS({ sessao, os, toast }) {
     await contar((itens || []).map(x => x.id === it.id ? { ...x, resolvida: v } : x));
   };
   const abertas = (itens || []).filter(i => i.tipo === 'pendencia' && !i.resolvida);
+  const nFotos = (itens || []).reduce((n, i) => n + (i.fotos || []).length, 0);
+  const TIPOS_D = [['pendencia', '⚠', 'Problema / pendência', 'Falta peça, defeito, algo a resolver', '#dc2626'], ['final', '🌇', 'Final do dia', 'Foto do que foi montado hoje', '#d97706'], ['registro', '📝', 'Anotação', 'O que foi feito, recado, observação', '#2563eb'], ['foto', '📷', 'Só foto', 'Registrar fotos da obra', '#0d9488']];
+  const tInfo = TIPOS_D.find(t => t[0] === tipo);
+  const filtrados = (itens || []).filter(i => filtroD === 'abertas' ? (i.tipo === 'pendencia' && !i.resolvida) : filtroD === 'fotos' ? (i.fotos || []).length : true);
+  const porDia = []; filtrados.forEach(i => { const d = String(i.em).slice(0, 10); const g = porDia.find(x => x[0] === d); g ? g[1].push(i) : porDia.push([d, [i]]); });
+  const nomeDia = (d) => { const h = isoD(new Date()), o = isoD(new Date(Date.now() - 864e5)); return d === h ? 'Hoje' : d === o ? 'Ontem' : new Date(d + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }); };
   return html`
-    <div class="sheet-t">📓 Diário de obra</div>
-    <div class="dim" style=${{ marginTop: '-6px' }}>${numOS(os)} · ${(os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || ''}</div>
-    <div class="seg-mini dia-tipo">${[['pendencia', '⚠ Pendência'], ['registro', '📝 Registro'], ['final', '🌇 Final do dia'], ['foto', '📷 Só foto']].map(([v, t]) => html`<button key=${v} class=${tipo === v ? 'on' : ''} onClick=${() => setTipo(v)}>${t}</button>`)}</div>
-    <div class="dia-box">
-      <textarea class="inp" rows="3" placeholder=${tipo === 'pendencia' ? 'Ex: falta 1 dobradiça na porta do balcão, puxador riscado…' : tipo === 'final' ? 'O que foi montado hoje (fale ou escreva) + tire a foto' : 'O que foi feito hoje / observação'} value=${texto + (interim ? ' ' + interim : '')} onInput=${e => { setTexto(e.target.value); setInterim(''); }}></textarea>
+    <div class="dia-topo">
+      <div><div class="sheet-t" style=${{ margin: 0 }}>📓 Diário de obra</div><div class="dim">${numOS(os)} · ${(os.cliente?.nome || '').split(/\s[-–]\s/)[0]} · ${(os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || ''}</div></div>
+      <div class="dia-kpis"><span class=${abertas.length ? 'ruim' : 'bom'}>${abertas.length ? '⚠ ' + abertas.length + ' em aberto' : '✓ Sem pendências'}</span><span>📷 ${nFotos}</span><span>📝 ${(itens || []).length}</span></div>
+    </div>
+    ${!tipo ? html`<div class="dia-escolha"><div class="lbl">O que você quer registrar?</div>
+      <div class="dia-cards">${TIPOS_D.map(([v, ic, t, d, c]) => html`<button key=${v} class="dia-card" style=${{ '--c': c }} onClick=${() => { setTipo(v); if (v === 'final' || v === 'foto') setTimeout(() => cam.current?.click(), 50); }}><span class="dia-ic">${ic}</span><b>${t}</b><small>${d}</small></button>`)}</div></div>`
+    : html`<div class="dia-box" style=${{ '--c': tInfo[4] }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><b style=${{ color: tInfo[4] }}>${tInfo[1]} ${tInfo[2]}</b><button class="btn btn-sm btn-ghost" onClick=${() => { setTipo(''); setTexto(''); setFotos([]); fala.ouvindo && fala.parar(); }}>✕ Cancelar</button></div>
+      ${tipo !== 'foto' && html`<textarea class="inp" rows="3" placeholder=${tipo === 'pendencia' ? 'Ex: falta 1 dobradiça na porta do balcão…' : tipo === 'final' ? 'O que foi montado hoje (opcional)' : 'Escreva ou toque em 🎤 e fale'} value=${texto + (interim ? ' ' + interim : '')} onInput=${e => { setTexto(e.target.value); setInterim(''); }}></textarea>`}
       <div class="dia-acoes">
-        ${fala.ouvindo ? html`<button class="btn btn-grande btn-mic-on pulse" onClick=${fala.parar}>■ Parar</button>` : html`<button class="btn btn-grande btn-teal" onClick=${fala.iniciar}>🎤 Falar</button>`}
-        <button class="btn btn-grande" onClick=${() => cam.current?.click()}>📷 Foto</button>
-        <button class="btn btn-grande btn-ghost" onClick=${() => gal.current?.click()}>🖼️</button>
-        <input ref=${cam} type="file" accept="image/*" capture="environment" hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
-        <input ref=${gal} type="file" accept="image/*" multiple hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
+        ${tipo !== 'foto' && (fala.ouvindo ? html`<button class="btn btn-grande btn-mic-on pulse" onClick=${fala.parar}>■ Parar</button>` : html`<button class="btn btn-grande btn-teal" onClick=${fala.iniciar}>🎤 Falar</button>`)}
+        <button class="btn btn-grande" onClick=${() => cam.current?.click()}>📷 Tirar foto</button>
+        <button class="btn btn-grande btn-ghost" onClick=${() => gal.current?.click()}>🖼️ Galeria</button>
       </div>
       ${fala.erro && html`<div class="error-box">${fala.erro}</div>`}
       ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}
-      <button class="btn btn-grande btn-verde btn-block" disabled=${salvando} onClick=${salvar}>${salvando ? 'Salvando…' : '✓ Salvar no diário'}</button>
-    </div>
-    ${abertas.length > 0 && html`<div class="sheet-t" style=${{ fontSize: '15px' }}>⚠ Pendências em aberto (${abertas.length})</div>`}
-    ${itens === null ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="dim">Nenhum registro ainda.</div>` : itens.map(it => html`
+      <button class="btn btn-grande btn-verde btn-block" disabled=${salvando} onClick=${async () => { await salvar(); }}>${salvando ? 'Salvando…' : '✓ Salvar'}</button>
+    </div>`}
+    <input ref=${cam} type="file" accept="image/*" capture="environment" hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
+    <input ref=${gal} type="file" accept="image/*" multiple hidden onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} />
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['abertas', '⚠ Em aberto (' + abertas.length + ')'], ['tudo', '📅 Tudo por dia'], ['fotos', '📷 Fotos']].map(([v, t]) => html`<button key=${v} class=${filtroD === v ? 'on' : ''} onClick=${() => setFiltroD(v)}>${t}</button>`)}</div>
+    ${itens === null ? html`<div class="dim">Carregando…</div>` : !filtrados.length ? html`<div class="vazio dim">${filtroD === 'abertas' ? '✓ Nenhuma pendência em aberto.' : 'Nada registrado ainda.'}</div>`
+      : filtroD === 'fotos' ? html`<div class="dia-galeria">${filtrados.flatMap(it => (it.fotos || []).map((f, k) => html`<img key=${it.id + k} src=${f} title=${fmtData(it.em)} onClick=${() => setVerFoto(f)} />`))}</div>`
+      : porDia.map(([d, lst]) => html`<div key=${d}><div class="dia-dia">${nomeDia(d)}</div>${lst.map(it => html`
       <div key=${it.id} class=${'dia-item ' + it.tipo + (it.resolvida ? ' ok' : '')}>
-        <div class="dia-cab"><span>${it.tipo === 'pendencia' ? (it.resolvida ? '✅' : '⚠') : it.tipo === 'foto' ? '📷' : it.tipo === 'final' ? '🌇 Final do dia ·' : '📝'} <b>${new Date(it.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> · ${it.quem}</span>
-          ${it.tipo === 'pendencia' && (it.resolvida ? html`<button class="btn btn-sm" onClick=${() => resolver(it, false)}>Reabrir</button>` : html`<button class="btn btn-sm btn-verde" onClick=${() => resolver(it, true)}>✓ Resolvida</button>`)}</div>
-        ${it.texto && html`<div class="dia-txt">${it.texto}</div>`}
-        ${(it.fotos || []).length > 0 && html`<div class="dia-fotos">${it.fotos.map((f, i) => html`<span key=${i}><img src=${f} onClick=${() => setVerFoto(f)} /></span>`)}</div>`}
-        ${it.resolvida && it.resolvidaPor && html`<small class="dim">Resolvida por ${it.resolvidaPor} · ${fmtData(it.resolvidaEm)}</small>`}
-      </div>`)}
+        ${it.tipo === 'pendencia' && html`<button class=${'dia-ck' + (it.resolvida ? ' on' : '')} title=${it.resolvida ? 'Reabrir' : 'Marcar como resolvida'} onClick=${() => resolver(it, !it.resolvida)}>${it.resolvida ? '✓' : ''}</button>`}
+        <div class="grow">
+          <div class="dia-cab"><span>${(TIPOS_D.find(t => t[0] === it.tipo) || [])[1] || '📝'} <b>${new Date(it.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</b> · ${it.quem}</span></div>
+          ${it.texto && html`<div class="dia-txt">${it.texto}</div>`}
+          ${(it.fotos || []).length > 0 && html`<div class="dia-fotos">${it.fotos.map((f, i) => html`<span key=${i}><img src=${f} onClick=${() => setVerFoto(f)} /></span>`)}</div>`}
+          ${it.resolvida && it.resolvidaPor && html`<small class="dim">✓ Resolvida por ${it.resolvidaPor} · ${fmtData(it.resolvidaEm)}</small>`}
+        </div>
+      </div>`)}</div>`)}
     ${verFoto && html`<div class="foto-cheia" onClick=${() => setVerFoto(null)}><img src=${verFoto} /></div>`}`;
+}
+
+/* ---------- Pagamento de nota / conta ligado à OS ---------- */
+const pgNovo = () => ({ lancar: true, forma: '', conta: '', parcelas: 1, venc: isoD(new Date()), pago: false });
+function PagamentoBox({ pg, setPg, total, titulo = '💳 Como vai pagar?' }) {
+  const n = Math.max(1, parseInt(pg.parcelas, 10) || 1);
+  return html`<div class="pg-box">
+    <label class="row" style=${{ gap: '8px', alignItems: 'center' }}><input type="checkbox" checked=${pg.lancar} onChange=${e => setPg({ ...pg, lancar: e.target.checked })} /><b>${titulo}</b> <small class="dim">(vai para Contas a pagar no Financeiro)</small></label>
+    ${pg.lancar && html`
+      <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${FORMAS_PG.map(f => html`<button key=${f} class=${'pill' + (pg.forma === f ? ' on' : '')} onClick=${() => setPg({ ...pg, forma: pg.forma === f ? '' : f })}>${f}</button>`)}</div>
+      <div class="row" style=${{ gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}><span class="lbl">Parcelas</span>
+        ${[1, 2, 3, 4, 5, 6, 10, 12].map(k => html`<button key=${k} class=${'pill' + (n === k ? ' on' : '')} onClick=${() => setPg({ ...pg, parcelas: k, pago: k === 1 ? pg.pago : false })}>${k === 1 ? 'À vista' : k + 'x'}</button>`)}
+        <input class="inp inp-sm" style=${{ width: '56px' }} inputmode="numeric" value=${pg.parcelas} onInput=${e => setPg({ ...pg, parcelas: e.target.value })} /></div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">${n > 1 ? '1º vencimento' : 'Vencimento'}</span><input class="inp" type="date" value=${pg.venc} onInput=${e => setPg({ ...pg, venc: e.target.value })} /></div>
+        <div class="field"><span class="lbl">Conta / banco (opcional)</span><input class="inp" value=${pg.conta} onInput=${e => setPg({ ...pg, conta: e.target.value })} /></div>
+      </div>
+      ${n === 1 ? html`<label class="row" style=${{ gap: '8px' }}><input type="checkbox" checked=${pg.pago} onChange=${e => setPg({ ...pg, pago: e.target.checked })} /> Já está pago</label>` : null}
+      <div class="pg-resumo">${n > 1 ? n + ' × ' + brl(Math.round(total / n * 100) / 100) + ' · todo mês a partir de ' + dm(pg.venc) : brl(total) + (pg.pago ? ' · pago' : ' · vence ' + dm(pg.venc))}${pg.forma ? ' · ' + pg.forma : ''}</div>`}
+  </div>`;
+}
+async function lancarPagamentoOS(sessao, os, { descricao, categoria, total, tipo = 'pagar', notaId = '', nf = '' }, pg) {
+  if (!pg?.lancar || !numBR(total)) return 0;
+  const n = Math.max(1, parseInt(pg.parcelas, 10) || 1), grupo = n > 1 ? rand(8) : '';
+  const vp = Math.round(numBR(total) / n * 100) / 100;
+  const b = F().fsMod.writeBatch(F().db);
+  for (let k = 0; k < n; k++) b.set(F().fsMod.doc(col('empresas', sessao.empresaId, 'lancamentos')), { tipo, categoria, descricao, valor: k === n - 1 ? Math.round((numBR(total) - vp * (n - 1)) * 100) / 100 : vp, venc: addMes(pg.venc, k), parcela: n > 1 ? (k + 1) + '/' + n : '', recorrente: false, grupo, forma: pg.forma || '', conta: pg.conta || '', pago: n === 1 && !!pg.pago, pagoEm: n === 1 && pg.pago ? nowIso() : '', osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', notaId, nf, criadoEm: nowIso(), por: sessao.nome });
+  await b.commit();
+  registrar(sessao, os.id, tipo === 'pagar' ? '💸' : '💰', (tipo === 'pagar' ? 'Conta a pagar: ' : 'A receber: ') + descricao, n + 'x · ' + brl(numBR(total)) + (pg.forma ? ' · ' + pg.forma : ''));
+  return n;
+}
+function FinanceiroOS({ sessao, os, toast }) {
+  const [notas, setNotas] = useState(null), [lanc, setLanc] = useState([]), [novo, setNovo] = useState(null), [comp, setComp] = useState(null);
+  useEffect(() => { const { onSnapshot, query, where } = F().fsMod;
+    const a = onSnapshot(query(col('empresas', sessao.empresaId, 'notas'), where('osId', '==', os.id)), s => setNotas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setNotas([]));
+    const b = onSnapshot(query(col('empresas', sessao.empresaId, 'lancamentos'), where('osId', '==', os.id)), s => setLanc(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    const c = onSnapshot(docRef('empresas', sessao.empresaId, 'compras', os.id), d => setComp(d.data() || {}), () => {});
+    return () => { a(); b(); c(); }; }, [os.id]);
+  const soma = (l) => l.reduce((n, x) => n + numBR(x.valor), 0);
+  const rec = lanc.filter(x => x.tipo === 'receber'), pag = lanc.filter(x => x.tipo === 'pagar');
+  const contrato = numBR(os.financeiro?.valor), material = (comp?.itens || []).reduce((n, i) => n + numBR(i.valor), 0);
+  const pagar = async (x) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'lancamentos', x.id), { pago: !x.pago, pagoEm: !x.pago ? nowIso() : '', pagoPor: !x.pago ? sessao.nome : '' }); registrar(sessao, os.id, x.pago ? '↺' : '✅', (x.pago ? 'Desmarcado: ' : (x.tipo === 'pagar' ? 'Pago: ' : 'Recebido: ')) + x.descricao + (x.parcela ? ' (' + x.parcela + ')' : ''), brl(x.valor)); } catch (e) { toast(e.message, 'erro'); } };
+  const salvarNovo = async () => { const v = numBR(novo.valor); if (!v) return toast('Informe o valor.'); try { await lancarPagamentoOS(sessao, os, { descricao: novo.descricao || novo.categoria, categoria: novo.categoria, total: v, tipo: novo.tipo }, { ...novo.pg, lancar: true }); toast('Lançado no financeiro.', 'ok'); setNovo(null); } catch (e) { toast(e.message, 'erro'); } };
+  const Linha = (x) => html`<div key=${x.id} class=${'fo-l' + (x.pago ? ' ok' : x.venc < isoD(new Date()) ? ' atraso' : '')}>
+    <button class=${'dia-ck' + (x.pago ? ' on' : '')} onClick=${() => pagar(x)}>${x.pago ? '✓' : ''}</button>
+    <span class="grow"><b>${x.descricao}</b><small>${[x.parcela, x.forma, x.conta, x.pago ? (x.tipo === 'pagar' ? 'pago' : 'recebido') : 'vence ' + dm(x.venc)].filter(Boolean).join(' · ')}</small></span><b>${brl(x.valor)}</b></div>`;
+  const Grupo = (tit, l, cor) => { const pg = l.filter(x => x.pago); return html`<div class="fo-g"><div class="fo-gt" style=${{ color: cor }}>${tit} <small>${pg.length} de ${l.length} · ${brl(soma(pg))} feito · falta ${brl(soma(l) - soma(pg))}</small></div>${l.sort((a, b) => String(a.venc).localeCompare(b.venc)).map(Linha)}</div>`; };
+  return html`<div class="stack">
+    <div class="fo-kpis">
+      <div><small>Contrato</small><b>${brl(contrato)}</b></div>
+      <div><small>Recebido</small><b class="ok-txt">${brl(soma(rec.filter(x => x.pago)))}</b></div>
+      <div><small>A receber</small><b>${brl(soma(rec.filter(x => !x.pago)))}</b></div>
+      <div><small>Material (compras)</small><b>${brl(material)}</b></div>
+      <div><small>Pago</small><b>${brl(soma(pag.filter(x => x.pago)))}</b></div>
+      <div><small>A pagar</small><b style=${{ color: 'var(--danger)' }}>${brl(soma(pag.filter(x => !x.pago)))}</b></div>
+      <div class="fo-res"><small>Resultado previsto</small><b>${brl(contrato - material - soma(pag.filter(x => !x.notaId)))}</b></div>
+    </div>
+    <${ComprasOS} sessao=${sessao} os=${os} toast=${toast} soNota=${true} />
+    <div class="row" style=${{ gap: '6px' }}>
+      <button class="btn btn-verde" onClick=${() => setNovo({ tipo: 'receber', categoria: 'Cliente — parcela', descricao: 'Parcela do cliente', valor: '', pg: pgNovo() })}>＋ Recebimento do cliente</button>
+      <button class="btn btn-danger" onClick=${() => setNovo({ tipo: 'pagar', categoria: 'RT arquiteto', descricao: '', valor: '', pg: pgNovo() })}>＋ Outro custo (RT, frete, terceiro…)</button></div>
+    ${novo && html`<div class="card stack">
+      <div class="grid2"><input class="inp" placeholder="Descrição" value=${novo.descricao} onInput=${e => setNovo({ ...novo, descricao: e.target.value })} /><input class="inp" inputmode="decimal" placeholder="Valor total (R$)" value=${novo.valor} onInput=${e => setNovo({ ...novo, valor: e.target.value })} /></div>
+      ${novo.tipo === 'pagar' && html`<div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${['RT arquiteto', 'Comissão', 'Frete', 'Terceirizado', 'Montagem', 'Outros'].map(c => html`<button key=${c} class=${'pill' + (novo.categoria === c ? ' on' : '')} onClick=${() => setNovo({ ...novo, categoria: c, descricao: novo.descricao || c })}>${c}</button>`)}</div>`}
+      <${PagamentoBox} pg=${novo.pg} setPg=${pg => setNovo({ ...novo, pg: { ...pg, lancar: true } })} total=${numBR(novo.valor)} titulo=${novo.tipo === 'receber' ? '💰 Como o cliente vai pagar?' : '💳 Como vai pagar?'} />
+      <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setNovo(null)}>Cancelar</button><button class="btn btn-primary" style=${{ flex: 1 }} onClick=${salvarNovo}>💾 Lançar no financeiro</button></div></div>`}
+    ${rec.length > 0 && Grupo('💰 Recebimentos do cliente', rec, '#16a34a')}
+    ${pag.length > 0 && Grupo('💸 Contas a pagar desta OS', pag, '#dc2626')}
+    <div class="fo-gt">🧾 Notas fiscais desta OS (${(notas || []).length})</div>
+    ${notas === null ? html`<div class="dim">Carregando…</div>` : !notas.length ? html`<div class="dim">Nenhuma nota lançada nesta OS ainda.</div>` : notas.sort((a, b) => String(b.data).localeCompare(a.data)).map(n => { const ps = pag.filter(x => x.notaId === n.id); return html`<div key=${n.id} class="fo-l">
+      <span style=${{ fontSize: '20px' }}>🧾</span><span class="grow"><b>NF ${n.numero || 's/n'} · ${n.fornecedor}</b><small>${[fmtData(n.data), (n.linhas || []).length + ' itens', ps.length ? ps.filter(x => x.pago).length + ' de ' + ps.length + ' pagas' : 'sem pagamento lançado'].join(' · ')}</small></span><b>${brl(numBR(n.total) || (n.linhas || []).reduce((t, l) => t + numBR(l.valorTotal), 0))}</b></div>`; })}
+  </div>`;
 }
 
 /* ---------- Pedidos (peças extras, terceiros e compras) ---------- */
@@ -2520,7 +2607,7 @@ function ItemCompraModal({ item, parceiros, salvar, fechar }) {
     <button class="btn btn-grande btn-verde btn-block" onClick=${() => { const st = it.st; salvar({ ...it, valor: numBR(it.valor), comprado: st === 'pedido' || st === 'recebido', recebido: st === 'recebido', recebidoEm: st === 'recebido' ? (it.recebidoEm || nowIso()) : '', pedidoEm: ['pedido', 'recebido'].includes(st) ? (it.pedidoEm || nowIso()) : '' }); fechar(); }}>💾 Salvar item</button>
   </div></div>`, document.body);
 }
-function ComprasOS({ sessao, os, toast }) {
+function ComprasOS({ sessao, os, toast, soNota }) {
   const [doc, setDoc] = useState(undefined);
   const [lendo, setLendo] = useState('');
   const [prev, setPrev] = useState(null);
@@ -2544,7 +2631,7 @@ function ComprasOS({ sessao, os, toast }) {
       const r = await extrairArquivo(file); const cats = catsEmpresa(cfgE), regras = cfgE.regrasCategoria || [];
       const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0, categorias: cats, exemplos: regras.slice(-120), empresa: sessao.empresaNome || '' }, r.imagens || []);
       const linhas = (res.itens || []).map(arrumarLinhaNF).map(li => { let best = '', sc = 0; itens.forEach(i => { const p = parecido(li.descricao, i.descricao); if (p > sc) { sc = p; best = i.id; } }); return { ...li, categoria: categoriaPorRegra(regras, li.descricao) || (cats.includes(li.categoria) ? li.categoria : 'Outros'), osId: os.id, itemId: sc >= 0.5 ? best : '' }; });
-      setNfOS({ arquivo: file.name, ...fornecedorDaNota(res, sessao, cfgE), numero: res.numero || '', data: res.data || isoD(new Date()), total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas });
+      setNfOS({ arquivo: file.name, ...fornecedorDaNota(res, sessao, cfgE), numero: res.numero || '', data: res.data || isoD(new Date()), total: numBR(res.total), totalProdutos: numBR(res.totalProdutos), linhas, pg: pgNovo() });
     } catch (e2) { toast('Não li a nota: ' + e2.message, 'erro'); }
     setLendo('');
   };
@@ -2555,7 +2642,9 @@ function ComprasOS({ sessao, os, toast }) {
       if (k >= 0) lista[k] = { ...lista[k], ...base, valor: v }; else lista.push({ id: rand(6), categoria: l.categoria || 'Outros', descricao: l.descricao, qtd: l.qtd, unidade: l.unidade, valor: v, ...base }); });
     try {
       await gravar(lista, { __log: 'Nota fiscal ' + nf.numero + ' — ' + nf.fornecedor + ' (' + nf.linhas.length + ' itens · ' + brl(nf.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0)) + ')' });
-      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'notas'), { ...nf, criadoEm: nowIso(), por: sessao.nome });
+      const { pg, ...nfD } = nf; const tot = numBR(nf.total) || nf.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0);
+      const rn = await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'notas'), { ...nfD, osId: os.id, osCod: numOS(os), pagamento: pg.lancar ? { forma: pg.forma, parcelas: pg.parcelas, venc: pg.venc } : null, criadoEm: nowIso(), por: sessao.nome });
+      await lancarPagamentoOS(sessao, os, { descricao: 'NF ' + (nf.numero || 's/n') + ' — ' + nf.fornecedor, categoria: 'Material (NF)', total: tot, notaId: rn.id, nf: nf.numero || '' }, pg);
       const mp = mesclarParceiro(parceiros, nf); const regras = cfgE.regrasCategoria || [];
       const nr = [...regras.filter(r => !nf.linhas.some(l => norm(l.descricao) === norm(r.d))), ...nf.linhas.map(l => ({ d: l.descricao, c: l.categoria }))].slice(-600);
       await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: mp.lista, regrasCategoria: nr });
@@ -2591,20 +2680,7 @@ function ComprasOS({ sessao, os, toast }) {
     : modo === 'etapa' ? [['⚡ Pré-pedido (comprar já)', itens.filter(i => i.etapa === 'pre')], ['📦 Pedido principal', itens.filter(i => i.etapa !== 'pre')]].filter(([, l]) => l.length)
     : [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length);
   const feitos = itens.filter(i => i.comprado).length;
-  if (prev) return html`
-    <div class="sheet-t">📥 Conferir importação</div>
-    <div class="dim">${prev.arquivo} · ${prev.itens.length} itens encontrados. Desmarque o que não for comprar.</div>
-    <div class="compras-lista">${prev.itens.map((i, k) => html`<label key=${k} class=${'compra-i' + (i.ok ? '' : ' off')}><input type="checkbox" checked=${i.ok} onChange=${e => setPrev(p => ({ ...p, itens: p.itens.map((x, j) => j === k ? { ...x, ok: e.target.checked } : x) }))} />
-      <span>${ICO_CAT[i.categoria]}</span><span class="grow"><b>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b><small>${[i.codigo, i.marca, i.categoria, i.ambiente, i.etapa === 'pre' ? 'PRÉ-PEDIDO' : ''].filter(Boolean).join(' · ')}</small></span><b class="compra-q">${i.qtd} ${i.unidade || ''}</b></label>`)}</div>
-    <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setPrev(null)}>Cancelar</button><button class="btn btn-verde" style=${{ flex: 1 }} onClick=${confirmar}>✓ Colocar ${prev.itens.filter(i => i.ok).length} itens na folha</button></div>`;
-  return html`
-    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🛒 Folha de compras</div>
-      ${itens.length > 0 && html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
-    <div class="grid2">
-      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = true; inp.current?.click(); }}>${lendo && importar.det !== false ? lendo : '📐 Levantar do detalhamento do arquiteto'}</button>
-      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = false; inp.current?.click(); }}>📥 Importar folha do PCP (Dinabox)</button>
-    </div>
-    <input ref=${inp} type="file" hidden accept=".pdf,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
+  const blocoNF = html`
     <button class="btn btn-grande btn-verde btn-block" disabled=${!!lendo} onClick=${() => inpNfOS.current?.click()}>🧾 Lançar nota fiscal desta OS (recebimento + preços)</button>
     <input ref=${inpNfOS} type="file" hidden accept=".pdf,.xml,.txt,image/*" onChange=${e => { lerNfOS(e.target.files[0]); e.target.value = ''; }} />
     ${nfOS && ReactDOM.createPortal(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(820px,100%)' }}>
@@ -2620,8 +2696,26 @@ function ComprasOS({ sessao, os, toast }) {
         <select class="inp inp-sm" value=${l.itemId} onChange=${e => setNfOS({ ...nfOS, linhas: nfOS.linhas.map((x, j) => j === k ? { ...x, itemId: e.target.value } : x) })}><option value="">➕ novo item na lista</option>${itens.map(i => html`<option key=${i.id} value=${i.id}>${i.descricao}</option>`)}</select>
       </div>`)}</div>
       <div>Soma dos itens: <b>${brl(nfOS.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0))}</b> · total da nota ${brl(nfOS.total)}</div>
-      <button class="btn btn-grande btn-verde btn-block" onClick=${confirmarNfOS}>💾 Lançar na OS e atualizar preços</button>
+      <${PagamentoBox} pg=${nfOS.pg} setPg=${pg => setNfOS({ ...nfOS, pg })} total=${numBR(nfOS.total) || nfOS.linhas.reduce((n, l) => n + numBR(l.valorTotal), 0)} />
+      <button class="btn btn-grande btn-verde btn-block" onClick=${confirmarNfOS}>💾 Lançar na OS${nfOS.pg.lancar ? ', no financeiro' : ''} e atualizar preços</button>
     </div></div>`, document.body)}
+  `;
+  if (soNota) return blocoNF;
+  if (prev) return html`
+    <div class="sheet-t">📥 Conferir importação</div>
+    <div class="dim">${prev.arquivo} · ${prev.itens.length} itens encontrados. Desmarque o que não for comprar.</div>
+    <div class="compras-lista">${prev.itens.map((i, k) => html`<label key=${k} class=${'compra-i' + (i.ok ? '' : ' off')}><input type="checkbox" checked=${i.ok} onChange=${e => setPrev(p => ({ ...p, itens: p.itens.map((x, j) => j === k ? { ...x, ok: e.target.checked } : x) }))} />
+      <span>${ICO_CAT[i.categoria]}</span><span class="grow"><b>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b><small>${[i.codigo, i.marca, i.categoria, i.ambiente, i.etapa === 'pre' ? 'PRÉ-PEDIDO' : ''].filter(Boolean).join(' · ')}</small></span><b class="compra-q">${i.qtd} ${i.unidade || ''}</b></label>`)}</div>
+    <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setPrev(null)}>Cancelar</button><button class="btn btn-verde" style=${{ flex: 1 }} onClick=${confirmar}>✓ Colocar ${prev.itens.filter(i => i.ok).length} itens na folha</button></div>`;
+  return html`
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🛒 Folha de compras</div>
+      ${itens.length > 0 && html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
+    <div class="grid2">
+      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = true; inp.current?.click(); }}>${lendo && importar.det !== false ? lendo : '📐 Levantar do detalhamento do arquiteto'}</button>
+      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = false; inp.current?.click(); }}>📥 Importar folha do PCP (Dinabox)</button>
+    </div>
+    <input ref=${inp} type="file" hidden accept=".pdf,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
+    ${blocoNF}
     <button class="btn btn-grande btn-block" disabled=${!!lendo} onClick=${async () => {
       setLendo('Conferindo com o contrato…');
       try {
@@ -3753,9 +3847,11 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar para cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
+      ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
+      ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
