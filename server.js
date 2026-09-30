@@ -407,7 +407,7 @@ e no FINAL coloque as ações entre <acoes> e </acoes> como um array JSON. O usu
 - {"tipo":"mais_dias","os":"26.010","dias":2,"motivo":"..."}
 - {"tipo":"mover_tarefa","os":"26.010","pessoa":"opcional","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD","motivo":"..."}
 - {"tipo":"excluir_tarefa","os":"26.010","motivo":"..."}
-- {"tipo":"abrir_aba","aba":"inicio|quadro|pedidos|os|contratos|projetos|importar|catalogo|equipe|cronograma|excluir|config"}  (abre a tela; executa na hora, sem confirmação)
+- {"tipo":"abrir_aba","aba":"inicio|quadro|pedidos|os|contratos|projetos|importar|catalogo|equipe|cronograma|excluir|config|compras|financeiro"}  (abre a tela; executa na hora, sem confirmação)
 - {"tipo":"abrir_os","os":"26.010","modo":"temas|folha|calendario|editar"}  (abre a OS na primeira tela; NÃO use modo "editar" a não ser que o usuário diga editar/alterar/mexer na OS; sem pedido específico, omita o modo)
 - {"tipo":"ver_cronograma","os":"26.010"}  (vai direto para a linha da OS no cronograma; executa na hora)
 - {"tipo":"imprimir_os","os":"26.010"}
