@@ -239,19 +239,26 @@ async function chamarIA(tarefa, dados = {}, imagens = []) {
   const user = F().auth.currentUser;
   if (!user) throw new Error('Faça login de novo.');
   const token = await user.getIdToken();
-  let r;
+  const mostrar = tarefa !== 'assistente';
+  const corpo = JSON.stringify({ tarefa, dados, imagens });
+  const base = PROG.st ? Math.max(PROG.st.pct || 0, 40) : 5;
+  let espera = null;
+  if (mostrar) PROG.set({ label: '⬆️ Enviando para a IA…', pct: base, erro: false, arquivo: PROG.st?.arquivo || (corpo.length > 1048576 ? (corpo.length / 1048576).toFixed(1) + ' MB' : Math.ceil(corpo.length / 1024) + ' KB') });
   try {
-    r = await fetch('/api/ia', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-      body: JSON.stringify({ tarefa, dados, imagens }),
+    const resp = await new Promise((ok, falha) => {
+      const x = new XMLHttpRequest(); x.open('POST', '/api/ia'); x.setRequestHeader('content-type', 'application/json'); x.setRequestHeader('authorization', 'Bearer ' + token);
+      if (mostrar) x.upload.onprogress = (e) => { if (e.lengthComputable) PROG.set({ pct: base + (e.loaded / e.total) * (70 - base) * 0.5 + 0, label: '⬆️ Enviando… ' + Math.round(e.loaded / e.total * 100) + '%' }); };
+      if (mostrar) x.upload.onload = () => { PROG.set({ label: '🤖 A IA está lendo…', pct: Math.max(PROG.st?.pct || 0, 60) }); espera = setInterval(() => { const p = PROG.st?.pct || 60; PROG.set({ pct: p + (96 - p) * 0.06 }); }, 700); };
+      x.onload = () => ok({ status: x.status, texto: x.responseText });
+      x.onerror = () => falha(new Error('Sem conexão com o servidor. Confira a internet.'));
+      x.send(corpo);
     });
-  } catch {
-    throw new Error('Sem conexão com o servidor. Confira a internet.');
-  }
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.erro || 'A IA não respondeu (erro ' + r.status + ').');
-  return body.resultado;
+    clearInterval(espera);
+    let body = {}; try { body = JSON.parse(resp.texto); } catch {}
+    if (resp.status < 200 || resp.status >= 300) throw new Error(body.erro || 'A IA não respondeu (erro ' + resp.status + ').');
+    if (mostrar) PROG.fim(true);
+    return body.resultado;
+  } catch (e) { clearInterval(espera); if (mostrar) PROG.fim(false); throw e; }
 }
 
 /* ---------- OS: criar sem repetir, com número único ---------- */
@@ -372,12 +379,34 @@ async function imagemParaJpeg(file, max = 1600) {
 }
 
 // Devolve { texto, imagens } de qualquer arquivo aceito.
+/* ---------- Barra de transferência (arquivos e IA) ---------- */
+const PROG = { st: null, t: null,
+  set(p) { clearTimeout(this.t); this.st = { ...(this.st || {}), ...p }; window.dispatchEvent(new Event('prog')); },
+  fim(ok = true) { if (!this.st) return; this.set({ pct: 100, label: ok ? '✓ Pronto' : '⚠ Não deu certo', erro: !ok }); this.t = setTimeout(() => { this.st = null; window.dispatchEvent(new Event('prog')); }, ok ? 900 : 2500); },
+};
+function BarraTransferencia() {
+  const [, f] = useState(0);
+  useEffect(() => { const h = () => f(x => x + 1); window.addEventListener('prog', h); return () => window.removeEventListener('prog', h); }, []);
+  const st = PROG.st; if (!st) return null;
+  const pct = Math.max(2, Math.min(100, Math.round(st.pct || 0)));
+  return html`<div class="transf-top"><i style=${{ width: pct + '%' }}></i></div>
+    <div class=${'transf-card' + (st.erro ? ' erro' : pct >= 100 ? ' ok' : '')}>
+      <div class="row" style=${{ justifyContent: 'space-between', gap: '10px', flexWrap: 'nowrap' }}><b>${st.label || 'Carregando…'}</b><span>${pct}%</span></div>
+      ${st.arquivo && html`<small>${st.arquivo}</small>`}
+      <div class="transf-barra"><i style=${{ width: pct + '%' }}></i></div>
+    </div>`;
+}
 async function extrairArquivo(file) {
+  PROG.set({ label: '📂 Lendo o arquivo…', arquivo: file.name + ' · ' + (file.size > 1048576 ? (file.size / 1048576).toFixed(1) + ' MB' : Math.ceil(file.size / 1024) + ' KB'), pct: 3, erro: false });
+  try { const r = await extrairArquivo0(file); PROG.set({ pct: 40, label: '✓ Arquivo lido' }); return r; } catch (e) { PROG.fim(false); throw e; }
+}
+async function extrairArquivo0(file) {
   const nome = file.name.toLowerCase();
   if (nome.endsWith('.pdf')) {
     const pdf = await pdfjsLib.getDocument({ data: await lerArrayBuffer(file) }).promise;
     let texto = '';
     for (let p = 1; p <= pdf.numPages; p++) {
+      PROG.set({ label: '📄 Lendo página ' + p + ' de ' + pdf.numPages, pct: 5 + p / pdf.numPages * 30 });
       const page = await pdf.getPage(p);
       const tc = await page.getTextContent();
       let linhaY = null, linha = '';
@@ -395,6 +424,7 @@ async function extrairArquivo(file) {
     // PDF escaneado (só imagem): transforma as páginas em fotos pra IA ler.
     if (texto.replace(/--- Página \d+ ---/g, '').trim().length < 80) {
       for (let p = 1; p <= Math.min(pdf.numPages, 10); p++) {
+        PROG.set({ label: '🖼 Preparando imagem da página ' + p, pct: 20 + p / Math.min(pdf.numPages, 10) * 18 });
         const page = await pdf.getPage(p);
         const vp = page.getViewport({ scale: 1.6 });
         const c = document.createElement('canvas');
@@ -5818,6 +5848,7 @@ function Principal({ sessao, toast }) {
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
+      <${BarraTransferencia} />
       ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
