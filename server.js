@@ -363,6 +363,21 @@ TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
 ${d.temImagens ? 'As imagens são o detalhamento; leia tudo, inclusive legendas e tabelas.' : ''}`;
 
+    case 'conferir_compras':
+      return `Você é comprador de uma marcenaria de móveis planejados. Compare o que a OS/CONTRATO pede com a LISTA DE COMPRAS atual e diga o que está FALTANDO na lista.
+Olhe: ferragens de cada móvel (dobradiças, corrediças, articuladores, sistemas de correr), puxadores, perfis, vidros/espelhos, fechaduras, tecidos, iluminação/LED, lâminas, pedras, pintura/laca, acessórios, e itens citados nas observações.
+Chapas e fitas genéricas normalmente vêm da lista bruta (Dinabox) — só aponte se tiver cor/padrão especial que não esteja na lista.
+Não repita o que já está na lista (mesmo com nome um pouco diferente). Não invente.
+Marque "etapa":"pre" para o que não tem pronta entrega (lâminas, Blum/Hettich/Grass importados, vidros especiais, pedras, tecidos importados).
+Categorias: ${(Array.isArray(d.categorias) ? d.categorias : ['Chapas', 'Lâminas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Pedras', 'Tecidos', 'Pintura', 'Acessórios', 'Outros']).join(', ')}.
+Responda SOMENTE com JSON: {"faltando":[{"categoria":"","descricao":"","marca":"","qtd":"","unidade":"","etapa":"pre|pedido","ambiente":"","motivo":"onde aparece no contrato/OS"}]}
+
+OS / CONTRATO:
+${String(d.os || '').slice(0, 30000)}
+
+LISTA DE COMPRAS ATUAL:
+${String(d.lista || '(vazia)').slice(0, 15000)}`;
+
     case 'nota_fiscal':
       return `Leia esta NOTA FISCAL (DANFE/NF-e ou cupom) de compra de materiais de marcenaria.
 Extraia do EMITENTE: nome fantasia (ou razão social), razão social, CNPJ, cidade, UF e endereço (é a unidade/filial que vendeu).
