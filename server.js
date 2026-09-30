@@ -380,6 +380,7 @@ ${String(d.lista || '(vazia)').slice(0, 15000)}`;
 
     case 'nota_fiscal':
       return `Leia esta NOTA FISCAL (DANFE/NF-e ou cupom) de compra de materiais de marcenaria.
+ATENÇÃO: o EMITENTE é o FORNECEDOR que vendeu (bloco do topo do DANFE, ao lado do logo). NÃO confunda com o DESTINATÁRIO/REMETENTE, que é a marcenaria compradora${d.empresa ? ' ("' + d.empresa + '" — nunca use esse nome como fornecedor)' : ''}.
 Extraia do EMITENTE: nome fantasia (ou razão social), razão social, CNPJ, cidade, UF e endereço (é a unidade/filial que vendeu).
 Extraia número da nota, data de emissão e TODOS os itens com código, quantidade, unidade, valor unitário e valor total do item, e o valor total da nota.
 Classifique cada item em UMA destas categorias: ${(Array.isArray(d.categorias) && d.categorias.length ? d.categorias : ['Chapas', 'Lâminas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Pedras', 'Tecidos', 'Pintura', 'Acessórios', 'Químicos', 'Outros']).join(', ')}.
