@@ -4458,6 +4458,7 @@ function TelaComprasGeral({ sessao, toast }) {
   const [novaCat, setNovaCat] = useState('');
   const [editP, setEditP] = useState(null);
   const [buscaP, setBuscaP] = useState('');
+  const [catP, setCatP] = useState('');
   const salvarParc = async (lista) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: lista }); } catch (e) { toast(e.message, 'erro'); } };
   // ranking dos parceiros: orçamentos comparados + notas
   const rank = {}; const add = (f) => (rank[f] = rank[f] || { nome: f, orcs: 0, vitorias: 0, economia: 0, compras: 0, gasto: 0, atrasos: 0, entregas: 0 });
@@ -4539,16 +4540,19 @@ function TelaComprasGeral({ sessao, toast }) {
         <span class="dim">${r.compras} compras · ${brl(r.gasto)}</span></div>`)}
     </div>`}
     ${aba === 'precos' && (() => {
-      const lin = notas.flatMap(n => (n.linhas || []).map(l => ({ ...l, forn: n.fornecedor, cidade: n.cidade, data: n.data, vu: numBR(l.valorUnit) || (numBR(l.valorTotal) / (numBR(l.qtd) || 1)) }))).filter(l => l.vu > 0);
+      const lin = notas.flatMap(n => (n.linhas || []).map(l => ({ ...l, forn: n.fornecedor, cidade: n.cidade, data: n.data, vu: numBR(l.valorTotal) && numBR(l.qtd) ? numBR(l.valorTotal) / numBR(l.qtd) : numBR(l.valorUnit) }))).filter(l => l.vu > 0);
       const grupos = []; lin.forEach(l => { const g = grupos.find(g => parecido(g.desc, l.descricao) >= 0.7); if (g) g.l.push(l); else grupos.push({ desc: l.descricao, cat: l.categoria || 'Outros', l: [l] }); });
       const q = norm(buscaP);
-      const vis = grupos.filter(g => !q || norm(g.desc + ' ' + g.cat + ' ' + g.l.map(x => x.forn).join(' ')).includes(q)).sort((a, b) => a.cat.localeCompare(b.cat) || b.l.length - a.l.length);
+      const vis0 = grupos.filter(g => !q || norm(g.desc + ' ' + g.cat + ' ' + g.l.map(x => x.forn).join(' ')).includes(q));
+      const catsP = [...new Set(vis0.map(g => g.cat))].sort();
+      const vis = vis0.filter(g => !catP || g.cat === catP).sort((a, b) => a.cat.localeCompare(b.cat) || a.desc.localeCompare(b.desc));
       return html`<div class="card page-card stack">
         <div class="dim">Todos os preços das notas lançadas. Quando o mesmo material aparece em fornecedores diferentes, o mais barato ganha 🏆.</div>
         <input class="inp inp-sm" placeholder="🔍 Buscar material ou fornecedor…" value=${buscaP} onInput=${e => setBuscaP(e.target.value)} />
-        ${!vis.length ? html`<div class="vazio dim">Nenhum preço ainda. Lance notas fiscais.</div>` : vis.slice(0, 200).map((g, k) => { const porF = {}; g.l.forEach(x => { if (!porF[x.forn] || x.data > porF[x.forn].data) porF[x.forn] = x; }); const lst = Object.values(porF).sort((a, b) => a.vu - b.vu); const min = lst[0].vu;
-          return html`<div key=${k} class="preco-g"><div class="row" style=${{ justifyContent: 'space-between' }}><b>${ICO_CAT[g.cat] || '📦'} ${g.desc}</b><small class="dim">${g.cat}</small></div>
-            ${lst.map((x, j) => html`<div key=${j} class=${'preco-l' + (j === 0 && lst.length > 1 ? ' melhor' : '')}><span>${j === 0 && lst.length > 1 ? '🏆 ' : ''}${x.forn}${x.cidade ? ' · ' + x.cidade : ''}</span><small>${x.data ? dm(x.data) + '/' + String(x.data).slice(2, 4) : ''}</small><b>${brl(x.vu)}${x.unidade ? '/' + x.unidade : ''}</b>${j > 0 ? html`<em>+${Math.round((x.vu / min - 1) * 100)}%</em>` : ''}</div>`)}</div>`; })}
+        <div class="tm-chips"><button class=${'pill' + (!catP ? ' on' : '')} onClick=${() => setCatP('')}>Todas (${vis0.length})</button>${catsP.map(c => html`<button key=${c} class=${'pill' + (catP === c ? ' on' : '')} onClick=${() => setCatP(c)}>${ICO_CAT[c] || '📦'} ${c} (${vis0.filter(g => g.cat === c).length})</button>`)}</div>
+        ${!vis.length ? html`<div class="vazio dim">Nenhum preço ainda. Lance notas fiscais.</div>` : vis.slice(0, 300).map((g, k) => { const porF = {}; g.l.forEach(x => { if (!porF[x.forn] || x.data > porF[x.forn].data) porF[x.forn] = x; }); const lst = Object.values(porF).sort((a, b) => a.vu - b.vu); const min = lst[0].vu;
+          return html`${k === 0 || vis[k - 1].cat !== g.cat ? html`<div class="preco-cat">${ICO_CAT[g.cat] || '📦'} ${g.cat}</div>` : ''}<div key=${k} class="preco-g"><div class="row" style=${{ justifyContent: 'space-between' }}><b>${ICO_CAT[g.cat] || '📦'} ${g.desc}</b><small class="dim">${g.cat}</small></div>
+            ${lst.map((x, j) => html`<div key=${j} class=${'preco-l' + (j === 0 && lst.length > 1 ? ' melhor' : '')}><span>${j === 0 && lst.length > 1 ? '🏆 ' : ''}${x.forn}${x.cidade ? ' · ' + x.cidade : ''}</span><small>${x.data ? dm(x.data) + '/' + String(x.data).slice(2, 4) : ''}</small><b>${brl(x.vu)}${x.unidade ? '/' + x.unidade : ''}</b><small class="dim">${numBR(x.qtd) > 1 ? numBR(x.qtd) + ' × = ' + brl(numBR(x.valorTotal)) : ''}</small>${j > 0 ? html`<em>+${Math.round((x.vu / min - 1) * 100)}%</em>` : ''}</div>`)}</div>`; })}
       </div>`; })()}
     ${aba === 'cadastro' && html`<div class="card page-card stack">
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}><div class="dim">Cadastrados sozinhos a cada nota fiscal. Mesma empresa em unidades diferentes (outro CNPJ da mesma rede) fica junta. Toque para editar.</div>
