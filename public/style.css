@@ -1346,3 +1346,8 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .qg-clientes .qg-cliente{width:auto!important;min-width:0;max-width:100%}
 .qg-oss{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px;align-items:start}
 @media(max-width:600px){.qg-clientes .qg-cliente{flex-basis:100%!important}.qg-oss{grid-template-columns:1fr}}
+/* v117 — sem espaço em branco: colunas tipo mosaico */
+.ini-clis,.os-clis{display:block!important;column-width:300px;column-gap:10px}
+.os-clis{column-width:360px}
+.ini-clis>.ini-cli,.os-clis>.os-cli{break-inside:avoid;display:inline-block;width:100%;margin:0 0 10px;vertical-align:top}
+@media (max-width:700px){.ini-clis,.os-clis{column-count:1;column-width:auto}}

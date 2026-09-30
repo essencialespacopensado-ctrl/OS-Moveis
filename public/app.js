@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['117', ['📐 Listas de OS por cliente em mosaico: cada cartão tem só a altura das suas OS, sem espaço em branco.']],
   ['116', ['📐 Quadro geral: cartões dos clientes com tamanho proporcional ao número de OS e lado a lado, sem desperdiçar espaço. As OS de um cliente ficam em grade.']],
   ['115', ['🧠 Mapa: ao tocar em qualquer balão aparecem escritas todas as possibilidades daquele nível (seção, tela e cada função com como fazer, o que muda e onde impacta).']],
   ['114', ['🧠 Manual virou mapa mental: toque em seção → tela → função e veja como fazer, o que muda e onde impacta (com atalhos).']],
