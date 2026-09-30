@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['113', ['📖 Manual completo em Geral → Manual, com busca.', '❓ Botão "Como funciona" em cada tela, mostrando o manual daquela aba.', '🤖 Lembrete: em caso de dúvida, pergunte ao assistente.']],
   ['112', ['⏳ Ao dar mais dias no cronograma, aparece o alerta de cliente em atraso (e dos clientes empurrados junto), mostrando se passa do prazo de entrega.', '⏩ Quando alguém conclui antes do prazo, o app pergunta se quer adiantar as próximas tarefas dele ou ajudar uma OS atrasada, abatendo dias.', '🔮 Quadro geral → Previsão de finalização: por cliente e por OS, com base no cronograma, compras e parceiros, avisando prazos perto ou em risco.']],
   ['111', ['📈 Quadro geral: barra de conclusão em % por cliente, por OS e o andamento geral de todas as obras (etapa da OS + produção + parceiros).']],
   ['110', ['✏️ Nome do cliente editável direto na OS (lápis ao lado do nome). Se o cliente tiver outras OS, dá para trocar em todas de uma vez.']],
@@ -5451,6 +5452,119 @@ function TelaCatalogo({ sessao, catalogo, toast }) {
     </div>`;
 }
 
+/* ---------- Manual de instruções (por aba) ---------- */
+const MANUAL = {
+  inicio: ['⌂ Início', 'Tela de abertura do app, com o resumo do dia.', [
+    ['Para que serve', 'Mostra de relance o que precisa de atenção hoje: OS em andamento, tarefas do cronograma, prazos próximos e pendências.'],
+    ['Como usar', 'Toque em qualquer item para abrir direto a OS ou a tela correspondente. O app sempre abre aqui.'],
+    ['Atualizar', 'Use ⟳ Atualizar no topo para puxar os dados mais novos. Quando houver versão nova do app, aparece 🔄 e a janela "O que mudou".'],
+  ]],
+  quadro: ['📊 Quadro geral', 'Visão de todas as obras, por cliente, e previsão de entrega.', [
+    ['🏗 Obras', 'Cada cartão é um cliente com a barra de conclusão da obra (%). Toque no cliente para ver cada OS: etapas da fábrica, parceiros (vidros, serralheria, pintura…), diário de obra, compras e vídeos.'],
+    ['📈 Andamento geral', 'Mostra a média de todas as obras e uma barra por cliente, do mais atrasado ao mais adiantado. O % soma: etapa da OS (40%), produção na fábrica (40%) e parceiros recebidos (20%).'],
+    ['⚡ Agora em andamento', 'Tudo o que está sendo feito hoje e por quem, ao mesmo tempo: equipe interna (cronograma), parceiros, etapas da fábrica e terceirizados. Veja "Por OS" ou "Por quem".'],
+    ['🔮 Previsão de finalização', 'Calcula quando cada OS e cada cliente termina, usando cronograma + chegada das compras + parceiros (+2 dias úteis). Compara com o prazo de entrega: 🟢 no prazo, 🟡 apertado, 🟠 prazo chegando (≤5 dias úteis), 🔴 vai passar/vencido.'],
+    ['Parceiros', 'Toque no chip do parceiro para mudar a etapa (pedir orçamento → aprovado → recebido), informar quem faz e a previsão. ＋ parceiro adiciona outro serviço na OS.'],
+    ['⚠ Clientes parecidos', 'Se o mesmo cliente foi escrito de dois jeitos (ex.: Silmara x Sillmara), aparece um aviso com o botão "Juntar como…".'],
+    ['Filtros', 'Todas, Pendências de parceiro, Aguardando aprovação e Atrasadas. Use a busca para achar cliente, OS ou ambiente.'],
+  ]],
+  contratos: ['📑 Contratos', 'Contratos dos clientes e geração de OS a partir deles.', [
+    ['Enviar contrato', 'Envie o PDF/Word do contrato. A IA lê cliente, ambientes, valores e prazo.'],
+    ['Gerar OS', 'A partir do contrato, gere as OS por ambiente. O número segue o nome do arquivo; se já existir, o app avisa e dá opções.'],
+    ['Valor do contrato', 'O valor fica ligado à OS e é usado no Financeiro (resultado por OS) e no cálculo de RT/comissão.'],
+  ]],
+  projetos: ['✨ Reuniões & Projetos', 'Cadastro do projeto do cliente, documentos e ata da reunião.', [
+    ['Novo projeto', 'Cadastre o cliente e anexe contrato, detalhamentos e imagens.'],
+    ['Ata com microfone', 'Durante a reunião, toque no 🎤: a IA escreve a ata por ambiente/móvel, ignorando conversas paralelas.'],
+    ['Gerar OS automática', 'Com os documentos e a ata, o botão monta a OS preenchida (MDF, fitas, ferragens, puxadores) — depois é só revisar.'],
+  ]],
+  amostras: ['📦 Amostras', 'Controle de amostras emprestadas e itens que o cliente deixou.', [
+    ['📤 Emprestar amostra', 'Registre qual amostra saiu, quem levou (cliente, arquiteto), contato, data e até quando deve voltar.'],
+    ['📥 Cliente deixou algo', 'Registre o que o cliente deixou aqui (tecido, pedra, tinta…) e até quando devolver.'],
+    ['Devolução', 'Marque o quadradinho quando voltar. Atrasadas ficam em vermelho. Desfazer pede motivo.'],
+    ['Na OS', 'Cada OS tem a aba 📦 Amostras só com o que é daquele cliente.'],
+  ]],
+  importar: ['🗂️ Importar (IA)', 'Traz OSs antigas (PDF, Word, Excel, foto) para o layout novo.', [
+    ['Como importar', 'Arraste ou escolha vários arquivos. Um de cada vez, a IA lê e monta a OS no layout novo, mantendo o número do arquivo (ex.: "26.089 Cliente.pdf").'],
+    ['Barra de transferência', 'Mostra o andamento (lendo página, enviando, IA lendo). Use ⏸ Pausar, ▶ Continuar e ✖ Cancelar.'],
+    ['Erros', 'Se a IA falhar (ex.: erro 502), o app tenta de novo sozinho até 4 vezes. Depois aparece 🔁 Tentar de novo no arquivo.'],
+    ['Número repetido', 'Se o número já existe ou não bate com o arquivo, aparece um aviso para escolher: substituir, próximo livre, digitar outro ou pular.'],
+  ]],
+  os: ['📋 Ordens de Serviço', 'Lista de OS e a ficha completa de cada uma.', [
+    ['Abrir OS', 'Toque na OS para ver a ficha: 🎨 Por temas, 🛒 Compras, 🧾 Notas & financeiro, 📓 Diário de obra, 📦 Amostras, 📄 Folha de impressão e 📆 Calendário.'],
+    ['✏️ Editar', 'Só pelo botão Editar OS. Se a OS já foi marcada como revisada, pede motivo. O nome do cliente tem um ✏️ próprio ao lado do nome (pode trocar em todas as OS do cliente).'],
+    ['📅 Enviar ao cronograma', 'Escolha o cronograma, 👷 Internos ou 🤝 Terceirizados, a pessoa, início e prazo final. Depois de enviado vira "📅 Ver no cronograma", que leva direto à linha.'],
+    ['🛒 Compras (folha padrão)', 'Tabela com: recebido ✓, item, quantidade, 🛒 comprar ou 📦 estoque, comprado com quem e prazo de entrega (atrasados em vermelho). Levante itens do detalhamento, do Dinabox ou confira com o contrato. 🖨 imprime a folha (em branco se não houver itens).'],
+    ['🧾 Notas & financeiro', 'Lançar a nota fiscal da OS: a IA lê os itens e preços; escolha a forma de pagamento e em quantas vezes. Vai direto para Contas a pagar e atualiza os preços.'],
+    ['📓 Diário de obra', 'Escolha: ⚠ Problema, 🌇 Final do dia, 📝 Anotação ou 📷 Só foto. Fale ou fotografe e salve. Pendências se resolvem com o ✓.'],
+    ['Linha do tempo', 'Tudo que acontece na OS (em qualquer setor) fica registrado com data, quem fez e motivo.'],
+  ]],
+  cronograma: ['📅 Cronograma', 'Agenda da produção, montagem e terceirizados.', [
+    ['Grupos', 'Botões por categoria no topo (produção, montagem…). ✏️ Categorias cria ou edita (administrador).'],
+    ['Nova tarefa', 'Escolha a OS, quem executa, início e prazo final. O app bloqueia tarefa sobreposta, tarefa repetida e a mesma OS em dois lugares ao mesmo tempo.'],
+    ['✓ Concluir', 'Aparece só no dia do prazo final. Se terminar antes, o app pergunta se quer adiantar as próximas tarefas da pessoa ou ajudar uma OS atrasada (abatendo dias).'],
+    ['＋ Mais dias', 'Pede motivo, empurra as tarefas seguintes da pessoa e mostra o alerta de cliente em atraso (e se passa do prazo de entrega).'],
+    ['Mudar / excluir', 'Troque dia ou pessoa, ou exclua — sempre com motivo. Reabrir tarefa concluída também pede motivo.'],
+    ['Visão mês e métricas', 'Mês colorido por cliente. Métricas de dias ganhos/perdidos por semana, mês, trimestre, semestre e ano.'],
+  ]],
+  pedidos: ['🪵 Peças extras', 'Peças extras, terceirizados e compras avulsas por OS.', [
+    ['Novo pedido', 'Escolha o tipo (peça extra interna, terceirizado ou compra), o item, medidas, cor, fita e prazo. Pode anexar foto.'],
+    ['Andamento', 'Siga as etapas (solicitado → em produção → pronto → entregue na obra). Aparece também no "Agora em andamento".'],
+  ]],
+  catalogo: ['🎨 Catálogo', 'Cores de MDF, fitas, ferragens e acessórios.', [
+    ['Busca', 'Busca em tempo real por fabricante, linha e nome. O que for digitado nas OS fica salvo aqui.'],
+    ['Cadastrar', 'Adicione novas cores/itens com tipo, fabricante e linha.'],
+  ]],
+  excluir: ['🗑 Excluir OSs', 'Apagar OSs de teste ou erradas.', [
+    ['Seleção', 'Marque várias (ou todas) e exclua com a senha. Vão para o histórico e podem ser restauradas.'],
+    ['🧹 Limpar histórico', 'Apaga permanentemente o histórico de exclusões. Não tem volta.'],
+  ]],
+  compras: ['🛒 Compras', 'Visão geral de compras de todas as OS, notas fiscais, parceiros e preços.', [
+    ['Itens', 'Todos os itens de compra das OS com status (falta orçar, orçando, aguardando aprovação, pedido feito, recebido) e previsão.'],
+    ['🧾 Notas', 'Lance notas fiscais: a IA cadastra o fornecedor (quem vendeu, não quem comprou), separa itens e calcula o preço unitário. ✏️ corrige o fornecedor.'],
+    ['Parceiros', 'Cadastrados automaticamente pelas notas (agrupa filiais pelo CNPJ). Pode editar à mão.'],
+    ['Preços', 'Tabela compacta por categoria com o preço unitário de cada fornecedor e o 🏆 melhor preço.'],
+    ['Categorias e notas modelo', 'As categorias são aprendidas com as notas. Notas modelo podem ser apagadas.'],
+  ]],
+  equipe: ['👥 Equipe', 'Acessos e permissões.', [
+    ['Novo acesso', 'Nome, login, senha inicial e grupo.'],
+    ['🔐 Grupos e permissões', 'Escolha o que cada grupo vê (Financeiro, Compras, Montador…). ＋ Novo grupo, renomear ou apagar. Salve em 💾 Salvar acessos.'],
+    ['⚙ Personalizar', 'Libera ou esconde telas só para uma pessoa, diferente do grupo.'],
+    ['Esqueceu a senha', 'Remova o acesso e crie outro com login novo.'],
+  ]],
+  financeiro: ['💰 Resultado por OS', 'Lucro de cada OS.', [
+    ['Como calcula', 'Valor do contrato menos material (soma das compras/notas da OS) e demais custos lançados.'],
+  ]],
+  contas: ['📒 Contas & custos operacionais', 'Contas a pagar e a receber.', [
+    ['＋ A pagar / ＋ A receber', 'Descrição, valor, vencimento, forma de pagamento e conta/banco. Escolha: total dividido em parcelas, valor por parcela ou recorrente.'],
+    ['Parcelamentos', 'Mostra "X de N pagas", quanto já foi pago/recebido e quanto falta.'],
+    ['RT e comissão', 'Ligue à OS/cliente e informe o % sobre o contrato — o valor é calculado.'],
+    ['Notas das OS', 'As notas lançadas dentro da OS entram aqui automaticamente como contas a pagar.'],
+  ]],
+  config: ['⚙ Configurações', 'Ajustes da empresa.', [
+    ['Etapas', 'Nomes e ordem das etapas da OS e da fábrica.'],
+    ['Logo', 'A logo vai para as impressões.'],
+  ]],
+};
+function ManualAba({ aba }) {
+  const m = MANUAL[aba]; if (!m) return null;
+  return html`<div class="man-sec"><div class="man-t">${m[0]}</div><div class="dim">${m[1]}</div>
+    ${m[2].map(([t, d]) => html`<div key=${t} class="man-i"><b>${t}</b><span>${d}</span></div>`)}</div>`;
+}
+function LembreteAssistente() {
+  return html`<div class="man-lembrete"><span>🤖</span><div><b>Ficou com dúvida? Pergunte ao assistente.</b><small>Toque no botão do assistente (canto da tela) e pergunte do seu jeito — ex.: "como lanço uma nota?", "onde vejo o atraso da Silmara?". Ele também abre telas e faz alterações para você.</small></div></div>`;
+}
+function TelaManual({ abas }) {
+  const [q, setQ] = useState('');
+  const ks = Object.keys(MANUAL).filter(k => abas.some(a => a.v === k)).filter(k => !q || norm(JSON.stringify(MANUAL[k])).includes(norm(q)));
+  return html`<div class="fade-up stack"><div class="page-head"><div><h2>📖 Manual do Gestão Pró</h2><div class="dim">Como funciona cada aba. Toque em ❓ em qualquer tela para ver só a parte dela.</div></div></div>
+    <${LembreteAssistente} />
+    <input class="inp" placeholder="🔍 Buscar no manual (ex.: nota, atraso, amostra)" value=${q} onInput=${e => setQ(e.target.value)} />
+    <div class="man-indice">${ks.map(k => html`<a key=${k} href=${'#man-' + k} onClick=${e => { e.preventDefault(); document.getElementById('man-' + k)?.scrollIntoView({ behavior: 'smooth' }); }}>${MANUAL[k][0]}</a>`)}</div>
+    ${ks.map(k => html`<div key=${k} id=${'man-' + k} class="card"><${ManualAba} aba=${k} /></div>`)}
+  </div>`;
+}
+
 /* ---------- Grupos e permissões ---------- */
 function EditorAcessos({ sessao, usuarios, toast }) {
   const [grupos, setGrupos] = useState(() => PAPEIS.map(g => ({ ...g, abas: [...g.abas] })));
@@ -5619,7 +5733,7 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'amostras', 'importar', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
@@ -5627,7 +5741,7 @@ const SECOES = [
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
-const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config'], [/amostras?/, 'amostras']];
+const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/manual|ajuda|instru/, 'manual'], [/configura/, 'config'], [/amostras?/, 'amostras']];
 function comandoTela(q) {
   const t = norm(q);
   if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
@@ -6250,10 +6364,11 @@ function Principal({ sessao, toast }) {
     { v: 'compras', t: 'Compras', i: '🛒' },
     { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
     { v: 'config', t: 'Configurações', i: '⚙' },
-  ].filter(a => pode(sessao, a.v));
+  ].filter(a => pode(sessao, a.v)).concat([{ v: 'manual', t: 'Manual', i: '📖' }]);
   const vis = (v) => abas.some(a => a.v === v);
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
+  const [ajuda, setAjuda] = useState(false);
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
@@ -6284,14 +6399,20 @@ function Principal({ sessao, toast }) {
           </div>
         </div>
       </header>
+      ${ajuda && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAjuda(false)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
+        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">❓ Como funciona</div><button class="x-btn" onClick=${() => setAjuda(false)}>✕</button></div>
+        <${ManualAba} aba=${aba} /><${LembreteAssistente} /><button class="btn btn-sm" onClick=${() => { setAjuda(false); irPara('manual'); }}>📖 Ver o manual completo</button></div></div>`, document.body)}
+      ${aba !== 'manual' && MANUAL[aba] && html`<button class="btn-ajuda" title="Como funciona esta tela" onClick=${() => setAjuda(true)}>❓</button>`}
       ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
+        ${aba === 'inicio' && html`<${LembreteAssistente} />`}
         ${aba === 'inicio' && vis('inicio') && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
         ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} toast=${toast} />`}
+        ${aba === 'manual' && html`<${TelaManual} abas=${abas} />`}
         ${aba === 'amostras' && vis('amostras') && html`<${TelaAmostras} sessao=${sessao} toast=${toast} />`}
         ${aba === 'importar' && vis('importar') && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && vis('catalogo') && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}

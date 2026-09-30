@@ -1309,3 +1309,12 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .pv-l:hover{transform:translateX(3px)}.pv-l small{display:block;opacity:.7;font-size:12px}
 .pv-st{font-size:18px}.pv-d{display:flex;flex-direction:column;align-items:center;min-width:64px}.pv-d small{font-size:11px;opacity:.65}
 .pv-tag{color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+/* v113 — manual */
+.man-sec{display:flex;flex-direction:column;gap:8px}.man-t{font-weight:800;font-size:18px}
+.man-i{display:grid;grid-template-columns:170px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+@media(max-width:600px){.man-i{grid-template-columns:1fr;gap:2px}}
+.man-lembrete{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#7c3aed 12%,var(--surface-solid));border:1px solid color-mix(in srgb,#7c3aed 35%,transparent);margin-bottom:10px}
+.man-lembrete>span{font-size:28px}.man-lembrete small{display:block;opacity:.8;font-size:13px;margin-top:2px}
+.man-indice{display:flex;flex-wrap:wrap;gap:6px}.man-indice a{padding:5px 10px;border-radius:999px;background:var(--surface2);color:var(--text);text-decoration:none;font-size:13px}
+.btn-ajuda{position:fixed;left:14px;bottom:18px;z-index:900;width:44px;height:44px;border-radius:50%;border:0;background:#7c3aed;color:#fff;font-size:20px;box-shadow:0 6px 18px #7c3aed66;cursor:pointer;transition:transform .15s}
+.btn-ajuda:hover{transform:scale(1.1)}
