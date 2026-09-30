@@ -2805,7 +2805,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
     </div>`;
 }
 
-/* ---------- Cronogramas: agenda semanal (modelo Zonta), mês, produção e entregas ---------- */
+/* ---------- Cronogramas: agenda semanal (modelo padrão), mês, produção e entregas ---------- */
 const DIAS_SEM = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 const GRADES_PADRAO = [
   ['entregas', '🚚 Entregas', 'Viagem', '#0E7490'],
@@ -5679,6 +5679,7 @@ function Principal({ sessao, toast }) {
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
+            <button class="btn btn-ghost btn-sm" title="Compartilhar o app" onClick=${async () => { const url = location.origin + '/'; const txt = 'Gestão Pró — gestão de ordens de serviço, produção, compras e financeiro para marcenarias. Acesse: ' + url; try { if (navigator.share) await navigator.share({ title: 'Gestão Pró', text: txt, url }); else { await navigator.clipboard.writeText(txt); toast('Link copiado: ' + url, 'ok'); } } catch {} }}>🔗<span class="txt-desk"> Compartilhar</span></button>
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
         </div>
