@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['116', ['📐 Quadro geral: cartões dos clientes com tamanho proporcional ao número de OS e lado a lado, sem desperdiçar espaço. As OS de um cliente ficam em grade.']],
   ['115', ['🧠 Mapa: ao tocar em qualquer balão aparecem escritas todas as possibilidades daquele nível (seção, tela e cada função com como fazer, o que muda e onde impacta).']],
   ['114', ['🧠 Manual virou mapa mental: toque em seção → tela → função e veja como fazer, o que muda e onde impacta (com atalhos).']],
   ['113', ['📖 Manual completo em Geral → Manual, com busca.', '❓ Botão "Como funciona" em cada tela, mostrando o manual daquela aba.', '🤖 Lembrete: em caso de dúvida, pergunte ao assistente.']],
@@ -3114,12 +3115,12 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
         cards.forEach(c => { const k = norm(c.o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: c.o.cliente?.nome || 'Sem cliente', cards: [] }).cards.push(c); });
         const todasP = cards.map(c => pctObra(c.o)); const geral = todasP.length ? Math.round(todasP.reduce((a, b) => a + b, 0) / todasP.length) : 0;
         return [html`<div key="__geral" class="card pct-geral"><div class="row" style=${{ justifyContent: 'space-between' }}><b>📈 Andamento geral das obras</b><small class="dim">${Object.keys(grupos).length} clientes · ${cards.length} OS</small></div><${BarraPct} p=${geral} grande=${true} />
-          <div class="pct-mini">${Object.values(grupos).map(g => { const p = Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length); return { g, p }; }).sort((a, b) => a.p - b.p).map(({ g, p }) => html`<div key=${g.nome} class="pct-lin" onClick=${() => setCliSel(norm(g.cards[0].o.cliente?.nome) || '—')}><span>${g.nome.split(/\s[-–]\s/)[0]}</span><${BarraPct} p=${p} /></div>`)}</div></div>`, ...Object.entries(grupos).sort((a, b) => b[1].cards.some(c => c.atras) - a[1].cards.some(c => c.atras) || a[1].nome.localeCompare(b[1].nome)).map(([k, g]) => {
+          <div class="pct-mini">${Object.values(grupos).map(g => { const p = Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length); return { g, p }; }).sort((a, b) => a.p - b.p).map(({ g, p }) => html`<div key=${g.nome} class="pct-lin" onClick=${() => setCliSel(norm(g.cards[0].o.cliente?.nome) || '—')}><span>${g.nome.split(/\s[-–]\s/)[0]}</span><${BarraPct} p=${p} /></div>`)}</div></div>`, html`<div key="__cli" class="qg-clientes">${Object.entries(grupos).sort((a, b) => b[1].cards.some(c => c.atras) - a[1].cards.some(c => c.atras) || a[1].nome.localeCompare(b[1].nome)).map(([k, g]) => {
           const tot = g.cards.length * 6, feitas = g.cards.reduce((n, c) => n + c.feitas, 0);
           const pend = g.cards.reduce((n, c) => n + c.pendParc.length, 0), atr = g.cards.filter(c => c.atras).length, pendD = g.cards.reduce((n, c) => n + (c.o.pendAbertas || 0), 0);
           const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
           const cor = corCliente(g.nome);
-          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor }} onClick=${() => setCliSel(k)}>
+          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor, flex: g.cards.length + ' 1 ' + Math.min(560, 180 + g.cards.length * 70) + 'px' }} onClick=${() => setCliSel(k)}>
             <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
             <div class="pct-rot"><small>Conclusão da obra</small><${BarraPct} p=${Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length)} /></div>
             <div class="qg-badges">
@@ -3129,11 +3130,11 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
               ${atr > 0 && html`<span class="b-atr">⚠ ${atr}</span>`}
               ${prazos[0] && html`<span>🚚 ${prazos[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>`}
             </div>
-          </button>`; })];
+          </button>`; })}</div>`];
       })() : html`
         <div class="row" style=${{ gap: '8px', justifyContent: 'space-between' }}><span class="row" style=${{ gap: '8px' }}><button class="btn btn-sm" onClick=${() => setCliSel(null)}>← Clientes</button><b class="qg-cli-nome" style=${{ '--cc': corCliente(cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || '') }}>${cards.find(c => norm(c.o.cliente?.nome) === cliSel)?.o.cliente?.nome || ''}</b></span>
           <button class="btn btn-sm" onClick=${() => imprimirFolha(cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(c => c.o))}>🖨 Folha de pendências</button></div>
-        ${cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(({ o, parc, et, feitas, atras }) => html`
+        <div class="qg-oss">${cards.filter(c => (norm(c.o.cliente?.nome) || '—') === cliSel).map(({ o, parc, et, feitas, atras }) => html`
         <div key=${o.id} class=${'qg-card' + (atras ? ' atras' : '')} style=${{ '--cc': corOS(o) }}>
           <div class="qg-top" onClick=${() => abrirOS(o.id)}>
             <b class="qg-num">${numOS(o)}</b>
@@ -3160,7 +3161,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
             <button class="qg-diario" onClick=${() => imprimirFolha([o])}>🖨 Pendências</button>
           </div>
           ${o.ultimoFinal?.foto && html`<button class="final-dia" onClick=${() => setSheet({ osId: o.id, tipo: 'diario' })}><img src=${o.ultimoFinal.foto} /><span>🌇 Final do dia · ${new Date(o.ultimoFinal.em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}${o.ultimoFinal.quem ? ' · ' + o.ultimoFinal.quem : ''}</span></button>`}
-        </div>`)}`}
+        </div>`)}</div>`}
 
       ${osSheet && ReactDOM.createPortal(html`
         <div class="sheet-fundo" onClick=${e => e.target === e.currentTarget && setSheet(null)}>

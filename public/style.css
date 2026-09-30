@@ -1341,3 +1341,8 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .mm-lista .mm-card{width:100%}
 .mm-card.foco{box-shadow:0 0 0 4px var(--c),0 14px 36px color-mix(in srgb,var(--c) 30%,transparent)}
 .mm-ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;line-height:1.45}
+/* v116 — cartões proporcionais */
+.qg-clientes{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.qg-clientes .qg-cliente{width:auto!important;min-width:0;max-width:100%}
+.qg-oss{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px;align-items:start}
+@media(max-width:600px){.qg-clientes .qg-cliente{flex-basis:100%!important}.qg-oss{grid-template-columns:1fr}}
