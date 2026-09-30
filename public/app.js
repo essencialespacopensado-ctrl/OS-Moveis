@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['110', ['✏️ Nome do cliente editável direto na OS (lápis ao lado do nome). Se o cliente tiver outras OS, dá para trocar em todas de uma vez.']],
   ['109', ['👥 Clientes com nome quase igual (ex.: Silmara x Sillmara) aparecem em aviso no Quadro geral com botão para juntar.', '👥 Ao criar ou importar OS com nome parecido com um cliente existente, o app pergunta se é o mesmo.', '🤖 A IA também organiza: diga "junta a Sillmara com a Silmara".']],
   ['107', ['📋 Folha de compras padrão aparece sempre na aba 🛒 Compras da OS, mesmo sem itens.']],
   ['106', ['⚡ Quadro geral → "Agora em andamento": tudo que está sendo feito hoje e por quem ao mesmo tempo (marcenaria, serralheria, vidros, pintura, terceirizados). Veja por OS ou por quem.']],
@@ -353,12 +354,12 @@ async function ajustarSequencia(sessao) {
     await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { seqAno: seq, osSeq: lista.length });
   } catch {}
 }
-function pedirTexto(titulo, ph) {
+function pedirTexto(titulo, ph, ini = '') {
   return new Promise(res => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = ReactDOM.createRoot(el);
     const fim = (v) => { root.unmount(); el.remove(); res(v); };
-    function M() { const [v, setV] = useState(''); return html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(420px,100%)' }}>
+    function M() { const [v, setV] = useState(ini); return html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(420px,100%)' }}>
       <div class="sec-title">${titulo}</div><input class="inp" autoFocus placeholder=${ph} value=${v} onInput=${e => setV(e.target.value)} onKeyDown=${e => e.key === 'Enter' && fim(v)} />
       <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => fim('')}>Cancelar</button><button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${() => fim(v)}>OK</button></div></div></div>`; }
     root.render(html`<${M} />`);
@@ -3975,7 +3976,12 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
       <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
-        <b>${o.cliente?.nome || ''}</b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}${o.prazoEntrega ? ' · entrega ' + dm(o.prazoEntrega) : ''}</small></div>
+        <b>${o.cliente?.nome || ''} <button class="edit-cli" title="Editar nome do cliente" onClick=${async () => {
+          const antigo = o.cliente?.nome || ''; const novo = (await pedirTexto('✏️ Nome do cliente', 'Nome do cliente', antigo) || '').trim(); if (!novo || novo === antigo) return;
+          const outras = baseCli(antigo) && baseCli(antigo) !== baseCli(novo) ? (await F().fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.id !== o.id && baseCli(x.cliente?.nome) === baseCli(antigo)) : [];
+          let todas = false; if (outras.length) { const r = await escolher('Trocar em todas?', '"' + baseCli(antigo) + '" tem mais ' + outras.length + ' OS.', [{ v: 't', t: 'Trocar em todas as ' + (outras.length + 1) + ' OS', cls: 'btn-primary' }, { v: 'u', t: 'Só nesta OS' }]); if (!r) return; todas = r === 't'; }
+          try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: novo }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); registrar(sessao, o.id, '👤', 'Nome do cliente', antigo + ' → ' + novo);
+            if (todas) await unificarCliente(sessao, outras, baseCli(antigo), baseCli(novo)); toast('Nome atualizado' + (todas ? ' em ' + (outras.length + 1) + ' OS.' : '.'), 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>✏️</button></b><small>${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}${o.prazoEntrega ? ' · entrega ' + dm(o.prazoEntrega) : ''}</small></div>
         <button class="x-btn" style=${{ color: '#fff' }} onClick=${fechar}>✕</button></div>
 
       <div class="ficha-acoes">
