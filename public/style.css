@@ -1139,3 +1139,18 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @media(max-width:700px){.mais-menu{position:fixed;left:12px;right:12px;top:auto;bottom:80px;min-width:0}}
 /* v83 — menu Mais fora do corte da barra */
 .mais-menu{position:fixed;top:64px;right:max(16px,calc((100vw - 1200px)/2));max-height:calc(100vh - 90px);overflow:auto}
+
+/* v84 — seções: Geral, Produção, Compras, Equipe, Financeiro */
+.secoes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;max-width:100%;padding:2px}
+.secoes::-webkit-scrollbar{display:none}
+.secoes button{border:2px solid transparent;background:#f5f5f4;color:#44403c;font:inherit;font-weight:800;font-size:14px;padding:9px 16px;border-radius:12px;cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .15s,background .2s}
+.secoes button:hover{transform:translateY(-2px);box-shadow:0 5px 12px #0002;border-color:var(--sc)}
+.secoes button.on{background:var(--sc);color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--sc) 40%,transparent)}
+.subabas{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 16px;max-width:1200px;margin:0 auto;border-bottom:3px solid var(--sc)}
+.subabas::-webkit-scrollbar{display:none}
+.subabas button{display:flex;align-items:center;gap:6px;border:1.5px solid color-mix(in srgb,var(--sc) 35%,#fff);background:#fff;color:#44403c;font:inherit;font-weight:700;font-size:13px;padding:7px 13px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:transform .15s}
+.subabas button:hover{transform:translateY(-1px)}
+.subabas button.on{background:color-mix(in srgb,var(--sc) 14%,#fff);border-color:var(--sc);color:var(--sc)}
+.dev-cantinho{position:fixed;left:6px;bottom:4px;z-index:5;border:none;background:none;color:#d6d3d1;font-size:10px;cursor:pointer;opacity:.5;padding:2px 4px}
+.dev-cantinho:hover{opacity:1;color:#78716c}
+.fin-barra{height:8px;background:#f5f5f4;border-radius:5px;overflow:hidden}.fin-barra i{display:block;height:100%;border-radius:5px}

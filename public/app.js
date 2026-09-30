@@ -4352,6 +4352,89 @@ function ImpressaoOS({ os, empresa }) {
     </div>`;
 }
 
+
+/* ---------- Compras (visão geral de todas as OSs) ---------- */
+function TelaComprasGeral({ sessao, toast }) {
+  const [docs, setDocs] = useState(null);
+  const [oss, setOss] = useState([]);
+  const [filtro, setFiltro] = useState('faltam');
+  const [agrupar, setAgrupar] = useState('parceiro');
+  const [abrir, setAbrir] = useState(null);
+  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => setDocs(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setDocs([])); const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); return () => { a(); b(); }; }, []);
+  const itens = (docs || []).flatMap(d => (d.itens || []).map(i => ({ ...i, osId: d.id, osCod: d.osCod, cliente: d.cliente })));
+  const vis = itens.filter(i => filtro === 'todas' || (filtro === 'faltam' ? !i.comprado : i.comprado));
+  const grupos = {}; vis.forEach(i => { const k = agrupar === 'parceiro' ? (i.parceiro || 'Sem parceiro') : (i.osCod + ' ' + (i.cliente || '')); (grupos[k] = grupos[k] || []).push(i); });
+  const marcar = async (i) => {
+    const d = docs.find(x => x.id === i.osId); if (!d) return;
+    let mot = ''; if (i.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; }
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'compras', d.id), { itens: d.itens.map(x => x.id === i.id ? { ...x, comprado: !x.comprado, compradoPor: !x.comprado ? sessao.nome : '', compradoEm: !x.comprado ? nowIso() : '' } : x), atualizadoEm: nowIso() }); registrar(sessao, i.osId, i.comprado ? '↺' : '🛒', (i.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + i.descricao, mot); }
+    catch (e) { toast(e.message, 'erro'); }
+  };
+  const osAbrir = abrir && oss.find(o => o.id === abrir);
+  return html`<div class="fade-up stack">
+    <div class="page-head"><div><h2>🛒 Compras</h2><div class="dim">Todos os itens de compra de todas as OSs, num lugar só.</div></div></div>
+    <div class="mt-tiles">
+      <div class="mt-t neg"><small>Faltam comprar</small><b>${itens.filter(i => !i.comprado).length}</b></div>
+      <div class="mt-t pos"><small>Comprados</small><b>${itens.filter(i => i.comprado).length}</b></div>
+      <div class="mt-t"><small>OSs com compras</small><b>${(docs || []).filter(d => (d.itens || []).length).length}</b></div>
+    </div>
+    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+      <div class="seg-mini">${[['faltam', 'Faltam'], ['compradas', 'Comprados'], ['todas', 'Todos']].map(([k, t]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
+      <div class="seg-mini">${[['parceiro', 'Por parceiro'], ['os', 'Por OS']].map(([k, t]) => html`<button key=${k} class=${agrupar === k ? 'on' : ''} onClick=${() => setAgrupar(k)}>${t}</button>`)}</div>
+    </div>
+    ${docs === null ? html`<div class="card">Carregando…</div>` : !vis.length ? html`<div class="card vazio dim">${filtro === 'faltam' ? '✓ Nada faltando comprar.' : 'Nenhum item.'}</div>` :
+      Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([k, l]) => html`<div key=${k} class="card page-card stack" style=${{ gap: '6px' }}>
+        <div class="row" style=${{ justifyContent: 'space-between' }}><b>${agrupar === 'parceiro' ? '🤝 ' : '📋 '}${k}</b><span class="chip">${l.length}</span></div>
+        ${l.map((i, j) => html`<div key=${j} class="fl-i">
+          <span style=${{ flex: 1 }}>${i.comprado ? '✅' : '⬜'} ${i.qtd ? i.qtd + ' ' : ''}${i.descricao}<small> · ${agrupar === 'parceiro' ? i.osCod + ' ' + (i.cliente || '').split(/\s[-–]\s/)[0] : i.parceiro || 'sem parceiro'}</small></span>
+          <button class="btn btn-sm btn-ghost" onClick=${() => setAbrir(i.osId)}>abrir</button>
+          <button class=${'btn btn-sm ' + (i.comprado ? '' : 'btn-verde')} onClick=${() => marcar(i)}>${i.comprado ? '↺' : '✓ Comprado'}</button></div>`)}
+      </div>`)}
+    ${osAbrir && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAbrir(null)}><div class="card modal-caixa stack" style=${{ width: 'min(760px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🛒 ${numOS(osAbrir)} · ${osAbrir.cliente?.nome || ''}</div><button class="x-btn" onClick=${() => setAbrir(null)}>✕</button></div>
+      <${ComprasOS} sessao=${sessao} os=${osAbrir} toast=${toast} /></div></div>`, document.body)}
+  </div>`;
+}
+
+/* ---------- Financeiro (por OS / cliente) ---------- */
+const brl = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function TelaFinanceiro({ sessao, toast }) {
+  const [oss, setOss] = useState(null);
+  const [edit, setEdit] = useState(null);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setOss([])), []);
+  const cli = {}; (oss || []).forEach(o => { const k = norm((o.cliente?.nome || '—').split(/\s[-–]\s/)[0]); (cli[k] = cli[k] || { nome: (o.cliente?.nome || '—').split(/\s[-–]\s/)[0], oss: [] }).oss.push(o); });
+  const fin = (o) => o.financeiro || {};
+  const tot = (l, k) => l.reduce((n, o) => n + (Number(fin(o)[k]) || 0), 0);
+  const todas = oss || [];
+  const vT = tot(todas, 'valor'), rT = tot(todas, 'recebido'), cT = tot(todas, 'custo');
+  const salvar = async () => {
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', edit.id), { financeiro: { valor: Number(edit.valor) || 0, recebido: Number(edit.recebido) || 0, custo: Number(edit.custo) || 0, obs: edit.obs || '', atualizadoEm: nowIso(), por: sessao.nome } }); registrar(sessao, edit.id, '💰', 'Financeiro atualizado', 'Valor ' + brl(edit.valor) + ' · recebido ' + brl(edit.recebido)); setEdit(null); toast('Salvo.', 'ok'); }
+    catch (e) { toast(e.message, 'erro'); }
+  };
+  return html`<div class="fade-up stack">
+    <div class="page-head"><div><h2>💰 Financeiro</h2><div class="dim">Valor, recebido e custo por OS. Só o administrador vê esta tela.</div></div></div>
+    <div class="mt-tiles">
+      <div class="mt-t"><small>Valor dos contratos</small><b style=${{ fontSize: '18px' }}>${brl(vT)}</b></div>
+      <div class="mt-t pos"><small>Recebido</small><b style=${{ fontSize: '18px' }}>${brl(rT)}</b></div>
+      <div class="mt-t warn"><small>A receber</small><b style=${{ fontSize: '18px' }}>${brl(vT - rT)}</b></div>
+      <div class="mt-t neg"><small>Custos</small><b style=${{ fontSize: '18px' }}>${brl(cT)}</b></div>
+      <div class=${'mt-t ' + (vT - cT >= 0 ? 'pos' : 'neg')}><small>Margem</small><b style=${{ fontSize: '18px' }}>${brl(vT - cT)}</b><em>${vT ? Math.round((vT - cT) * 100 / vT) + '%' : '—'}</em></div>
+    </div>
+    ${oss === null ? html`<div class="card">Carregando…</div>` : Object.values(cli).sort((a, b) => a.nome.localeCompare(b.nome)).map(c => { const v = tot(c.oss, 'valor'), r = tot(c.oss, 'recebido'); return html`<div key=${c.nome} class="card page-card stack" style=${{ gap: '6px', borderLeft: '6px solid ' + corCliente(c.nome) }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><b>${c.nome}</b><span class="dim">${brl(r)} de ${brl(v)} · falta <b style=${{ color: v - r > 0 ? '#b45309' : '#15803d' }}>${brl(v - r)}</b></span></div>
+      ${v > 0 && html`<div class="fin-barra"><i style=${{ width: Math.min(100, r * 100 / v) + '%', background: corCliente(c.nome) }}></i></div>`}
+      ${c.oss.sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<div key=${o.id} class="fl-i"><span style=${{ flex: 1 }}><b>${numOS(o)}</b> ${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}</span>
+        <small>${fin(o).valor ? brl(fin(o).valor) + ' · rec. ' + brl(fin(o).recebido) : 'sem valor'}</small>
+        <button class="btn btn-sm" onClick=${() => setEdit({ id: o.id, cod: numOS(o), valor: fin(o).valor || '', recebido: fin(o).recebido || '', custo: fin(o).custo || '', obs: fin(o).obs || '' })}>✏️</button></div>`)}
+    </div>`; })}
+    ${edit && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEdit(null)}><div class="card modal-caixa stack">
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">💰 OS ${edit.cod}</div><button class="x-btn" onClick=${() => setEdit(null)}>✕</button></div>
+      ${[['valor', 'Valor do contrato (R$)'], ['recebido', 'Já recebido (R$)'], ['custo', 'Custo (material + terceiros) (R$)']].map(([k, t]) => html`<div key=${k} class="field"><span class="lbl">${t}</span><input class="inp" inputmode="decimal" value=${edit[k]} onInput=${e => setEdit({ ...edit, [k]: e.target.value.replace(',', '.') })} /></div>`)}
+      <textarea class="inp" rows="2" placeholder="Observação (forma de pagamento, parcelas…)" value=${edit.obs} onInput=${e => setEdit({ ...edit, obs: e.target.value })}></textarea>
+      <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>💾 Salvar</button>
+    </div></div>`, document.body)}
+  </div>`;
+}
 /* =========================================================
    Importar OSs antigas
    ========================================================= */
@@ -4632,10 +4715,16 @@ function MinhaConta({ sessao, fechar, toast }) {
    ========================================================= */
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
-const PRINCIPAIS = ['inicio', 'os', 'cronograma', 'quadro', 'pedidos'];
-const GRUPOS_MENU = [['Documentos', ['contratos', 'projetos', 'importar']], ['Cadastros', ['catalogo', 'equipe']], ['Administração', ['excluir', 'config']]];
+const SECOES = [
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'config']],
+  ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
+  ['compras', '🛒 Compras', '#16a34a', ['compras']],
+  ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
+  ['financeiro', '💰 Financeiro', '#0e7490', ['financeiro']],
+];
+const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
-const TELAS_VOZ = [[/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
+const TELAS_VOZ = [[/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
 function comandoTela(q) {
   const t = norm(q);
   if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
@@ -5248,9 +5337,11 @@ function Principal({ sessao, toast }) {
     ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
     { v: 'cronograma', t: 'Cronograma', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
+    { v: 'compras', t: 'Compras', i: '🛒' },
+    ...(sessao.papel === 'admin' ? [{ v: 'financeiro', t: 'Financeiro', i: '💰' }] : []),
     ...(sessao.papel === 'admin' ? [{ v: 'config', t: 'Configurações', i: '⚙' }] : []),
   ];
-  const [mais, setMais] = useState(false);
+  const [devL, setDevL] = useState(false);
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
@@ -5264,14 +5355,8 @@ function Principal({ sessao, toast }) {
               <div class="dim topo-emp" style=${{ fontSize: '12px' }}>🏢 ${sessao.empresaNome}</div>
             </div>
           </div>
-          <nav class="pillnav nav-org">
-            ${abas.filter(a => PRINCIPAIS.includes(a.v)).sort((x, y) => PRINCIPAIS.indexOf(x.v) - PRINCIPAIS.indexOf(y.v)).map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => { setMais(false); irPara(a.v); }}><span class="ico">${a.i}</span>${a.t}</button>`)}
-            <div class="mais-wrap">
-              <button class=${'mais-btn' + (!PRINCIPAIS.includes(aba) ? ' on' : '') + (mais ? ' aberto' : '')} onClick=${() => setMais(!mais)}><span class="ico">☰</span>${!PRINCIPAIS.includes(aba) ? (abas.find(a => a.v === aba) || {}).t || 'Mais' : 'Mais'} ▾</button>
-              ${mais && html`<div class="mais-fundo" onClick=${() => setMais(false)}></div><div class="mais-menu">
-                ${GRUPOS_MENU.map(([tit, vs]) => { const it = abas.filter(a => vs.includes(a.v)); return it.length ? html`<div key=${tit} class="mais-grp"><small>${tit}</small>${it.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => { setMais(false); irPara(a.v); }}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })}
-              </div>`}
-            </div>
+          <nav class="secoes">
+            ${SECOES.filter(([k, , , vs]) => abas.some(a => vs.includes(a.v))).map(([k, t, cor, vs]) => html`<button key=${k} class=${secaoDe(aba)[0] === k ? 'on' : ''} style=${{ '--sc': cor }} onClick=${() => irPara(abas.find(a => vs.includes(a.v)).v)}>${t}</button>`)}
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
@@ -5285,6 +5370,7 @@ function Principal({ sessao, toast }) {
           </div>
         </div>
       </header>
+      ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = abas.filter(a => vs.includes(a.v)); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
@@ -5296,6 +5382,8 @@ function Principal({ sessao, toast }) {
         ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
         ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
         ${aba === 'contratos' && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'compras' && html`<${TelaComprasGeral} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'financeiro' && sessao.papel === 'admin' && html`<${TelaFinanceiro} sessao=${sessao} toast=${toast} />`}
         ${aba === 'pedidos' && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
         ${aba === 'cronograma' && html`<${TelaCronograma} key=${cronoK} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
@@ -5304,6 +5392,8 @@ function Principal({ sessao, toast }) {
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
+      <button class="dev-cantinho" title="Desenvolvedor" onClick=${() => setDevL(true)}>dev</button>
+      ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
 
