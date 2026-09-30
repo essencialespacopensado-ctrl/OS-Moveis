@@ -2416,7 +2416,7 @@ const ST_COMPRA = [['orcar', 'Falta orçar', '#9ca3af'], ['orcando', 'Orçando',
 const stCompra = (i) => i.st || (i.recebido ? 'recebido' : i.comprado ? 'pedido' : (i.orcs || []).length ? 'orcando' : 'orcar');
 const infoStC = (v) => ST_COMPRA.find(x => x[0] === v) || ST_COMPRA[0];
 const ETAPA_C = { pre: '⚡ Pré-pedido', pedido: '📦 Pedido principal' };
-const numBR = (v) => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || Number(v) || 0;
+const numBR = (v) => { if (typeof v === 'number') return isFinite(v) ? v : 0; const t = String(v ?? '').trim().replace(/[R$\s]/g, ''); if (!t) return 0; if (t.includes(',')) return Number(t.replace(/\./g, '').replace(',', '.')) || 0; if (/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, '')) || 0; return Number(t) || 0; };
 /* Detalhe de um item: orçamentos, fornecedor escolhido, valor, previsão */
 function ItemCompraModal({ item, parceiros, salvar, fechar }) {
   const [it, setIt] = useState({ orcs: [], ...item, st: stCompra(item) });
@@ -4466,7 +4466,7 @@ function TelaComprasGeral({ sessao, toast }) {
     if (i.parceiro && numBR(i.valor)) { const r = add(i.parceiro); r.compras++; r.gasto += numBR(i.valor); }
     if (i.parceiro && i.previsao && i.recebidoEm) { const r = add(i.parceiro); r.entregas++; if (i.recebidoEm.slice(0, 10) > i.previsao) r.atrasos++; } });
   notas.forEach(n => { if (n.fornecedor) { const r = add(n.fornecedor); r.compras += n.semOS ? 1 : 0; r.gasto += n.semOS ? numBR(n.total) : 0; } });
-  { const lin = notas.flatMap(n => (n.linhas || []).map(l => ({ d: l.descricao, f: n.fornecedor, vu: numBR(l.valorUnit) }))).filter(x => x.vu > 0 && x.f); const gs = []; lin.forEach(l => { const g = gs.find(g => parecido(g[0].d, l.d) >= 0.7); if (g) g.push(l); else gs.push([l]); });
+  { const lin = notas.flatMap(n => (n.linhas || []).map(l => ({ d: l.descricao, f: n.fornecedor, vu: numBR(l.valorUnit) }))).filter(x => x.vu > 0 && x.f); const gs = []; lin.forEach(l => { const nm = (x) => (String(x).match(/\d+/g) || []).join('-'); const g = gs.find(g => nm(g[0].d) === nm(l.d) && parecido(g[0].d, l.d) >= 0.7); if (g) g.push(l); else gs.push([l]); });
     gs.forEach(g => { const fs = {}; g.forEach(x => { fs[x.f] = Math.min(fs[x.f] || Infinity, x.vu); }); const ent = Object.entries(fs); if (ent.length < 2) return; const min = Math.min(...ent.map(e => e[1])); const med = ent.reduce((n, e) => n + e[1], 0) / ent.length; ent.forEach(([f, v]) => { const r = add(f); r.orcs++; if (v === min) { r.vitorias++; r.economia += (med - v) / med; } }); }); }
   const ranking = Object.values(rank).filter(r => r.orcs || r.compras).sort((a, b) => (b.vitorias / (b.orcs || 1)) - (a.vitorias / (a.orcs || 1)) || b.compras - a.compras);
   // nota fiscal
@@ -4474,7 +4474,7 @@ function TelaComprasGeral({ sessao, toast }) {
     if (!file) return; setLendoNf('Lendo ' + file.name + '…');
     try {
       const r = await extrairArquivo(file); setLendoNf('A IA está lendo a nota…');
-      const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0, categorias: cats, exemplos: regras.slice(-120) }, r.imagens || []);
+      const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0, categorias: cats, exemplos: regras.slice(-120), empresa: sessao.empresaNome || '' }, r.imagens || []);
       (res.itens || []).forEach(li => { li.categoria = categoriaPorRegra(regras, li.descricao) || (cats.includes(li.categoria) ? li.categoria : 'Outros'); });
       const linhas = (res.itens || []).map(li => { let best = null, sc = 0; itens.filter(i => i._st !== 'recebido').forEach(i => { let p = parecido(li.descricao, i.descricao); if (i.parceiro && norm(res.fornecedor).includes(norm(i.parceiro).split(' ')[0])) p += .2; if (p > sc) { sc = p; best = i; } }); return { ...li, osId: best && sc >= .4 ? best.osId : '', itemId: best && sc >= .4 ? best.id : '' }; });
       if (lerNf.modelo) { lerNf.modelo = false; setModelo({ arquivo: file.name, fornecedor: res.fornecedor || '', linhas: (res.itens || []).map(li => ({ descricao: li.descricao, categoria: li.categoria })) }); setLendoNf(''); return; }
@@ -4541,7 +4541,7 @@ function TelaComprasGeral({ sessao, toast }) {
     </div>`}
     ${aba === 'precos' && (() => {
       const lin = notas.flatMap(n => (n.linhas || []).map(l => ({ ...l, forn: n.fornecedor, cidade: n.cidade, data: n.data, vu: numBR(l.valorTotal) && numBR(l.qtd) ? numBR(l.valorTotal) / numBR(l.qtd) : numBR(l.valorUnit) }))).filter(l => l.vu > 0);
-      const grupos = []; lin.forEach(l => { const g = grupos.find(g => parecido(g.desc, l.descricao) >= 0.7); if (g) g.l.push(l); else grupos.push({ desc: l.descricao, cat: l.categoria || 'Outros', l: [l] }); });
+      const grupos = []; lin.forEach(l => { const nums = (x) => (String(x).match(/\d+/g) || []).join('-'); const g = grupos.find(g => nums(g.desc) === nums(l.descricao) && parecido(g.desc, l.descricao) >= 0.7); if (g) g.l.push(l); else grupos.push({ desc: l.descricao, cat: l.categoria || 'Outros', l: [l] }); });
       const q = norm(buscaP);
       const vis0 = grupos.filter(g => !q || norm(g.desc + ' ' + g.cat + ' ' + g.l.map(x => x.forn).join(' ')).includes(q));
       const catsP = [...new Set(vis0.map(g => g.cat))].sort();
