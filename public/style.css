@@ -1154,3 +1154,31 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .dev-cantinho{position:fixed;left:6px;bottom:4px;z-index:5;border:none;background:none;color:#d6d3d1;font-size:10px;cursor:pointer;opacity:.5;padding:2px 4px}
 .dev-cantinho:hover{opacity:1;color:#78716c}
 .fin-barra{height:8px;background:#f5f5f4;border-radius:5px;overflow:hidden}.fin-barra i{display:block;height:100%;border-radius:5px}
+
+/* v86 — compras avançadas, contas */
+.st-trilho{display:flex;flex-wrap:wrap;gap:4px}
+.st-trilho button{border:2px solid var(--c);background:#fff;color:var(--c);font:inherit;font-weight:700;font-size:12px;padding:5px 10px;border-radius:999px;cursor:pointer}
+.st-trilho button.on{background:var(--c);color:#fff}
+.st-chip{display:inline-block;color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap;margin-top:3px}
+.st-resumo{display:flex;flex-wrap:wrap;gap:4px}.st-resumo span{color:#fff;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700}
+.st-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.st-cards button{border:2px solid color-mix(in srgb,var(--c) 40%,#fff);background:color-mix(in srgb,var(--c) 8%,#fff);border-radius:12px;padding:8px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;font:inherit;transition:transform .15s}
+.st-cards button:hover{transform:translateY(-2px)}.st-cards button b{font-size:22px;color:var(--c)}.st-cards button small{font-size:11px;color:#44403c;font-weight:700}
+.st-cards button.on{background:var(--c);border-color:var(--c)}.st-cards button.on b,.st-cards button.on small{color:#fff}
+.fl-i.melhor{background:#f0fdf4;border:1.5px solid #86efac}
+.rank-i{display:flex;align-items:center;gap:10px;padding:8px 10px;background:#fafaf9;border-radius:10px}
+.rank-i small{display:block;color:#78716c;font-size:12px}.rank-n{font-size:20px;width:30px;text-align:center;font-weight:800}
+.nf-linhas{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.nf-l{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px;align-items:center;background:#fafaf9;border-radius:8px;padding:6px 8px}
+.nf-l small{display:block;color:#57534e;font-size:12px}
+@media(max-width:700px){.nf-l{grid-template-columns:1fr}}
+.conta{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px;border-left:5px solid #16a34a;background:#fafaf9}
+.conta.pagar{border-left-color:#dc2626}.conta.pago{opacity:.55}.conta.venc{background:#fef2f2}
+.conta small{display:block;color:#78716c;font-size:12px}.conta-d{min-width:44px;text-align:center}
+.conta-v{white-space:nowrap}.conta.pagar .conta-v{color:#b91c1c}.conta.receber .conta-v{color:#15803d}
+.conta-ck{width:26px;height:26px;border-radius:7px;border:2px solid #a8a29e;background:#fff;cursor:pointer;font-weight:800;color:#fff;flex:none}
+.conta.pago .conta-ck{background:#16a34a;border-color:#16a34a}
+.cat-bar{display:grid;grid-template-columns:150px 1fr 100px;gap:8px;align-items:center;font-size:13px;margin-top:4px}
+.cat-bar div{height:10px;background:#f5f5f4;border-radius:5px}.cat-bar i{display:block;height:100%;background:#dc2626;border-radius:5px}
+.sec-dev{margin-left:auto;background:none!important;border:none!important;opacity:.35;font-size:14px!important;padding:6px 8px!important}
+.sec-dev:hover{opacity:1;transform:none!important;box-shadow:none!important}

@@ -2409,8 +2409,43 @@ const PARC_PADRAO = [
   { nome: 'Laca Nobre', esp: 'Pintura / laca' }, { nome: 'Projetta', esp: 'Vidros' }, { nome: 'Adeblu', esp: 'Esquadrias e lâminas' },
   { nome: 'Pintura Ezequiel', esp: 'Pintura' }, { nome: 'Pintura Celso', esp: 'Pintura' }, { nome: 'Eduardo', esp: '' }, { nome: 'Marmoraria Itália', esp: 'Pedras' },
 ];
-const CAT_COMPRA = ['Chapas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Acessórios', 'Químicos', 'Outros'];
-const ICO_CAT = { 'Chapas': '🟫', 'Fitas de borda': '🎞️', 'Ferragens': '🔩', 'Puxadores': '🔘', 'Perfis': '📏', 'Iluminação': '💡', 'Vidros': '🪟', 'Acessórios': '🧩', 'Químicos': '🧪', 'Outros': '📦' };
+const CAT_COMPRA = ['Chapas', 'Lâminas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Pedras', 'Tecidos', 'Pintura', 'Acessórios', 'Químicos', 'Outros'];
+const ICO_CAT = { 'Chapas': '🟫', 'Lâminas': '🌳', 'Fitas de borda': '🎞️', 'Ferragens': '🔩', 'Puxadores': '🔘', 'Perfis': '📏', 'Iluminação': '💡', 'Vidros': '🪟', 'Pedras': '🪨', 'Tecidos': '🧵', 'Pintura': '🎨', 'Acessórios': '🧩', 'Químicos': '🧪', 'Outros': '📦' };
+/* Situação de cada item de compra */
+const ST_COMPRA = [['orcar', 'Falta orçar', '#9ca3af'], ['orcando', 'Orçando', '#f59e0b'], ['aprovacao', 'Aguard. aprovação', '#ea580c'], ['pedido', 'Pedido feito', '#2563eb'], ['recebido', 'Recebido', '#16a34a']];
+const stCompra = (i) => i.st || (i.recebido ? 'recebido' : i.comprado ? 'pedido' : (i.orcs || []).length ? 'orcando' : 'orcar');
+const infoStC = (v) => ST_COMPRA.find(x => x[0] === v) || ST_COMPRA[0];
+const ETAPA_C = { pre: '⚡ Pré-pedido', pedido: '📦 Pedido principal' };
+const numBR = (v) => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || Number(v) || 0;
+/* Detalhe de um item: orçamentos, fornecedor escolhido, valor, previsão */
+function ItemCompraModal({ item, parceiros, salvar, fechar }) {
+  const [it, setIt] = useState({ orcs: [], ...item, st: stCompra(item) });
+  const [o, setO] = useState({ forn: '', valor: '' });
+  const melhor = (it.orcs || []).length ? it.orcs.reduce((a, b) => (numBR(b.valor) < numBR(a.valor) ? b : a)) : null;
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${ICO_CAT[it.categoria] || '📦'} ${it.descricao}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    <div class="dim">${[it.qtd && it.qtd + ' ' + (it.unidade || ''), it.marca, it.obs].filter(Boolean).join(' · ')}</div>
+    <div class="st-trilho">${ST_COMPRA.map(([v, t, c]) => html`<button key=${v} class=${it.st === v ? 'on' : ''} style=${{ '--c': c }} onClick=${() => setIt({ ...it, st: v })}>${t}</button>`)}</div>
+    <div class="row" style=${{ gap: '6px' }}><span class="lbl">Etapa</span>${Object.entries(ETAPA_C).map(([k, t]) => html`<button key=${k} class=${'pill' + ((it.etapa || 'pedido') === k ? ' on' : '')} onClick=${() => setIt({ ...it, etapa: k })}>${t}</button>`)}</div>
+    <div class="sec-title" style=${{ fontSize: '14px' }}>💬 Orçamentos</div>
+    ${(it.orcs || []).map((x, k) => html`<div key=${k} class=${'fl-i' + (melhor === x ? ' melhor' : '')}><span style=${{ flex: 1 }}>${x.forn}${melhor === x && it.orcs.length > 1 ? ' 🏆' : ''}</span><b>${brl(numBR(x.valor))}</b>
+      <button class="btn btn-sm" onClick=${() => setIt({ ...it, parceiro: x.forn, valor: numBR(x.valor), st: ['orcar', 'orcando'].includes(it.st) ? 'aprovacao' : it.st })}>Escolher</button>
+      <button class="x-btn" onClick=${() => setIt({ ...it, orcs: it.orcs.filter((_, j) => j !== k) })}>✕</button></div>`)}
+    <div class="row" style=${{ gap: '5px', flexWrap: 'nowrap' }}>
+      <input class="inp inp-sm" list="lista-parc" placeholder="Fornecedor" value=${o.forn} onInput=${e => setO({ ...o, forn: e.target.value })} />
+      <input class="inp inp-sm" style=${{ width: '110px' }} inputmode="decimal" placeholder="R$ total" value=${o.valor} onInput=${e => setO({ ...o, valor: e.target.value })} />
+      <button class="btn btn-sm btn-primary" onClick=${() => { if (!o.forn || !o.valor) return; setIt({ ...it, orcs: [...(it.orcs || []), { forn: o.forn.trim(), valor: numBR(o.valor), em: nowIso() }], st: it.st === 'orcar' ? 'orcando' : it.st }); setO({ forn: '', valor: '' }); }}>＋</button>
+      <datalist id="lista-parc">${parceiros.map(p => html`<option key=${p.nome} value=${p.nome} />`)}</datalist>
+    </div>
+    <div class="grid2">
+      <div class="field"><span class="lbl">Comprado com</span><input class="inp" list="lista-parc" value=${it.parceiro || ''} onInput=${e => setIt({ ...it, parceiro: e.target.value })} /></div>
+      <div class="field"><span class="lbl">Valor (R$)</span><input class="inp" inputmode="decimal" value=${it.valor || ''} onInput=${e => setIt({ ...it, valor: e.target.value })} /></div>
+      <div class="field"><span class="lbl">Previsão de entrega</span><input class="inp" type="date" value=${it.previsao || ''} onInput=${e => setIt({ ...it, previsao: e.target.value })} /></div>
+      <div class="field"><span class="lbl">Nota fiscal</span><input class="inp" value=${it.nf || ''} onInput=${e => setIt({ ...it, nf: e.target.value })} /></div>
+    </div>
+    <button class="btn btn-grande btn-verde btn-block" onClick=${() => { const st = it.st; salvar({ ...it, valor: numBR(it.valor), comprado: st === 'pedido' || st === 'recebido', recebido: st === 'recebido', recebidoEm: st === 'recebido' ? (it.recebidoEm || nowIso()) : '', pedidoEm: ['pedido', 'recebido'].includes(st) ? (it.pedidoEm || nowIso()) : '' }); fechar(); }}>💾 Salvar item</button>
+  </div></div>`, document.body);
+}
 function ComprasOS({ sessao, os, toast }) {
   const [doc, setDoc] = useState(undefined);
   const [lendo, setLendo] = useState('');
@@ -2419,6 +2454,8 @@ function ComprasOS({ sessao, os, toast }) {
   const [imprimir, setImprimir] = useState(false);
   const [modo, setModo] = useState('categoria');
   const [escolher, setEscolher] = useState(null); // {ids:[...]} para escolher parceiro
+  const [itemAb, setItemAb] = useState(null);
+  const inpDet = useRef(null);
   const [parceiros, setParceiros] = useState([]);
   const [novoParc, setNovoParc] = useState('');
   const inp = useRef(null);
@@ -2434,38 +2471,45 @@ function ComprasOS({ sessao, os, toast }) {
       setLendo('Lendo ' + file.name + '…');
       const r = await extrairArquivo(file);
       setLendo('A IA está montando a folha…');
-      const res = await chamarIA('compras_dinabox', { texto: r.texto, temImagens: (r.imagens || []).length > 0 }, r.imagens || []);
-      setPrev({ arquivo: file.name, itens: (res.itens || []).map(i => ({ ...i, categoria: CAT_COMPRA.includes(i.categoria) ? i.categoria : 'Outros', ok: true })) });
+      const det = importar.det; importar.det = false;
+      const res = await chamarIA(det ? 'levantar_materiais' : 'compras_dinabox', { texto: r.texto, temImagens: (r.imagens || []).length > 0 }, r.imagens || []);
+      setPrev({ arquivo: file.name, det, itens: (res.itens || []).map(i => ({ ...i, etapa: i.etapa === 'pre' ? 'pre' : 'pedido', categoria: CAT_COMPRA.includes(i.categoria) ? i.categoria : 'Outros', ok: true })) });
     } catch (e) { toast('Não importou: ' + e.message, 'erro'); }
     setLendo('');
   };
   const confirmar = async () => {
     const add = prev.itens.filter(i => i.ok).map(({ ok, ...i }) => ({ ...i, id: rand(6), comprado: false }));
-    await gravar([...itens, ...add], { origem: 'Dinabox PCP · ' + prev.arquivo, __log: 'Folha de compras importada (' + add.length + ' itens)' });
+    await gravar([...itens, ...add], { origem: (prev.det ? 'Detalhamento · ' : 'Dinabox PCP · ') + prev.arquivo, __log: (prev.det ? 'Levantamento de materiais do detalhamento (' : 'Folha de compras importada (') + add.length + ' itens)' });
     toast(add.length + ' itens na folha de compras.', 'ok'); setPrev(null);
   };
-  const marcar = async (id) => { const it = itens.find(i => i.id === id); let mot = ''; if (it?.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; } registrar(sessao, os.id, it?.comprado ? '↺' : '🛒', (it?.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + (it?.descricao || '') + (it?.parceiro ? ' · ' + it.parceiro : ''), mot); return gravar(itens.map(i => i.id === id ? { ...i, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i)); };
+  const marcarSt = null;
+  const marcar = async (id) => { const it = itens.find(i => i.id === id); let mot = ''; if (it?.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; } registrar(sessao, os.id, it?.comprado ? '↺' : '🛒', (it?.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + (it?.descricao || '') + (it?.parceiro ? ' · ' + it.parceiro : ''), mot); return gravar(itens.map(i => i.id === id ? { ...i, st: !i.comprado ? 'pedido' : 'orcar', recebido: false, comprado: !i.comprado, compradoPor: !i.comprado ? sessao.nome : '', compradoEm: !i.comprado ? nowIso() : '' } : i)); };
   const remover = (id) => gravar(itens.filter(i => i.id !== id));
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
+    : modo === 'etapa' ? [['⚡ Pré-pedido (comprar já)', itens.filter(i => i.etapa === 'pre')], ['📦 Pedido principal', itens.filter(i => i.etapa !== 'pre')]].filter(([, l]) => l.length)
     : CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length);
   const feitos = itens.filter(i => i.comprado).length;
   if (prev) return html`
     <div class="sheet-t">📥 Conferir importação</div>
     <div class="dim">${prev.arquivo} · ${prev.itens.length} itens encontrados. Desmarque o que não for comprar.</div>
     <div class="compras-lista">${prev.itens.map((i, k) => html`<label key=${k} class=${'compra-i' + (i.ok ? '' : ' off')}><input type="checkbox" checked=${i.ok} onChange=${e => setPrev(p => ({ ...p, itens: p.itens.map((x, j) => j === k ? { ...x, ok: e.target.checked } : x) }))} />
-      <span>${ICO_CAT[i.categoria]}</span><span class="grow"><b>${i.descricao}</b><small>${[i.codigo, i.marca, i.categoria].filter(Boolean).join(' · ')}</small></span><b class="compra-q">${i.qtd} ${i.unidade || ''}</b></label>`)}</div>
+      <span>${ICO_CAT[i.categoria]}</span><span class="grow"><b>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b><small>${[i.codigo, i.marca, i.categoria, i.ambiente, i.etapa === 'pre' ? 'PRÉ-PEDIDO' : ''].filter(Boolean).join(' · ')}</small></span><b class="compra-q">${i.qtd} ${i.unidade || ''}</b></label>`)}</div>
     <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setPrev(null)}>Cancelar</button><button class="btn btn-verde" style=${{ flex: 1 }} onClick=${confirmar}>✓ Colocar ${prev.itens.filter(i => i.ok).length} itens na folha</button></div>`;
   return html`
     <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🛒 Folha de compras</div>
       ${itens.length > 0 && html`<button class="btn btn-sm" onClick=${() => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Imprimir folha padrão</button>`}</div>
-    <button class="btn btn-grande btn-block" disabled=${!!lendo} onClick=${() => inp.current?.click()}>${lendo || '📥 Importar folha de compras do PCP (Dinabox)'}</button>
+    <div class="grid2">
+      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = true; inp.current?.click(); }}>${lendo && importar.det !== false ? lendo : '📐 Levantar do detalhamento do arquiteto'}</button>
+      <button class="btn btn-grande" disabled=${!!lendo} onClick=${() => { importar.det = false; inp.current?.click(); }}>📥 Importar folha do PCP (Dinabox)</button>
+    </div>
     <input ref=${inp} type="file" hidden accept=".pdf,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { importar(e.target.files[0]); e.target.value = ''; }} />
-    <small class="dim">No Dinabox, exporte a folha de compras do PCP (PDF ou Excel) e escolha o arquivo aqui.</small>
+    <small class="dim">O detalhamento do arquiteto já separa o que é <b>⚡ pré-pedido</b> (lâminas, Blum, itens sem pronta entrega). A folha do Dinabox traz o pedido grosso (chapas, fitas, ferragens).</small>
+    ${itens.length > 0 && html`<div class="st-resumo">${ST_COMPRA.map(([v, t, c]) => { const n = itens.filter(i => stCompra(i) === v).length; return n ? html`<span key=${v} style=${{ background: c }}>${t}: ${n}</span>` : null; })}<span style=${{ background: '#1f2937' }}>Total: ${brl(itens.reduce((n, i) => n + numBR(i.valor), 0))}</span></div>`}
     ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="vazio dim">Nenhum item ainda.</div>` : html`
       <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados</span></div>
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
-        <div class="seg-mini"><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
+        <div class="seg-mini"><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
       </div>
       ${grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
           <span class="row" style=${{ gap: '4px' }}>
@@ -2474,7 +2518,8 @@ function ComprasOS({ sessao, os, toast }) {
           </span></div>
         <div class="compras-lista">${l.map(i => html`<div key=${i.id} class=${'compra-i' + (i.comprado ? ' feito' : '')}>
           <button class="compra-ck" onClick=${() => marcar(i.id)}>${i.comprado ? '✓' : ''}</button>
-          <span class="grow"><b>${i.descricao}</b><small>${[i.codigo, i.marca, i.obs, i.comprado ? 'comprado por ' + i.compradoPor : ''].filter(Boolean).join(' · ')}</small></span>
+          <span class="grow" style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}><b>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b><small>${[i.codigo, i.marca, i.obs, i.previsao && stCompra(i) === 'pedido' ? '🚚 ' + dm(i.previsao) : '', (i.orcs || []).length ? (i.orcs.length + ' orç.') : ''].filter(Boolean).join(' · ')}</small>
+            <span class="st-chip" style=${{ background: infoStC(stCompra(i))[2] }}>${infoStC(stCompra(i))[1]}${i.valor ? ' · ' + brl(numBR(i.valor)) : ''}</span></span>
           <button class=${'parc-chip' + (i.parceiro ? ' tem' : '')} onClick=${() => setEscolher({ ids: [i.id] })}>${i.parceiro ? '🤝 ' + i.parceiro : '＋ parceiro'}</button>
           <b class="compra-q">${i.qtd} ${i.unidade || ''}</b><button class="x-btn" onClick=${() => remover(i.id)}>✕</button></div>`)}</div></div>`)}`}
     <div class="compra-add">
@@ -2499,6 +2544,7 @@ function ComprasOS({ sessao, os, toast }) {
             <button class="x-btn" onClick=${() => salvarParceiros(parceiros.filter((_, j) => j !== k))}>✕</button></div>`)}
         </details>
       </div></div>`, document.body)}
+    ${itemAb && html`<${ItemCompraModal} item=${itemAb} parceiros=${parceiros} fechar=${() => setItemAb(null)} salvar=${(ni) => { gravar(itens.map(x => x.id === ni.id ? ni : x)); if (stCompra(ni) !== stCompra(itemAb)) registrar(sessao, os.id, '🛒', infoStC(stCompra(ni))[1] + ': ' + ni.descricao, [ni.parceiro, ni.valor ? brl(ni.valor) : ''].filter(Boolean).join(' · ')); }} />`}
     ${imprimir && ReactDOM.createPortal(html`<${ImpressaoCompras} os=${os} doc=${typeof imprimir === 'string' ? { ...doc, itens: itens.filter(i => i.parceiro === imprimir), parceiro: imprimir } : doc} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}`;
 }
 function LogoImp({ empresa }) { return window.__LOGO ? html`<img class="po-logo" src=${window.__LOGO} alt=${empresa || ''} />` : null; }
@@ -4354,59 +4400,217 @@ function ImpressaoOS({ os, empresa }) {
 
 
 /* ---------- Compras (visão geral de todas as OSs) ---------- */
+const semAcento = (t) => norm(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+function parecido(a, b) { const A = new Set(semAcento(a).split(' ').filter(w => w.length > 2)), B = new Set(semAcento(b).split(' ').filter(w => w.length > 2)); if (!A.size || !B.size) return 0; let n = 0; A.forEach(w => { if (B.has(w)) n++; }); return n / Math.min(A.size, B.size); }
 function TelaComprasGeral({ sessao, toast }) {
   const [docs, setDocs] = useState(null);
   const [oss, setOss] = useState([]);
-  const [filtro, setFiltro] = useState('faltam');
+  const [notas, setNotas] = useState([]);
+  const [filtro, setFiltro] = useState('abertos');
   const [agrupar, setAgrupar] = useState('parceiro');
   const [abrir, setAbrir] = useState(null);
-  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => setDocs(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setDocs([])); const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); return () => { a(); b(); }; }, []);
-  const itens = (docs || []).flatMap(d => (d.itens || []).map(i => ({ ...i, osId: d.id, osCod: d.osCod, cliente: d.cliente })));
-  const vis = itens.filter(i => filtro === 'todas' || (filtro === 'faltam' ? !i.comprado : i.comprado));
-  const grupos = {}; vis.forEach(i => { const k = agrupar === 'parceiro' ? (i.parceiro || 'Sem parceiro') : (i.osCod + ' ' + (i.cliente || '')); (grupos[k] = grupos[k] || []).push(i); });
-  const marcar = async (i) => {
-    const d = docs.find(x => x.id === i.osId); if (!d) return;
-    let mot = ''; if (i.comprado) { mot = await pedirMotivo('Desmarcar compra', 'Este item já estava comprado. Informe o motivo.'); if (!mot) return; }
-    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'compras', d.id), { itens: d.itens.map(x => x.id === i.id ? { ...x, comprado: !x.comprado, compradoPor: !x.comprado ? sessao.nome : '', compradoEm: !x.comprado ? nowIso() : '' } : x), atualizadoEm: nowIso() }); registrar(sessao, i.osId, i.comprado ? '↺' : '🛒', (i.comprado ? 'Compra desmarcada: ' : 'Comprado: ') + i.descricao, mot); }
-    catch (e) { toast(e.message, 'erro'); }
+  const [nf, setNf] = useState(null);
+  const [lendoNf, setLendoNf] = useState('');
+  const [aba, setAba] = useState('itens');
+  const inpNf = useRef(null);
+  useEffect(() => { const u = [F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => setDocs(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setDocs([])), F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}), F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'notas'), s => setNotas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})]; return () => u.forEach(f => f()); }, []);
+  const itens = (docs || []).flatMap(d => (d.itens || []).map(i => ({ ...i, _st: stCompra(i), osId: d.id, osCod: d.osCod, cliente: d.cliente })));
+  const hoje = isoD(new Date());
+  const vis = itens.filter(i => filtro === 'todos' || (filtro === 'abertos' ? i._st !== 'recebido' : filtro === 'pre' ? i.etapa === 'pre' && i._st !== 'recebido' : filtro === 'atrasados' ? i._st === 'pedido' && i.previsao && i.previsao < hoje : i._st === filtro));
+  const grupos = {}; vis.forEach(i => { const k = agrupar === 'parceiro' ? (i.parceiro || 'Sem fornecedor') : agrupar === 'status' ? infoStC(i._st)[1] : (i.osCod + ' ' + (i.cliente || '')); (grupos[k] = grupos[k] || []).push(i); });
+  const salvarItem = async (osId, ni) => { const d = docs.find(x => x.id === osId); if (!d) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'compras', osId), { itens: d.itens.map(x => x.id === ni.id ? ni : x), atualizadoEm: nowIso() }); };
+  const [itemAb, setItemAb] = useState(null);
+  const [parceiros, setParceiros] = useState([]);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => setParceiros(d.data()?.parceirosLista || PARC_PADRAO), () => {}), []);
+  // ranking dos parceiros: orçamentos comparados + notas
+  const rank = {}; const add = (f) => (rank[f] = rank[f] || { nome: f, orcs: 0, vitorias: 0, economia: 0, compras: 0, gasto: 0, atrasos: 0, entregas: 0 });
+  itens.forEach(i => { const o = (i.orcs || []).filter(x => numBR(x.valor) > 0); if (o.length >= 2) { const min = Math.min(...o.map(x => numBR(x.valor))), med = o.reduce((n, x) => n + numBR(x.valor), 0) / o.length; o.forEach(x => { const r = add(x.forn); r.orcs++; if (numBR(x.valor) === min) { r.vitorias++; r.economia += med ? (med - min) / med : 0; } }); }
+    if (i.parceiro && numBR(i.valor)) { const r = add(i.parceiro); r.compras++; r.gasto += numBR(i.valor); }
+    if (i.parceiro && i.previsao && i.recebidoEm) { const r = add(i.parceiro); r.entregas++; if (i.recebidoEm.slice(0, 10) > i.previsao) r.atrasos++; } });
+  notas.forEach(n => { if (n.fornecedor) { const r = add(n.fornecedor); r.gasto += 0; } });
+  const ranking = Object.values(rank).filter(r => r.orcs || r.compras).sort((a, b) => (b.vitorias / (b.orcs || 1)) - (a.vitorias / (a.orcs || 1)) || b.compras - a.compras);
+  // nota fiscal
+  const lerNf = async (file) => {
+    if (!file) return; setLendoNf('Lendo ' + file.name + '…');
+    try {
+      const r = await extrairArquivo(file); setLendoNf('A IA está lendo a nota…');
+      const res = await chamarIA('nota_fiscal', { texto: r.texto, temImagens: (r.imagens || []).length > 0 }, r.imagens || []);
+      const linhas = (res.itens || []).map(li => { let best = null, sc = 0; itens.filter(i => i._st !== 'recebido').forEach(i => { let p = parecido(li.descricao, i.descricao); if (i.parceiro && norm(res.fornecedor).includes(norm(i.parceiro).split(' ')[0])) p += .2; if (p > sc) { sc = p; best = i; } }); return { ...li, osId: best && sc >= .4 ? best.osId : '', itemId: best && sc >= .4 ? best.id : '' }; });
+      setNf({ arquivo: file.name, fornecedor: res.fornecedor || '', cnpj: res.cnpj || '', numero: res.numero || '', data: res.data || hoje, total: numBR(res.total), linhas });
+    } catch (e) { toast('Não li a nota: ' + e.message, 'erro'); }
+    setLendoNf('');
+  };
+  const confirmarNf = async () => {
+    try {
+      const porOS = {};
+      nf.linhas.forEach(l => { if (l.osId) (porOS[l.osId] = porOS[l.osId] || []).push(l); });
+      for (const [osId, ls] of Object.entries(porOS)) {
+        const d = docs.find(x => x.id === osId); const o = oss.find(x => x.id === osId);
+        let lista = [...(d?.itens || [])];
+        ls.forEach(l => {
+          const v = numBR(l.valorTotal) || numBR(l.valorUnit) * numBR(l.qtd);
+          const k = lista.findIndex(x => x.id === l.itemId);
+          if (k >= 0) lista[k] = { ...lista[k], st: 'recebido', recebido: true, comprado: true, recebidoEm: nowIso(), parceiro: nf.fornecedor, valor: numBR(lista[k].valor && lista[k].st === 'recebido' ? lista[k].valor : 0) + v, nf: nf.numero, valorUnit: numBR(l.valorUnit) };
+          else lista.push({ id: rand(6), categoria: 'Outros', descricao: l.descricao, qtd: l.qtd, unidade: l.unidade, st: 'recebido', recebido: true, comprado: true, recebidoEm: nowIso(), parceiro: nf.fornecedor, valor: v, valorUnit: numBR(l.valorUnit), nf: nf.numero, etapa: 'pedido' });
+        });
+        await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'compras', osId), { osId, osCod: o ? numOS(o) : d?.osCod || '', cliente: o?.cliente?.nome || d?.cliente || '', itens: lista, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }, { merge: true });
+        registrar(sessao, osId, '🧾', 'Nota fiscal ' + nf.numero + ' — ' + nf.fornecedor, ls.length + ' itens · ' + brl(ls.reduce((n, l) => n + (numBR(l.valorTotal) || 0), 0)));
+      }
+      await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'notas'), { ...nf, criadoEm: nowIso(), por: sessao.nome });
+      if (nf.fornecedor && !parceiros.some(p => norm(p.nome) === norm(nf.fornecedor))) await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { parceirosLista: [...parceiros, { nome: nf.fornecedor, esp: '' }] });
+      toast('Nota lançada e itens precificados.', 'ok'); setNf(null);
+    } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
   };
   const osAbrir = abrir && oss.find(o => o.id === abrir);
+  const cont = (f) => itens.filter(f).length;
   return html`<div class="fade-up stack">
-    <div class="page-head"><div><h2>🛒 Compras</h2><div class="dim">Todos os itens de compra de todas as OSs, num lugar só.</div></div></div>
-    <div class="mt-tiles">
-      <div class="mt-t neg"><small>Faltam comprar</small><b>${itens.filter(i => !i.comprado).length}</b></div>
-      <div class="mt-t pos"><small>Comprados</small><b>${itens.filter(i => i.comprado).length}</b></div>
-      <div class="mt-t"><small>OSs com compras</small><b>${(docs || []).filter(d => (d.itens || []).length).length}</b></div>
+    <div class="page-head"><div><h2>🛒 Compras</h2><div class="dim">Orçamentos, pedidos, entregas e notas de todas as OSs.</div></div>
+      <button class="btn btn-verde" disabled=${!!lendoNf} onClick=${() => inpNf.current?.click()}>${lendoNf || '🧾 Lançar nota fiscal'}</button>
+      <input ref=${inpNf} type="file" hidden accept=".pdf,.xml,.txt,image/*" onChange=${e => { lerNf(e.target.files[0]); e.target.value = ''; }} /></div>
+    <div class="st-cards">
+      ${[['orcar', cont(i => i._st === 'orcar')], ['orcando', cont(i => i._st === 'orcando')], ['aprovacao', cont(i => i._st === 'aprovacao')], ['pedido', cont(i => i._st === 'pedido')], ['recebido', cont(i => i._st === 'recebido')]].map(([v, n]) => html`<button key=${v} class=${filtro === v ? 'on' : ''} style=${{ '--c': infoStC(v)[2] }} onClick=${() => setFiltro(filtro === v ? 'abertos' : v)}><b>${n}</b><small>${infoStC(v)[1]}</small></button>`)}
+      <button class=${filtro === 'pre' ? 'on' : ''} style=${{ '--c': '#7c3aed' }} onClick=${() => setFiltro(filtro === 'pre' ? 'abertos' : 'pre')}><b>${cont(i => i.etapa === 'pre' && i._st !== 'recebido')}</b><small>⚡ Pré-pedido</small></button>
+      <button class=${filtro === 'atrasados' ? 'on' : ''} style=${{ '--c': '#dc2626' }} onClick=${() => setFiltro(filtro === 'atrasados' ? 'abertos' : 'atrasados')}><b>${cont(i => i._st === 'pedido' && i.previsao && i.previsao < hoje)}</b><small>Entrega atrasada</small></button>
     </div>
-    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
-      <div class="seg-mini">${[['faltam', 'Faltam'], ['compradas', 'Comprados'], ['todas', 'Todos']].map(([k, t]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
-      <div class="seg-mini">${[['parceiro', 'Por parceiro'], ['os', 'Por OS']].map(([k, t]) => html`<button key=${k} class=${agrupar === k ? 'on' : ''} onClick=${() => setAgrupar(k)}>${t}</button>`)}</div>
-    </div>
-    ${docs === null ? html`<div class="card">Carregando…</div>` : !vis.length ? html`<div class="card vazio dim">${filtro === 'faltam' ? '✓ Nada faltando comprar.' : 'Nenhum item.'}</div>` :
-      Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([k, l]) => html`<div key=${k} class="card page-card stack" style=${{ gap: '6px' }}>
-        <div class="row" style=${{ justifyContent: 'space-between' }}><b>${agrupar === 'parceiro' ? '🤝 ' : '📋 '}${k}</b><span class="chip">${l.length}</span></div>
-        ${l.map((i, j) => html`<div key=${j} class="fl-i">
-          <span style=${{ flex: 1 }}>${i.comprado ? '✅' : '⬜'} ${i.qtd ? i.qtd + ' ' : ''}${i.descricao}<small> · ${agrupar === 'parceiro' ? i.osCod + ' ' + (i.cliente || '').split(/\s[-–]\s/)[0] : i.parceiro || 'sem parceiro'}</small></span>
-          <button class="btn btn-sm btn-ghost" onClick=${() => setAbrir(i.osId)}>abrir</button>
-          <button class=${'btn btn-sm ' + (i.comprado ? '' : 'btn-verde')} onClick=${() => marcar(i)}>${i.comprado ? '↺' : '✓ Comprado'}</button></div>`)}
-      </div>`)}
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['itens', '📋 Itens'], ['parceiros', '🏆 Melhores parceiros'], ['notas', '🧾 Notas fiscais']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
+    ${aba === 'itens' && html`
+      <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+        <div class="seg-mini">${[['abertos', 'Em aberto'], ['todos', 'Todos']].map(([k, t]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
+        <div class="seg-mini">${[['parceiro', 'Por fornecedor'], ['status', 'Por situação'], ['os', 'Por OS']].map(([k, t]) => html`<button key=${k} class=${agrupar === k ? 'on' : ''} onClick=${() => setAgrupar(k)}>${t}</button>`)}</div>
+      </div>
+      ${docs === null ? html`<div class="card">Carregando…</div>` : !vis.length ? html`<div class="card vazio dim">${itens.length ? 'Nada nesse filtro.' : 'Nenhum item ainda. Abra uma OS no Quadro geral → 🛒 Compras e use "📐 Levantar do detalhamento" ou importe do Dinabox.'}</div>` :
+        Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([k, l]) => html`<div key=${k} class="card page-card stack" style=${{ gap: '5px' }}>
+          <div class="row" style=${{ justifyContent: 'space-between' }}><b>${k}</b><span class="dim">${l.length} ${l.length === 1 ? 'item' : 'itens'} · ${brl(l.reduce((n, i) => n + numBR(i.valor), 0))}</span></div>
+          ${l.map((i, j) => html`<div key=${j} class="fl-i" style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}>
+            <span style=${{ flex: 1 }}>${i.etapa === 'pre' ? '⚡ ' : ''}${i.qtd ? i.qtd + ' ' + (i.unidade || '') + ' ' : ''}<b>${i.descricao}</b><small> · ${agrupar === 'os' ? i.parceiro || 'sem fornecedor' : i.osCod + ' ' + (i.cliente || '').split(/\s[-–]\s/)[0]}${i.previsao && i._st === 'pedido' ? ' · 🚚 ' + dm(i.previsao) : ''}</small></span>
+            ${i.valor ? html`<b class="dim">${brl(numBR(i.valor))}</b>` : ''}
+            <span class="st-chip" style=${{ background: infoStC(i._st)[2] }}>${infoStC(i._st)[1]}</span>
+            <button class="btn btn-sm btn-ghost" onClick=${e => { e.stopPropagation(); setAbrir(i.osId); }}>OS</button></div>`)}
+        </div>`)}`}
+    ${aba === 'parceiros' && html`<div class="card page-card stack">
+      <div class="dim">Calculado pelos orçamentos que você compara em cada item (quem teve o menor preço) e pelas compras e entregas. Quanto mais orçamentos lançar, mais certo fica.</div>
+      ${!ranking.length ? html`<div class="vazio dim">Ainda sem dados. Lance pelo menos 2 orçamentos de fornecedores diferentes num item.</div>` : ranking.map((r, k) => html`<div key=${r.nome} class="rank-i">
+        <span class="rank-n">${k < 3 && r.vitorias ? ['🥇', '🥈', '🥉'][k] : k + 1}</span>
+        <span style=${{ flex: 1 }}><b>${r.nome}</b><small>${r.orcs ? r.vitorias + ' de ' + r.orcs + ' orçamentos com melhor preço' + (r.vitorias ? ' · economia média ' + Math.round(r.economia / r.vitorias * 100) + '%' : '') : 'sem orçamentos comparados'}${r.entregas ? ' · ' + (r.entregas - r.atrasos) + '/' + r.entregas + ' entregas no prazo' : ''}</small></span>
+        <span class="dim">${r.compras} compras · ${brl(r.gasto)}</span></div>`)}
+    </div>`}
+    ${aba === 'notas' && html`<div class="card page-card stack">
+      ${!notas.length ? html`<div class="vazio dim">Nenhuma nota lançada. Use 🧾 Lançar nota fiscal.</div>` : notas.sort((a, b) => String(b.data).localeCompare(String(a.data))).map(n => html`<div key=${n.id} class="fl-i"><span style=${{ flex: 1 }}><b>NF ${n.numero || '—'}</b> · ${n.fornecedor}<small> · ${n.data ? n.data.split('-').reverse().join('/') : ''} · ${(n.linhas || []).length} itens</small></span><b>${brl(n.total)}</b></div>`)}
+    </div>`}
+    ${nf && ReactDOM.createPortal(html`<div class="modal-fundo"><div class="card modal-caixa stack" style=${{ width: 'min(820px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧾 Nota fiscal — separar por OS</div><button class="x-btn" onClick=${() => setNf(null)}>✕</button></div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Fornecedor</span><input class="inp" value=${nf.fornecedor} onInput=${e => setNf({ ...nf, fornecedor: e.target.value })} /></div>
+        <div class="field"><span class="lbl">Nº da nota · data</span><div class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}><input class="inp" value=${nf.numero} onInput=${e => setNf({ ...nf, numero: e.target.value })} /><input class="inp" type="date" value=${nf.data} onInput=${e => setNf({ ...nf, data: e.target.value })} /></div></div>
+      </div>
+      <div class="dim">A IA já ligou cada item ao material parecido das OSs. Confira e troque se precisar. Itens sem OS não entram em nenhuma.</div>
+      <div class="nf-linhas">${nf.linhas.map((l, k) => { const doOS = itens.filter(i => i.osId === l.osId); return html`<div key=${k} class="nf-l">
+        <div><b>${l.descricao}</b><small>${l.qtd} ${l.unidade || ''} × ${brl(numBR(l.valorUnit))} = <b>${brl(numBR(l.valorTotal))}</b></small></div>
+        <select class="inp inp-sm" value=${l.osId} onChange=${e => setNf({ ...nf, linhas: nf.linhas.map((x, j) => j === k ? { ...x, osId: e.target.value, itemId: '' } : x) })}><option value="">— sem OS —</option>${oss.slice().sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<option key=${o.id} value=${o.id}>${numOS(o)} ${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]} · ${(o.ambientes || []).map(a => a.nome).join(', ')}</option>`)}</select>
+        ${l.osId && html`<select class="inp inp-sm" value=${l.itemId} onChange=${e => setNf({ ...nf, linhas: nf.linhas.map((x, j) => j === k ? { ...x, itemId: e.target.value } : x) })}><option value="">➕ novo item</option>${doOS.map(i => html`<option key=${i.id} value=${i.id}>${i.descricao}</option>`)}</select>`}
+      </div>`; })}</div>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><span>Total da nota: <b>${brl(nf.total)}</b></span><span class="dim">Alocado: ${brl(nf.linhas.filter(l => l.osId).reduce((n, l) => n + numBR(l.valorTotal), 0))}</span></div>
+      <button class="btn btn-grande btn-verde btn-block" onClick=${confirmarNf}>💾 Lançar nota e precificar itens</button>
+    </div></div>`, document.body)}
+    ${itemAb && html`<${ItemCompraModal} item=${itemAb} parceiros=${parceiros} fechar=${() => setItemAb(null)} salvar=${(ni) => { const { _st, osId, osCod, cliente, ...limpo } = ni; salvarItem(itemAb.osId, limpo).catch(e => toast(e.message, 'erro')); }} />`}
     ${osAbrir && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAbrir(null)}><div class="card modal-caixa stack" style=${{ width: 'min(760px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🛒 ${numOS(osAbrir)} · ${osAbrir.cliente?.nome || ''}</div><button class="x-btn" onClick=${() => setAbrir(null)}>✕</button></div>
       <${ComprasOS} sessao=${sessao} os=${osAbrir} toast=${toast} /></div></div>`, document.body)}
   </div>`;
 }
 
+
+/* ---------- Contas a pagar / receber e custos operacionais ---------- */
+const CAT_PAGAR = ['Aluguel', 'Salários', 'Pró-labore', 'Encargos', 'Energia', 'Água', 'Internet / telefone', 'Impostos', 'Contador', 'Combustível', 'Veículos', 'Manutenção', 'Máquinas', 'Material (geral)', 'Terceiros', 'RT arquiteto', 'Comissão', 'Frete', 'Marketing', 'Empréstimo / financiamento', 'Outros'];
+const CAT_RECEBER = ['Cliente — entrada', 'Cliente — parcela', 'Cliente — final', 'Outros recebimentos'];
+const addMes = (iso0, n) => { const d = deIsoD(iso0); const dia = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(dia, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return isoD(d); };
+function TelaContas({ sessao, toast }) {
+  const [l, setL] = useState(null);
+  const [oss, setOss] = useState([]);
+  const [mes, setMes] = useState(() => isoD(new Date()).slice(0, 7));
+  const [filtro, setFiltro] = useState('todos');
+  const [novo, setNovo] = useState(null);
+  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'lancamentos'), s => setL(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setL([])); const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); return () => { a(); b(); }; }, []);
+  const hoje = isoD(new Date());
+  const doMes = (l || []).filter(x => String(x.venc).slice(0, 7) === mes);
+  const vencidos = (l || []).filter(x => !x.pago && x.venc < hoje);
+  const soma = (arr) => arr.reduce((n, x) => n + numBR(x.valor), 0);
+  const aPagar = doMes.filter(x => x.tipo === 'pagar'), aRec = doMes.filter(x => x.tipo === 'receber');
+  const vis = (filtro === 'vencidos' ? vencidos : doMes).filter(x => filtro === 'todos' || filtro === 'vencidos' || x.tipo === filtro).sort((a, b) => String(a.venc).localeCompare(String(b.venc)));
+  const porCat = {}; aPagar.forEach(x => { porCat[x.categoria] = (porCat[x.categoria] || 0) + numBR(x.valor); });
+  const maxCat = Math.max(1, ...Object.values(porCat));
+  const nomeMes = new Date(mes + '-02').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const pagar = async (x) => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'lancamentos', x.id), { pago: !x.pago, pagoEm: !x.pago ? nowIso() : '', pagoPor: !x.pago ? sessao.nome : '' }); } catch (e) { toast(e.message, 'erro'); } };
+  const excluir = async (x) => { const r = await escolher('Excluir lançamento', x.descricao + ' — ' + brl(x.valor) + (x.grupo ? '\nFaz parte de um parcelamento/recorrência.' : ''), [{ v: 'um', t: 'Excluir só este', cls: 'btn-danger' }, ...(x.grupo ? [{ v: 'prox', t: 'Excluir este e os próximos (não pagos)', cls: 'btn-danger' }] : []), { v: 'n', t: 'Cancelar' }]); if (r === 'n' || !r) return;
+    const alvo = r === 'prox' ? l.filter(y => y.grupo === x.grupo && !y.pago && y.venc >= x.venc) : [x]; const b = F().fsMod.writeBatch(F().db); alvo.forEach(y => b.delete(docRef('empresas', sessao.empresaId, 'lancamentos', y.id))); await b.commit(); toast(alvo.length + ' excluído(s).', 'ok'); };
+  const salvarNovo = async () => {
+    const n = novo; const v = numBR(n.valor); if (!n.descricao?.trim() && !n.categoria) return toast('Escreva a descrição.'); if (!v) return toast('Informe o valor.'); if (!n.venc) return toast('Informe o vencimento.');
+    const qt = Math.max(1, parseInt(n.parcelas, 10) || 1); const grupo = qt > 1 ? rand(8) : '';
+    const valorParc = n.modo === 'total' ? Math.round(v / qt * 100) / 100 : v;
+    const o = n.osId ? oss.find(x => x.id === n.osId) : null;
+    const b = F().fsMod.writeBatch(F().db);
+    for (let k = 0; k < qt; k++) b.set(F().fsMod.doc(col('empresas', sessao.empresaId, 'lancamentos')), { tipo: n.tipo, categoria: n.categoria, descricao: (n.descricao || n.categoria).trim(), valor: valorParc, venc: addMes(n.venc, k), parcela: qt > 1 ? (k + 1) + '/' + qt : '', recorrente: n.modo === 'recorrente', grupo, pago: false, osId: o?.id || '', osCod: o ? numOS(o) : '', cliente: o?.cliente?.nome || n.cliente || '', criadoEm: nowIso(), por: sessao.nome });
+    try { await b.commit(); toast(qt > 1 ? qt + ' lançamentos criados.' : 'Lançado.', 'ok'); setNovo(null); } catch (e) { toast(e.message, 'erro'); }
+  };
+  const osRT = novo?.osId ? oss.find(x => x.id === novo.osId) : null;
+  const contratoRT = osRT ? oss.filter(x => norm((x.cliente?.nome || '').split(/\s[-–]\s/)[0]) === norm((osRT.cliente?.nome || '').split(/\s[-–]\s/)[0])).reduce((n, x) => n + numBR(x.financeiro?.valor), 0) : 0;
+  return html`<div class="fade-up stack">
+    <div class="page-head"><div><h2>📒 Contas & custos operacionais</h2><div class="dim">Tudo que a empresa paga e recebe: custos fixos, parcelamentos, RT do arquiteto, parcelas dos clientes.</div></div>
+      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-danger" onClick=${() => setNovo({ tipo: 'pagar', categoria: 'Aluguel', descricao: '', valor: '', venc: hoje, parcelas: 1, modo: 'total' })}>＋ A pagar</button><button class="btn btn-verde" onClick=${() => setNovo({ tipo: 'receber', categoria: 'Cliente — parcela', descricao: '', valor: '', venc: hoje, parcelas: 1, modo: 'total' })}>＋ A receber</button></div></div>
+    <div class="row" style=${{ gap: '8px', justifyContent: 'center' }}><button class="btn btn-sm" onClick=${() => setMes(addMes(mes + '-01', -1).slice(0, 7))}>‹</button><b style=${{ textTransform: 'capitalize', fontSize: '18px', minWidth: '180px', textAlign: 'center' }}>${nomeMes}</b><button class="btn btn-sm" onClick=${() => setMes(addMes(mes + '-01', 1).slice(0, 7))}>›</button></div>
+    <div class="mt-tiles">
+      <div class="mt-t neg"><small>A pagar no mês</small><b style=${{ fontSize: '18px' }}>${brl(soma(aPagar))}</b><em>${brl(soma(aPagar.filter(x => x.pago)))} já pago</em></div>
+      <div class="mt-t pos"><small>A receber no mês</small><b style=${{ fontSize: '18px' }}>${brl(soma(aRec))}</b><em>${brl(soma(aRec.filter(x => x.pago)))} já recebido</em></div>
+      <div class=${'mt-t ' + (soma(aRec) - soma(aPagar) >= 0 ? 'pos' : 'neg')}><small>Saldo previsto do mês</small><b style=${{ fontSize: '18px' }}>${brl(soma(aRec) - soma(aPagar))}</b></div>
+      <div class="mt-t warn"><small>Vencidos (todos os meses)</small><b style=${{ fontSize: '18px' }}>${vencidos.length}</b><em>${brl(soma(vencidos.filter(x => x.tipo === 'pagar')))} a pagar · ${brl(soma(vencidos.filter(x => x.tipo === 'receber')))} a receber</em></div>
+    </div>
+    ${Object.keys(porCat).length > 0 && html`<details class="card metricas"><summary><b>📊 Custos do mês por categoria</b></summary>${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => html`<div key=${c} class="cat-bar"><span>${c}</span><div><i style=${{ width: v / maxCat * 100 + '%' }}></i></div><b>${brl(v)}</b></div>`)}</details>`}
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['todos', 'Todos do mês'], ['pagar', 'A pagar'], ['receber', 'A receber'], ['vencidos', '⚠ Vencidos']].map(([k, t]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
+    <div class="card page-card stack" style=${{ gap: '4px' }}>
+      ${l === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nada aqui.</div>` : vis.map(x => { const venc = !x.pago && x.venc < hoje; return html`<div key=${x.id} class=${'conta ' + x.tipo + (x.pago ? ' pago' : '') + (venc ? ' venc' : '')}>
+        <button class="conta-ck" title=${x.pago ? 'Desmarcar' : x.tipo === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'} onClick=${() => pagar(x)}>${x.pago ? '✓' : ''}</button>
+        <span class="conta-d"><b>${x.venc ? x.venc.split('-').reverse().slice(0, 2).join('/') : ''}</b></span>
+        <span style=${{ flex: 1 }}><b>${x.descricao}</b>${x.parcela ? html` <span class="chip">${x.parcela}</span>` : ''}<small>${[x.categoria, x.osCod && 'OS ' + x.osCod, x.cliente, x.pago && (x.tipo === 'pagar' ? 'pago' : 'recebido') + ' por ' + x.pagoPor].filter(Boolean).join(' · ')}</small></span>
+        <b class="conta-v">${x.tipo === 'pagar' ? '−' : '+'} ${brl(x.valor)}</b>
+        <button class="x-btn" onClick=${() => excluir(x)}>✕</button></div>`; })}
+    </div>
+    ${novo && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setNovo(null)}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${novo.tipo === 'pagar' ? '💸 Conta a pagar' : '💰 Conta a receber'}</div><button class="x-btn" onClick=${() => setNovo(null)}>✕</button></div>
+      <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${(novo.tipo === 'pagar' ? CAT_PAGAR : CAT_RECEBER).map(c => html`<button key=${c} class=${'pill' + (novo.categoria === c ? ' on' : '')} onClick=${() => setNovo({ ...novo, categoria: c })}>${c}</button>`)}</div>
+      <input class="inp" placeholder="Descrição (ex.: Aluguel galpão, RT Arq. Fulana, Parcela 2 cliente…)" value=${novo.descricao} onInput=${e => setNovo({ ...novo, descricao: e.target.value })} />
+      ${(novo.categoria === 'RT arquiteto' || novo.categoria === 'Comissão' || novo.tipo === 'receber') && html`<div class="grid2">
+        <div class="field"><span class="lbl">Ligado a qual OS / cliente</span><select class="inp" value=${novo.osId || ''} onChange=${e => setNovo({ ...novo, osId: e.target.value })}><option value="">— nenhum —</option>${oss.slice().sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<option key=${o.id} value=${o.id}>${numOS(o)} ${(o.cliente?.nome || '').split(/\s[-–]\s/)[0]}</option>`)}</select></div>
+        ${(novo.categoria === 'RT arquiteto' || novo.categoria === 'Comissão') && html`<div class="field"><span class="lbl">% sobre o contrato${contratoRT ? ' (' + brl(contratoRT) + ')' : ''}</span><input class="inp" inputmode="decimal" placeholder="Ex.: 10" value=${novo.pct || ''} onInput=${e => { const pct = numBR(e.target.value); setNovo({ ...novo, pct: e.target.value, valor: contratoRT && pct ? String(Math.round(contratoRT * pct) / 100) : novo.valor }); }} /></div>`}
+      </div>`}
+      <div class="grid2">
+        <div class="field"><span class="lbl">Valor (R$)</span><input class="inp" inputmode="decimal" value=${novo.valor} onInput=${e => setNovo({ ...novo, valor: e.target.value })} /></div>
+        <div class="field"><span class="lbl">${Number(novo.parcelas) > 1 ? '1º vencimento' : 'Vencimento'}</span><input class="inp" type="date" value=${novo.venc} onInput=${e => setNovo({ ...novo, venc: e.target.value })} /></div>
+      </div>
+      <div class="row" style=${{ gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span class="lbl">Repetir</span>
+        ${[1, 2, 3, 4, 5, 6, 10, 12].map(n => html`<button key=${n} class=${'pill' + (Number(novo.parcelas) === n ? ' on' : '')} onClick=${() => setNovo({ ...novo, parcelas: n })}>${n === 1 ? 'Só uma vez' : n + 'x'}</button>`)}
+        <input class="inp inp-sm" style=${{ width: '64px' }} inputmode="numeric" value=${novo.parcelas} onInput=${e => setNovo({ ...novo, parcelas: e.target.value })} />
+      </div>
+      ${Number(novo.parcelas) > 1 && html`<div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>
+        <button class=${novo.modo === 'total' ? 'on' : ''} onClick=${() => setNovo({ ...novo, modo: 'total' })}>Parcelado: dividir o valor em ${novo.parcelas}x de ${brl(numBR(novo.valor) / (Number(novo.parcelas) || 1))}</button>
+        <button class=${novo.modo === 'recorrente' ? 'on' : ''} onClick=${() => setNovo({ ...novo, modo: 'recorrente' })}>Recorrente: ${brl(numBR(novo.valor))} todo mês</button></div>`}
+      <button class=${'btn btn-grande btn-block ' + (novo.tipo === 'pagar' ? 'btn-danger' : 'btn-verde')} onClick=${salvarNovo}>💾 Lançar</button>
+    </div></div>`, document.body)}
+  </div>`;
+}
 /* ---------- Financeiro (por OS / cliente) ---------- */
 const brl = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 function TelaFinanceiro({ sessao, toast }) {
   const [oss, setOss] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [mat, setMat] = useState({});
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setOss([])), []);
+  useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => { const m = {}; s.docs.forEach(d => { m[d.id] = (d.data().itens || []).filter(i => ['pedido', 'recebido'].includes(stCompra(i))).reduce((n, i) => n + numBR(i.valor), 0); }); setMat(m); }, () => {}), []);
   const cli = {}; (oss || []).forEach(o => { const k = norm((o.cliente?.nome || '—').split(/\s[-–]\s/)[0]); (cli[k] = cli[k] || { nome: (o.cliente?.nome || '—').split(/\s[-–]\s/)[0], oss: [] }).oss.push(o); });
-  const fin = (o) => o.financeiro || {};
+  const fin = (o) => ({ ...(o.financeiro || {}), material: mat[o.id] || 0 });
   const tot = (l, k) => l.reduce((n, o) => n + (Number(fin(o)[k]) || 0), 0);
   const todas = oss || [];
-  const vT = tot(todas, 'valor'), rT = tot(todas, 'recebido'), cT = tot(todas, 'custo');
+  const vT = tot(todas, 'valor'), rT = tot(todas, 'recebido'), mT = tot(todas, 'material'), cT = tot(todas, 'custo') + mT;
   const salvar = async () => {
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', edit.id), { financeiro: { valor: Number(edit.valor) || 0, recebido: Number(edit.recebido) || 0, custo: Number(edit.custo) || 0, obs: edit.obs || '', atualizadoEm: nowIso(), por: sessao.nome } }); registrar(sessao, edit.id, '💰', 'Financeiro atualizado', 'Valor ' + brl(edit.valor) + ' · recebido ' + brl(edit.recebido)); setEdit(null); toast('Salvo.', 'ok'); }
     catch (e) { toast(e.message, 'erro'); }
@@ -4417,19 +4621,20 @@ function TelaFinanceiro({ sessao, toast }) {
       <div class="mt-t"><small>Valor dos contratos</small><b style=${{ fontSize: '18px' }}>${brl(vT)}</b></div>
       <div class="mt-t pos"><small>Recebido</small><b style=${{ fontSize: '18px' }}>${brl(rT)}</b></div>
       <div class="mt-t warn"><small>A receber</small><b style=${{ fontSize: '18px' }}>${brl(vT - rT)}</b></div>
-      <div class="mt-t neg"><small>Custos</small><b style=${{ fontSize: '18px' }}>${brl(cT)}</b></div>
+      <div class="mt-t neg"><small>Material (compras)</small><b style=${{ fontSize: '18px' }}>${brl(mT)}</b></div>
+      <div class="mt-t neg"><small>Custos totais</small><b style=${{ fontSize: '18px' }}>${brl(cT)}</b></div>
       <div class=${'mt-t ' + (vT - cT >= 0 ? 'pos' : 'neg')}><small>Margem</small><b style=${{ fontSize: '18px' }}>${brl(vT - cT)}</b><em>${vT ? Math.round((vT - cT) * 100 / vT) + '%' : '—'}</em></div>
     </div>
     ${oss === null ? html`<div class="card">Carregando…</div>` : Object.values(cli).sort((a, b) => a.nome.localeCompare(b.nome)).map(c => { const v = tot(c.oss, 'valor'), r = tot(c.oss, 'recebido'); return html`<div key=${c.nome} class="card page-card stack" style=${{ gap: '6px', borderLeft: '6px solid ' + corCliente(c.nome) }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><b>${c.nome}</b><span class="dim">${brl(r)} de ${brl(v)} · falta <b style=${{ color: v - r > 0 ? '#b45309' : '#15803d' }}>${brl(v - r)}</b></span></div>
       ${v > 0 && html`<div class="fin-barra"><i style=${{ width: Math.min(100, r * 100 / v) + '%', background: corCliente(c.nome) }}></i></div>`}
       ${c.oss.sort((a, b) => numOS(a).localeCompare(numOS(b))).map(o => html`<div key=${o.id} class="fl-i"><span style=${{ flex: 1 }}><b>${numOS(o)}</b> ${(o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || ''}</span>
-        <small>${fin(o).valor ? brl(fin(o).valor) + ' · rec. ' + brl(fin(o).recebido) : 'sem valor'}</small>
+        <small>${fin(o).valor ? brl(fin(o).valor) + ' · rec. ' + brl(fin(o).recebido) : 'sem valor'}${fin(o).material ? ' · material ' + brl(fin(o).material) : ''}${fin(o).valor && (fin(o).material || fin(o).custo) ? ' · margem ' + Math.round((fin(o).valor - fin(o).material - (Number(fin(o).custo) || 0)) * 100 / fin(o).valor) + '%' : ''}</small>
         <button class="btn btn-sm" onClick=${() => setEdit({ id: o.id, cod: numOS(o), valor: fin(o).valor || '', recebido: fin(o).recebido || '', custo: fin(o).custo || '', obs: fin(o).obs || '' })}>✏️</button></div>`)}
     </div>`; })}
     ${edit && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEdit(null)}><div class="card modal-caixa stack">
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">💰 OS ${edit.cod}</div><button class="x-btn" onClick=${() => setEdit(null)}>✕</button></div>
-      ${[['valor', 'Valor do contrato (R$)'], ['recebido', 'Já recebido (R$)'], ['custo', 'Custo (material + terceiros) (R$)']].map(([k, t]) => html`<div key=${k} class="field"><span class="lbl">${t}</span><input class="inp" inputmode="decimal" value=${edit[k]} onInput=${e => setEdit({ ...edit, [k]: e.target.value.replace(',', '.') })} /></div>`)}
+      ${[['valor', 'Valor do contrato (R$)'], ['recebido', 'Já recebido (R$)'], ['custo', 'Outros custos da OS — mão de obra, terceiros (R$). O material vem sozinho das Compras']].map(([k, t]) => html`<div key=${k} class="field"><span class="lbl">${t}</span><input class="inp" inputmode="decimal" value=${edit[k]} onInput=${e => setEdit({ ...edit, [k]: e.target.value.replace(',', '.') })} /></div>`)}
       <textarea class="inp" rows="2" placeholder="Observação (forma de pagamento, parcelas…)" value=${edit.obs} onInput=${e => setEdit({ ...edit, obs: e.target.value })}></textarea>
       <button class="btn btn-grande btn-verde btn-block" onClick=${salvar}>💾 Salvar</button>
     </div></div>`, document.body)}
@@ -4720,11 +4925,11 @@ const SECOES = [
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
-  ['financeiro', '💰 Financeiro', '#0e7490', ['financeiro']],
+  ['financeiro', '💰 Financeiro', '#0e7490', ['financeiro', 'contas']],
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
-const TELAS_VOZ = [[/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
+const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/configura/, 'config']];
 function comandoTela(q) {
   const t = norm(q);
   if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
@@ -5338,7 +5543,7 @@ function Principal({ sessao, toast }) {
     { v: 'cronograma', t: 'Cronograma', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
     { v: 'compras', t: 'Compras', i: '🛒' },
-    ...(sessao.papel === 'admin' ? [{ v: 'financeiro', t: 'Financeiro', i: '💰' }] : []),
+    ...(sessao.papel === 'admin' ? [{ v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' }] : []),
     ...(sessao.papel === 'admin' ? [{ v: 'config', t: 'Configurações', i: '⚙' }] : []),
   ];
   const [devL, setDevL] = useState(false);
@@ -5357,6 +5562,7 @@ function Principal({ sessao, toast }) {
           </div>
           <nav class="secoes">
             ${SECOES.filter(([k, , , vs]) => abas.some(a => vs.includes(a.v))).map(([k, t, cor, vs]) => html`<button key=${k} class=${secaoDe(aba)[0] === k ? 'on' : ''} style=${{ '--sc': cor }} onClick=${() => irPara(vs.find(v => abas.some(a => a.v === v)))}>${t}</button>`)}
+            <button class="sec-dev" title="Desenvolvedor" onClick=${() => setDevL(true)}>🛠</button>
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
@@ -5384,6 +5590,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'contratos' && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'compras' && html`<${TelaComprasGeral} sessao=${sessao} toast=${toast} />`}
         ${aba === 'financeiro' && sessao.papel === 'admin' && html`<${TelaFinanceiro} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'contas' && sessao.papel === 'admin' && html`<${TelaContas} sessao=${sessao} toast=${toast} />`}
         ${aba === 'pedidos' && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
         ${aba === 'cronograma' && html`<${TelaCronograma} key=${cronoK} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
@@ -5392,7 +5599,6 @@ function Principal({ sessao, toast }) {
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
-      <button class="dev-cantinho" title="Desenvolvedor" onClick=${() => setDevL(true)}>dev</button>
       ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
