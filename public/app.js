@@ -5356,7 +5356,7 @@ function Principal({ sessao, toast }) {
             </div>
           </div>
           <nav class="secoes">
-            ${SECOES.filter(([k, , , vs]) => abas.some(a => vs.includes(a.v))).map(([k, t, cor, vs]) => html`<button key=${k} class=${secaoDe(aba)[0] === k ? 'on' : ''} style=${{ '--sc': cor }} onClick=${() => irPara(abas.find(a => vs.includes(a.v)).v)}>${t}</button>`)}
+            ${SECOES.filter(([k, , , vs]) => abas.some(a => vs.includes(a.v))).map(([k, t, cor, vs]) => html`<button key=${k} class=${secaoDe(aba)[0] === k ? 'on' : ''} style=${{ '--sc': cor }} onClick=${() => irPara(vs.find(v => abas.some(a => a.v === v)))}>${t}</button>`)}
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
@@ -5370,7 +5370,7 @@ function Principal({ sessao, toast }) {
           </div>
         </div>
       </header>
-      ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = abas.filter(a => vs.includes(a.v)); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
+      ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
