@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['118', ['🛠 Acesso do desenvolvedor com login + senha e "Esqueci a senha" (link no seu e-mail).']],
   ['117', ['📐 Listas de OS por cliente em mosaico: cada cartão tem só a altura das suas OS, sem espaço em branco.']],
   ['116', ['📐 Quadro geral: cartões dos clientes com tamanho proporcional ao número de OS e lado a lado, sem desperdiçar espaço. As OS de um cliente ficam em grade.']],
   ['115', ['🧠 Mapa: ao tocar em qualquer balão aparecem escritas todas as possibilidades daquele nível (seção, tela e cada função com como fazer, o que muda e onde impacta).']],
@@ -886,54 +887,59 @@ function TelaLogin() {
 const EMAIL_DEV = 'desenvolvedor@painel.gestaopro.app';
 
 function LoginDev({ fechar }) {
-  const [existe, setExiste] = useState(null);
-  const [senha, setSenha] = useState('');
-  const [senha2, setSenha2] = useState('');
-  const [erro, setErro] = useState('');
-  const [ocupado, setOcupado] = useState(false);
-
-  useEffect(() => {
-    F().fsMod.getDoc(docRef('config', 'dev')).then(s => setExiste(s.exists())).catch(() => setExiste(true));
-  }, []);
-
+  const [cfg, setCfg] = useState(undefined);
+  const [login, setLogin] = useState(''), [email, setEmail] = useState('');
+  const [senha, setSenha] = useState(''), [senha2, setSenha2] = useState('');
+  const [erro, setErro] = useState(''), [ok, setOk] = useState(''), [ocupado, setOcupado] = useState(false);
+  useEffect(() => { F().fsMod.getDoc(docRef('config', 'dev')).then(s => setCfg(s.exists() ? s.data() : null)).catch(() => setCfg({})); }, []);
+  const emailConta = () => cfg?.email || EMAIL_DEV;
   const entrar = async (e) => {
-    e.preventDefault(); setErro('');
+    e.preventDefault(); setErro(''); setOk('');
+    if (cfg?.login && norm(login) !== norm(cfg.login)) return setErro('Login ou senha incorretos.');
     if (!senha) return setErro('Digite a senha.');
     setOcupado(true);
-    try {
-      const { authMod, auth } = F();
-      await authMod.setPersistence(auth, authMod.browserLocalPersistence);
-      await authMod.signInWithEmailAndPassword(auth, EMAIL_DEV, senha);
-    } catch (e2) { setErro(traduzErroAuth(e2)); setOcupado(false); }
+    try { const { authMod, auth } = F(); await authMod.setPersistence(auth, authMod.browserLocalPersistence); await authMod.signInWithEmailAndPassword(auth, emailConta(), senha); }
+    catch (e2) { setErro(traduzErroAuth(e2)); setOcupado(false); }
   };
-
+  const esqueci = async () => {
+    setErro(''); setOk('');
+    if (!cfg?.email) return setErro('Este acesso antigo não tem e-mail de recuperação. Veja a instrução abaixo para recriar.');
+    try { await F().authMod.sendPasswordResetEmail(F().auth, cfg.email); setOk('Enviamos um link para ' + cfg.email.replace(/(.{2}).+(@.+)/, '$1•••$2') + '. Abra o e-mail e crie a senha nova.'); }
+    catch (e2) { setErro(traduzErroAuth(e2)); }
+  };
   const criar = async (e) => {
     e.preventDefault(); setErro('');
+    if (norm(login).length < 3) return setErro('Escolha um login com pelo menos 3 letras.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) return setErro('Informe um e-mail válido (para recuperar a senha).');
     if (senha.length < 8) return setErro('Use uma senha com pelo menos 8 caracteres.');
     if (senha !== senha2) return setErro('As duas senhas estão diferentes.');
     setOcupado(true);
     try {
-      const { authMod, auth, fsMod } = F();
-      await authMod.setPersistence(auth, authMod.browserLocalPersistence);
-      const cred = await authMod.createUserWithEmailAndPassword(auth, EMAIL_DEV, senha);
-      await fsMod.setDoc(docRef('config', 'dev'), { uid: cred.user.uid, criadoEm: nowIso() });
+      window.__criandoDev = true; const { authMod, auth, fsMod } = F(); await authMod.setPersistence(auth, authMod.browserLocalPersistence);
+      const cred = await authMod.createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), senha);
+      await fsMod.setDoc(docRef('config', 'dev'), { uid: cred.user.uid, login: login.trim(), email: email.trim().toLowerCase(), criadoEm: nowIso() });
     } catch (e2) { setErro(traduzErroAuth(e2)); setOcupado(false); }
   };
-
   return html`
     <div class="modal-bg" onClick=${e => e.target === e.currentTarget && fechar()}>
-      <form class="modal" onSubmit=${existe === false ? criar : entrar}>
-        <h3>Desenvolvedor</h3>
+      <form class="modal" onSubmit=${cfg === null ? criar : entrar}>
+        <h3>🛠 Desenvolvedor</h3>
         ${erro && html`<div class="error-box">${erro}</div>`}
-        ${existe === null ? html`<div class="dim">Carregando…</div>`
-          : existe === false ? html`
-            <div class="dim">Primeiro acesso: crie a senha do painel do desenvolvedor. Só existe um acesso desse tipo.</div>
-            <${Senha} id="dev-s1" value=${senha} onInput=${e => setSenha(e.target.value)} placeholder="Nova senha (mínimo 8)" />
+        ${ok && html`<div class="warn-box">${ok}</div>`}
+        ${cfg === undefined ? html`<div class="dim">Carregando…</div>`
+          : cfg === null ? html`
+            <div class="dim">Primeiro acesso: crie o login e a senha do painel do desenvolvedor. O e-mail serve para recuperar a senha.</div>
+            <input class="inp" placeholder="Login (ex.: paulo)" value=${login} onInput=${e => setLogin(e.target.value)} autoComplete="username" />
+            <input class="inp" type="email" placeholder="Seu e-mail (recuperação)" value=${email} onInput=${e => setEmail(e.target.value)} />
+            <${Senha} id="dev-s1" value=${senha} onInput=${e => setSenha(e.target.value)} placeholder="Senha (mínimo 8)" />
             <${Senha} id="dev-s2" value=${senha2} onInput=${e => setSenha2(e.target.value)} placeholder="Repita a senha" />
             <button class="btn btn-primary" disabled=${ocupado}>${ocupado ? 'Criando…' : 'Criar acesso'}</button>`
           : html`
+            ${cfg.login && html`<input class="inp" placeholder="Login" value=${login} onInput=${e => setLogin(e.target.value)} autoComplete="username" />`}
             <${Senha} id="dev-s" value=${senha} onInput=${e => setSenha(e.target.value)} placeholder="Senha do desenvolvedor" />
-            <button class="btn btn-primary" disabled=${ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>`}
+            <button class="btn btn-primary" disabled=${ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>
+            <button type="button" class="btn btn-ghost btn-sm" onClick=${esqueci}>Esqueci a senha</button>
+            ${!cfg.email && html`<small class="dim">Acesso antigo (sem login). Para criar login e senha novos: no Firebase → Firestore, apague o documento config/dev; ao voltar aqui aparece "Primeiro acesso".</small>`}`}
         <button type="button" class="btn btn-ghost btn-sm" onClick=${fechar}>Cancelar</button>
       </form>
     </div>`;
@@ -6421,11 +6427,9 @@ function App() {
       if (!user) { setSessao(null); return; }
       try {
         // Acesso do desenvolvedor: confere se esta conta é a registrada em config/dev.
-        if (user.email === EMAIL_DEV) {
-          const d = await fsMod.getDoc(fsMod.doc(fb.db, 'config', 'dev')).catch(() => null);
-          if (d?.exists() && d.data().uid === user.uid) { setSessao({ uid: user.uid, tipo: 'dev', nome: 'Desenvolvedor' }); return; }
-          setSemAcesso('Esse acesso de desenvolvedor não é válido.'); setSessao(null); return;
-        }
+        { let d = null; for (let i = 0; i < (user.email === EMAIL_DEV || window.__criandoDev ? 6 : 1); i++) { d = await fsMod.getDoc(fsMod.doc(fb.db, 'config', 'dev')).catch(() => null); if (d?.exists() && d.data().uid === user.uid) break; if (i < 5) await new Promise(r => setTimeout(r, 700)); }
+          if (d?.exists() && d.data().uid === user.uid) { setSessao({ uid: user.uid, tipo: 'dev', nome: d.data().login || 'Desenvolvedor' }); return; }
+          if (user.email === EMAIL_DEV) { setSemAcesso('Esse acesso de desenvolvedor não é válido.'); setSessao(null); return; } }
         // Logo depois do cadastro, o índice pode levar um instante pra existir.
         let idx = null;
         for (let i = 0; i < 6 && !idx; i++) {
