@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['107', ['📋 Folha de compras padrão aparece sempre na aba 🛒 Compras da OS, mesmo sem itens.']],
   ['106', ['⚡ Quadro geral → "Agora em andamento": tudo que está sendo feito hoje e por quem ao mesmo tempo (marcenaria, serralheria, vidros, pintura, terceirizados). Veja por OS ou por quem.']],
   ['105', ['📅 Enviar ao cronograma: escolha 👷 Internos (equipe cadastrada) ou 🤝 Terceirizados (parceiros) e toque no nome.']],
   ['104', ['📅 Botões da OS (Enviar ao cronograma etc.) com o texto completo.', '📋 Folha de compras padrão na OS: item, quantidade, comprar ou estoque, com quem foi comprado, prazo de entrega e ✓ recebido (atrasados em vermelho). A impressão segue o mesmo modelo.']],
@@ -2727,7 +2728,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     mudar(i.id, i.recebido ? { recebido: false, st: i.comprado ? 'pedido' : 'orcar', recebidoEm: '' } : { recebido: true, comprado: true, st: 'recebido', recebidoEm: nowIso(), recebidoPor: sessao.nome }); };
   const hojeC = isoD(new Date());
   const folhaPadrao = () => html`<div class="fc-wrap"><table class="fc-tab"><thead><tr><th>Recebido</th><th>Item</th><th>Qtd</th><th>Comprar / estoque</th><th>Comprado com</th><th>Prazo de entrega</th><th></th></tr></thead>
-    <tbody>${[...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
+    <tbody>${!itens.length && html`<tr><td colspan="7" class="c dim" style=${{ padding: '18px' }}>Nenhum item ainda — use 📐 Levantar do detalhamento, 📥 Dinabox, 📑 Conferir com o contrato, ou adicione abaixo.</td></tr>`}${[...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
       <tr key=${'c' + c} class="fc-cat"><td colspan="7">${ICO_CAT[c] || '📦'} ${c} <small>${l.filter(i => i.recebido).length}/${l.length} recebidos</small></td></tr>
       ${l.map(i => { const est = i.origem === 'estoque'; const atr = !i.recebido && !est && i.previsao && i.previsao < hojeC; return html`<tr key=${i.id} class=${(i.recebido ? 'ok' : '') + (atr ? ' atraso' : '')}>
         <td class="c"><button class=${'dia-ck' + (i.recebido ? ' on' : '')} title=${est ? 'Separado do estoque' : 'Recebido'} onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button></td>
@@ -2790,7 +2791,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     }}>📑 Conferir com o contrato (achar o que falta na lista)</button>
     <small class="dim">O detalhamento do arquiteto já separa o que é <b>⚡ pré-pedido</b> (lâminas, Blum, itens sem pronta entrega). A folha do Dinabox traz o pedido grosso (chapas, fitas, ferragens).</small>
     ${itens.length > 0 && html`<div class="st-resumo">${ST_COMPRA.map(([v, t, c]) => { const n = itens.filter(i => stCompra(i) === v).length; return n ? html`<span key=${v} style=${{ background: c }}>${t}: ${n}</span>` : null; })}<span style=${{ background: '#1f2937' }}>Total: ${brl(itens.reduce((n, i) => n + numBR(i.valor), 0))}</span></div>`}
-    ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="vazio dim">Nenhum item ainda.</div>` : html`
+    ${doc === undefined ? html`<div class="dim">Carregando…</div>` : itens.length === 0 ? html`<div class="sheet-t" style=${{ fontSize: '15px' }}>📋 Folha de compras padrão</div>${folhaPadrao()}` : html`
       <div class="compras-prog"><i style=${{ width: (feitos / itens.length * 100) + '%' }}></i><span>${feitos}/${itens.length} comprados · ${itens.filter(i => i.recebido).length} recebidos · ${itens.filter(i => i.origem === 'estoque').length} do estoque</span></div>
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <div class="seg-mini"><button class=${modo === 'folha' ? 'on' : ''} onClick=${() => setModo('folha')}>📋 Folha padrão</button><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
