@@ -245,15 +245,22 @@ async function chamarIA(tarefa, dados = {}, imagens = []) {
   let espera = null;
   if (mostrar) PROG.set({ label: '⬆️ Enviando para a IA…', pct: base, erro: false, arquivo: PROG.st?.arquivo || (corpo.length > 1048576 ? (corpo.length / 1048576).toFixed(1) + ' MB' : Math.ceil(corpo.length / 1024) + ' KB') });
   try {
-    const resp = await new Promise((ok, falha) => {
-      const x = new XMLHttpRequest(); x.open('POST', '/api/ia'); x.setRequestHeader('content-type', 'application/json'); x.setRequestHeader('authorization', 'Bearer ' + token);
+    let resp;
+    for (let tent = 1; ; tent++) {
+    await CTRL.ponto();
+    resp = await new Promise((ok, falha) => {
+      const x = new XMLHttpRequest(); CTRL.xhr = x; x.onabort = () => falha(new Error('Cancelado por você.')); x.open('POST', '/api/ia'); x.setRequestHeader('content-type', 'application/json'); x.setRequestHeader('authorization', 'Bearer ' + token);
       if (mostrar) x.upload.onprogress = (e) => { if (e.lengthComputable) PROG.set({ pct: base + (e.loaded / e.total) * (70 - base) * 0.5 + 0, label: '⬆️ Enviando… ' + Math.round(e.loaded / e.total * 100) + '%' }); };
       if (mostrar) x.upload.onload = () => { PROG.set({ label: '🤖 A IA está lendo…', pct: Math.max(PROG.st?.pct || 0, 60) }); espera = setInterval(() => { const p = PROG.st?.pct || 60; PROG.set({ pct: p + (96 - p) * 0.06 }); }, 700); };
       x.onload = () => ok({ status: x.status, texto: x.responseText });
       x.onerror = () => falha(new Error('Sem conexão com o servidor. Confira a internet.'));
       x.send(corpo);
     });
-    clearInterval(espera);
+    clearInterval(espera); CTRL.xhr = null;
+    if (![502, 503, 504, 429, 529].includes(resp.status) || tent >= 4) break;
+    if (mostrar) PROG.set({ label: '🔁 Servidor ocupado — tentando de novo (' + (tent + 1) + ' de 4)…' });
+    for (let i = 0; i < tent * 8; i++) { await CTRL.ponto(); await new Promise(r => setTimeout(r, 500)); }
+    }
     let body = {}; try { body = JSON.parse(resp.texto); } catch {}
     if (resp.status < 200 || resp.status >= 300) throw new Error(body.erro || 'A IA não respondeu (erro ' + resp.status + ').');
     if (mostrar) PROG.fim(true);
@@ -380,6 +387,12 @@ async function imagemParaJpeg(file, max = 1600) {
 
 // Devolve { texto, imagens } de qualquer arquivo aceito.
 /* ---------- Barra de transferência (arquivos e IA) ---------- */
+const CTRL = { pausado: false, cancelado: false, xhr: null,
+  pausar() { this.pausado = !this.pausado; PROG.set({ pausado: this.pausado }); },
+  cancelar() { this.cancelado = true; this.pausado = false; try { this.xhr && this.xhr.abort(); } catch {} PROG.set({ label: '✖ Cancelando…', pausado: false }); },
+  reset() { this.pausado = false; this.cancelado = false; },
+  async ponto() { while (this.pausado && !this.cancelado) await new Promise(r => setTimeout(r, 300)); if (this.cancelado) throw new Error('Cancelado por você.'); },
+};
 const PROG = { st: null, t: null,
   set(p) { clearTimeout(this.t); this.st = { ...(this.st || {}), ...p }; window.dispatchEvent(new Event('prog')); },
   fim(ok = true) { if (!this.st) return; this.set({ pct: 100, label: ok ? '✓ Pronto' : '⚠ Não deu certo', erro: !ok }); this.t = setTimeout(() => { this.st = null; window.dispatchEvent(new Event('prog')); }, ok ? 900 : 2500); },
@@ -393,10 +406,14 @@ function BarraTransferencia() {
     <div class=${'transf-card' + (st.erro ? ' erro' : pct >= 100 ? ' ok' : '')}>
       <div class="row" style=${{ justifyContent: 'space-between', gap: '10px', flexWrap: 'nowrap' }}><b>${st.label || 'Carregando…'}</b><span>${pct}%</span></div>
       ${st.arquivo && html`<small>${st.arquivo}</small>`}
-      <div class="transf-barra"><i style=${{ width: pct + '%' }}></i></div>
+      <div class=${'transf-barra' + (st.pausado ? ' pausada' : '')}><i style=${{ width: pct + '%' }}></i></div>
+      ${pct < 100 && html`<div class="row" style=${{ gap: '8px', justifyContent: 'flex-end' }}>
+        <button class="transf-btn" onClick=${() => CTRL.pausar()}>${st.pausado ? '▶ Continuar' : '⏸ Pausar'}</button>
+        <button class="transf-btn" onClick=${() => CTRL.cancelar()}>✖ Cancelar</button></div>`}
     </div>`;
 }
 async function extrairArquivo(file) {
+  await CTRL.ponto();
   PROG.set({ label: '📂 Lendo o arquivo…', arquivo: file.name + ' · ' + (file.size > 1048576 ? (file.size / 1048576).toFixed(1) + ' MB' : Math.ceil(file.size / 1024) + ' KB'), pct: 3, erro: false });
   try { const r = await extrairArquivo0(file); PROG.set({ pct: 40, label: '✓ Arquivo lido' }); return r; } catch (e) { PROG.fim(false); throw e; }
 }
@@ -406,6 +423,7 @@ async function extrairArquivo0(file) {
     const pdf = await pdfjsLib.getDocument({ data: await lerArrayBuffer(file) }).promise;
     let texto = '';
     for (let p = 1; p <= pdf.numPages; p++) {
+      await CTRL.ponto();
       PROG.set({ label: '📄 Lendo página ' + p + ' de ' + pdf.numPages, pct: 5 + p / pdf.numPages * 30 });
       const page = await pdf.getPage(p);
       const tc = await page.getTextContent();
@@ -4902,9 +4920,12 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
     setFila(v => [...lista, ...v]);
     const upd = (key, patch) => setFila(v => v.map(x => x.key === key ? { ...x, ...patch } : x));
     // Um de cada vez, pra não sobrecarregar a IA.
+    CTRL.reset();
     for (const item of lista) {
+      if (CTRL.cancelado) { upd(item.key, { status: 'Cancelado por você.', erro: true, rodando: false, refazer: true }); continue; }
       try {
-        upd(item.key, { status: 'Lendo arquivo…' });
+        await CTRL.ponto();
+        upd(item.key, { status: 'Lendo arquivo…', erro: false });
         const { texto, imagens } = await extrairArquivo(item.file);
         upd(item.key, { status: 'Convertendo para o layout novo…' });
         const res = await chamarIA('importar_os', { texto, temImagens: imagens.length > 0, catalogo: resumoCatalogo(catalogo) }, imagens);
@@ -4954,10 +4975,12 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
         });
         upd(item.key, { status: `Importada como OS nº ${numOS(numero)}`, ok: true, osId: id, rodando: false });
       } catch (e) {
-        upd(item.key, { status: e.message, erro: true, dupId: e.duplicada?.id, rodando: false });
+        upd(item.key, { status: e.message, erro: true, dupId: e.duplicada?.id, rodando: false, refazer: !e.duplicada });
       }
     }
+    CTRL.reset();
   };
+  const refazer = (f) => { setFila(v => v.filter(x => x.key !== f.key)); processar([f.file]); };
 
   return html`
     <div class="fade-up">
@@ -4971,6 +4994,9 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
         <div style=${{ fontSize: '34px' }}>🗂️</div>
         <div style=${{ fontWeight: 700, fontSize: '17px' }}>${ocupado ? 'Importando… aguarde terminar' : 'Arraste as OSs antigas aqui ou clique para escolher'}</div>
         <div class="dim">PDF, Word (.docx), Excel ou foto da folha. Pode mandar várias de uma vez.</div>
+        ${ocupado && html`<div class="row" style=${{ gap: '8px', justifyContent: 'center', marginTop: '10px' }} onClick=${e => e.stopPropagation()}>
+          <button class="btn btn-sm" onClick=${() => { CTRL.pausar(); setFila(v => [...v]); }}>${CTRL.pausado ? '▶ Continuar' : '⏸ Pausar'}</button>
+          <button class="btn btn-sm btn-danger" onClick=${() => CTRL.cancelar()}>✖ Cancelar tudo</button></div>`}
         <input ref=${inputRef} type="file" multiple hidden accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,image/*" onChange=${e => { processar(e.target.files); e.target.value = ''; }} />
       </div>
       <div class="list" style=${{ marginTop: '14px' }}>
@@ -4979,6 +5005,7 @@ function TelaImportar({ sessao, catalogo, toast, abrirOS }) {
             <span style=${{ fontSize: '20px' }}>${f.ok ? '✅' : f.erro ? '⚠️' : '⏳'}</span>
             <div class="grow"><div class="title">${f.nome}</div><div class=${f.erro ? '' : 'dim'} style=${f.erro ? { color: 'var(--danger)', fontSize: '13px' } : null}>${f.status}</div></div>
             ${f.dupId && html`<button class="btn btn-sm" onClick=${e => { e.stopPropagation(); abrirOS(f.dupId); }}>Abrir a existente</button>`}
+            ${f.refazer && !ocupado && html`<button class="btn btn-sm" onClick=${e => { e.stopPropagation(); refazer(f); }}>🔁 Tentar de novo</button>`}
             ${f.osId && html`<span class="chip chip-accent">Abrir</span>`}
           </div>`)}
       </div>
