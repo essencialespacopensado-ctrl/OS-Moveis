@@ -3534,6 +3534,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     return () => u.forEach(f => f && f());
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
+  useEffect(() => { window.__ultimaOS = osId; }, [osId]);
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'temas'; });
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
@@ -4639,8 +4640,12 @@ function descAcao(a) {
 async function executarAcao(sessao, a) {
   const { getDocs, updateDoc, addDoc, writeBatch } = F().fsMod; const E = sessao.empresaId;
   const oss = (await getDocs(col('empresas', E, 'os'))).docs.map(d => ({ id: d.id, ...d.data() }));
-  const o = a.os ? oss.find(x => numOS(x) === String(a.os).trim() || x.numeroAntigo === a.os) : null;
-  if (a.os && !o) throw new Error('Não achei a OS ' + a.os + '.');
+  const achar = (q) => { q = String(q || '').trim(); if (!q) return null; const n = norm(q), d = q.replace(/\D/g, '');
+    return oss.find(x => numOS(x) === q || x.numeroAntigo === q) || (d && oss.find(x => numOS(x).endsWith('.' + d.slice(-3).padStart(3, '0')))) || oss.find(x => norm(x.cliente?.nome + ' ' + (x.ambientes || []).map(a => a.nome).join(' ') + ' ' + (x.ambienteResumo || '')).includes(n)); };
+  const o = a.os ? achar(a.os) : (window.__ultimaOS ? oss.find(x => x.id === window.__ultimaOS) : null);
+  if (o) window.__ultimaOS = o.id;
+  if (a.pessoa) { try { const ag = await F().fsMod.getDoc(docRef('empresas', E, 'agenda', iso(segundaDe(new Date())))); const nomes = Object.values(ag.data()?.grades || {}).flat().map(r => r.nome).filter(Boolean); const np = norm(a.pessoa); a.pessoa = nomes.find(x => norm(x) === np) || nomes.find(x => norm(x).includes(np) || np.includes(norm(x).split(/[\s+]/)[0])) || a.pessoa; } catch {} }
+  if (a.tipo !== 'abrir_aba' && !o) throw new Error('Não achei a OS ' + (a.os || '') + '.');
   const refO = o && docRef('empresas', E, 'os', o.id);
   const tars = (await getDocs(col('empresas', E, 'tarefas'))).docs.map(d => ({ id: d.id, ...d.data() }));
   const tarDaOS = () => tars.filter(t => t.osId === o.id && t.status !== 'concluida').sort((x, y) => x.inicio.localeCompare(y.inicio))[0];
@@ -4710,6 +4715,7 @@ async function montarContexto(sessao, osAbertaId) {
       const amb = (o.ambientes || []).map(a => `${a.nome} [${(a.moveis || []).map(m => m.nome).join(', ')}]`).join('; ');
       linhas.push(`- OS ${numOS(o)} | ${o.cliente?.nome || '?'} | ${st} | prazo: ${o.prazoEntrega || '—'} | ${amb || 'sem ambientes'}`);
     });
+    const foco = osAbertaId || window.__ultimaOS; if (foco) { const fo = os.docs.find(d => d.id === foco); if (fo) linhas.push('\nOS EM FOCO (a última aberta/mencionada): ' + numOS(fo.data()) + ' ' + (fo.data().cliente?.nome || '')); }
     linhas.push('\nETAPAS DA OS (valor = nome): ' + STATUS_OS.map(x => x.v + ' = ' + x.t.replace(/^\d+\. /, '')).join('; '));
     linhas.push('CATEGORIAS DO CRONOGRAMA (chave = nome): ' + GRADES.map(g => g[0] + ' = ' + g[1]).join('; '));
     try {
@@ -4804,17 +4810,17 @@ function Assistente({ sessao, osAberta }) {
     try {
       const contexto = await montarContexto(sessao, osAberta);
       const r = await chamarIA('assistente', { contexto, historico: hist.map(m => ({ role: m.role, content: m.content })) });
-      const acoes = (r?.acoes || []).map(a => ({ ...a, _st: 'pendente' }));
+      const navs = (r?.acoes || []).filter(a => NAV_ACOES.includes(a.tipo));
+      for (const a of navs) { try { await executarAcao(sessao, a); } catch (e) { await falar(e.message); } }
+      const acoes = (r?.acoes || []).filter(a => !NAV_ACOES.includes(a.tipo)).map(a => ({ ...a, _st: 'pendente' }));
       const txt = String(r?.texto || '').replace(/\*\*/g, '');
       const idx = hist.length;
       setMsgs(h => [...h, { role: 'assistant', content: txt || (acoes.length ? 'Preparei estas mudanças.' : ''), acoes }]);
       if (acoes.length) {
         pendRef.current = { i: idx, acoes };
-        const t0 = acoes[0].tipo;
-        const perg = ['abrir_aba', 'abrir_os', 'ver_cronograma'].includes(t0) ? 'Abrir?' : t0 === 'imprimir_os' ? 'Imprimir?' : t0 === 'cronograma' ? 'Enviar agora?' : t0 === 'excluir_tarefa' ? 'Excluir agora?' : t0 === 'concluir_tarefa' ? 'Concluir agora?' : 'Aplicar agora?';
-        await falar(perg); setFase('confirmando');
+        await falar('Salvar?'); setFase('confirmando');
       }
-      else await falar(txt || 'Não entendi, pode repetir?');
+      else if (!navs.length) await falar(txt || 'Não entendi, pode repetir?'); else setFase('ouvindo');
     } catch (e) { await falar('Tive um problema: ' + e.message); }
   };
   const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(true); setFase('ouvindo'); falaCh.iniciar(); };
