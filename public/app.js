@@ -115,12 +115,38 @@ const STATUS_OS = [
   { v: 'montagem', t: '5. Montagem', c: 'chip chip-roxo' },
   { v: 'concluida', t: '6. Concluída', c: 'chip chip-ok' },
 ];
-const PAPEIS = [
-  { v: 'admin', t: 'Administrador' },
-  { v: 'projetista', t: 'Projetista' },
-  { v: 'vendedor', t: 'Vendedor' },
-  { v: 'producao', t: 'Produção' },
+/* ---------- Grupos de acesso (quem vê o quê) ---------- */
+const TELAS_ACESSO = [
+  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)']]],
+  ['Produção', [['os', 'Ordens de Serviço'], ['cronograma', 'Cronograma'], ['pedidos', 'Peças extras'], ['catalogo', 'Catálogo'], ['excluir', 'Excluir OSs']]],
+  ['Compras', [['compras', 'Compras, notas e parceiros']]],
+  ['Equipe', [['equipe', 'Equipe e acessos']]],
+  ['Financeiro', [['financeiro', 'Resultado por OS'], ['contas', 'Contas & custos operacionais']]],
+  ['Sistema', [['config', 'Configurações']]],
 ];
+const TODAS_TELAS = TELAS_ACESSO.flatMap(g => g[1].map(t => t[0]));
+const GRUPOS_PADRAO = [
+  { v: 'admin', t: 'Administrador', abas: TODAS_TELAS, fixo: true },
+  { v: 'gerente', t: 'Gerente', abas: TODAS_TELAS.filter(x => !['equipe', 'config'].includes(x)) },
+  { v: 'financeiro', t: 'Financeiro', abas: ['inicio', 'quadro', 'contratos', 'os', 'compras', 'financeiro', 'contas'] },
+  { v: 'compras', t: 'Compras', abas: ['inicio', 'os', 'pedidos', 'catalogo', 'compras'] },
+  { v: 'projetista', t: 'Projetista', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'os', 'cronograma', 'pedidos', 'catalogo'] },
+  { v: 'vendedor', t: 'Vendedor', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'os', 'catalogo'] },
+  { v: 'producao', t: 'Produção', abas: ['inicio', 'os', 'cronograma', 'pedidos', 'catalogo'] },
+  { v: 'montador', t: 'Montador', abas: ['inicio', 'os', 'cronograma', 'pedidos'] },
+];
+let PAPEIS = GRUPOS_PADRAO;
+function aplicarGrupos(lista) {
+  const l = Array.isArray(lista) && lista.length ? lista : GRUPOS_PADRAO;
+  PAPEIS = [GRUPOS_PADRAO[0], ...l.filter(g => g.v !== 'admin')];
+}
+function abasDoUsuario(sessao) {
+  if (sessao.papel === 'admin') return TODAS_TELAS;
+  if (Array.isArray(sessao.abasProprias)) return sessao.abasProprias;
+  const g = PAPEIS.find(p => p.v === sessao.papel);
+  return g ? g.abas : ['inicio', 'os'];
+}
+const pode = (sessao, aba) => abasDoUsuario(sessao).includes(aba);
 
 const novoMovel = (nome = '') => ({
   id: rand(8), nome, quantidade: 1, largura: '', altura: '', profundidade: '',
@@ -5082,6 +5108,59 @@ function TelaCatalogo({ sessao, catalogo, toast }) {
     </div>`;
 }
 
+/* ---------- Grupos e permissões ---------- */
+function EditorAcessos({ sessao, usuarios, toast }) {
+  const [grupos, setGrupos] = useState(() => PAPEIS.map(g => ({ ...g, abas: [...g.abas] })));
+  const [sel, setSel] = useState(grupos[1]?.v || 'admin');
+  const [sujo, setSujo] = useState(false);
+  const [pessoa, setPessoa] = useState(null);
+  const g = grupos.find(x => x.v === sel) || grupos[0];
+  const alt = (fn) => { setGrupos(v => v.map(x => x.v === sel ? fn({ ...x, abas: [...x.abas] }) : x)); setSujo(true); };
+  const tog = (t) => alt(x => ({ ...x, abas: x.abas.includes(t) ? x.abas.filter(a => a !== t) : [...x.abas, t] }));
+  const salvar = async () => {
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { gruposAcesso: grupos.filter(x => x.v !== 'admin').map(({ v, t, abas }) => ({ v, t, abas })) }); setSujo(false); toast('Acessos salvos.', 'ok'); }
+    catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+  };
+  const novo = async () => { const t = await pedirTexto('Novo grupo', 'Ex: Acabamento, Entregas…'); if (!t) return; const v = norm(t).replace(/[^a-z0-9]+/g, '-') + '-' + rand(3); setGrupos(x => [...x, { v, t: t.trim(), abas: ['inicio'] }]); setSel(v); setSujo(true); };
+  const renomear = async () => { const t = await pedirTexto('Nome do grupo', g.t); if (t) alt(x => ({ ...x, t: t.trim() })); };
+  const apagar = () => { if (usuarios.some(u => u.papel === g.v)) return toast('Tem gente nesse grupo. Mude as pessoas de grupo antes.', 'erro'); setGrupos(v => v.filter(x => x.v !== g.v)); setSel('admin'); setSujo(true); };
+  const mudarGrupo = async (u, papel) => {
+    try { await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'usuarios', u.uid), { papel }, { merge: true }); await F().fsMod.setDoc(docRef('usuarios_index', u.uid), { papel }, { merge: true }); toast(u.nome + ' agora é ' + (PAPEIS.find(p => p.v === papel)?.t || papel) + '.', 'ok'); }
+    catch (e) { toast('Não mudou: ' + e.message, 'erro'); }
+  };
+  const salvarPessoa = async (u, abas) => {
+    try { await F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'usuarios', u.uid), { abas: abas === null ? F().fsMod.deleteField() : abas }, { merge: true }); toast(abas === null ? 'Voltou a seguir o grupo.' : 'Acesso de ' + u.nome + ' salvo.', 'ok'); setPessoa(null); }
+    catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+  };
+  const Grade = ({ lista, onTog, trava }) => html`<div class="acs-grade">${TELAS_ACESSO.map(([sec, telas]) => html`<div key=${sec} class="acs-sec"><div class="acs-tit">${sec}</div>
+    ${telas.map(([v, t]) => html`<label key=${v} class=${'acs-chk' + (lista.includes(v) ? ' on' : '')}><input type="checkbox" disabled=${trava} checked=${lista.includes(v)} onChange=${() => onTog(v)} /> ${t}</label>`)}</div>`)}</div>`;
+  return html`<div class="card stack" style=${{ marginBottom: '14px' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="section-label">🔐 Grupos e permissões — quem vê o quê</div>
+      <button class=${'btn btn-sm ' + (sujo ? 'btn-primary' : '')} disabled=${!sujo} onClick=${salvar}>💾 Salvar acessos</button></div>
+    <div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>
+      ${grupos.map(x => html`<button key=${x.v} class=${'grupo-b' + (x.v === sel ? ' on' : '')} onClick=${() => setSel(x.v)}>${x.t} <small>(${usuarios.filter(u => u.papel === x.v).length})</small></button>`)}
+      <button class="grupo-b grupo-edit" onClick=${novo}>＋ Novo grupo</button>
+    </div>
+    ${g.v === 'admin' ? html`<div class="dim">O Administrador vê tudo, sempre.</div>` : html`<div class="row" style=${{ gap: '6px' }}>
+      <button class="btn btn-sm" onClick=${() => alt(x => ({ ...x, abas: [...TODAS_TELAS] }))}>Marcar tudo</button>
+      <button class="btn btn-sm" onClick=${() => alt(x => ({ ...x, abas: ['inicio'] }))}>Desmarcar tudo</button>
+      <button class="btn btn-sm btn-ghost" onClick=${renomear}>✏️ Renomear</button>
+      <button class="btn btn-sm btn-ghost" onClick=${apagar}>🗑 Apagar grupo</button></div>`}
+    <${Grade} lista=${g.abas} onTog=${tog} trava=${g.v === 'admin'} />
+    <div class="section-label" style=${{ marginTop: '6px' }}>Pessoas</div>
+    <div class="list">${usuarios.map(u => html`<div key=${u.uid} class="list-item" style=${{ cursor: 'default', flexWrap: 'wrap' }}>
+      <div class="grow"><div class="title">${u.nome}</div><div class="dim">${Array.isArray(u.abas) ? '⚙ acesso personalizado' : 'segue o grupo'}</div></div>
+      <select class="inp" style=${{ width: 'auto' }} disabled=${u.uid === sessao.uid} value=${u.papel} onChange=${e => mudarGrupo(u, e.target.value)}>${PAPEIS.map(p => html`<option key=${p.v} value=${p.v}>${p.t}</option>`)}</select>
+      ${u.papel !== 'admin' && html`<button class="btn btn-sm" onClick=${() => setPessoa({ u, abas: Array.isArray(u.abas) ? [...u.abas] : [...(PAPEIS.find(p => p.v === u.papel)?.abas || [])] })}>⚙ Personalizar</button>`}
+      ${pessoa?.u.uid === u.uid && html`<div style=${{ flexBasis: '100%' }} class="stack">
+        <${Grade} lista=${pessoa.abas} onTog=${v => setPessoa(x => ({ ...x, abas: x.abas.includes(v) ? x.abas.filter(a => a !== v) : [...x.abas, v] }))} />
+        <div class="row" style=${{ gap: '6px' }}><button class="btn btn-sm btn-primary" onClick=${() => salvarPessoa(u, pessoa.abas)}>💾 Salvar só pra ${u.nome.split(' ')[0]}</button>
+          ${Array.isArray(u.abas) && html`<button class="btn btn-sm" onClick=${() => salvarPessoa(u, null)}>↩ Voltar a seguir o grupo</button>`}
+          <button class="btn btn-sm btn-ghost" onClick=${() => setPessoa(null)}>Fechar</button></div></div>`}
+    </div>`)}</div>
+  </div>`;
+}
+
 /* =========================================================
    Equipe (administrador)
    ========================================================= */
@@ -5131,6 +5210,7 @@ function TelaEquipe({ sessao, toast }) {
           ${window.__LOGO && html`<button class="btn btn-ghost" onClick=${async () => { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { logo: '' }); toast('Logo removida.'); }}>Remover</button>`}
         </div>
       </div>
+      ${sessao.papel === 'admin' && html`<${EditorAcessos} key=${PAPEIS.map(p => p.v + p.abas.join()).join()} sessao=${sessao} usuarios=${usuarios} toast=${toast} />`}
       <form class="card stack" onSubmit=${adicionar} style=${{ marginBottom: '14px' }}>
         <div class="section-label">Novo acesso</div>
         ${erro && html`<div class="error-box">${erro}</div>`}
@@ -5783,7 +5863,10 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); aplicarGrupos(dd.gruposAcesso); setCfgV(v => v + 1); }, () => {}), []);
+  const [minhasAbas, setMinhasAbas] = useState(undefined);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
+  sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
   const [aba, setAba] = useState('inicio');
   const [podeInstalar, setPodeInstalar] = useState(!!window.__instalar);
   useEffect(() => { const f = () => setPodeInstalar(!!window.__instalar); window.addEventListener('pode-instalar', f); return () => window.removeEventListener('pode-instalar', f); }, []);
@@ -5814,13 +5897,15 @@ function Principal({ sessao, toast }) {
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
     { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
     { v: 'catalogo', t: 'Catálogo', i: '🎨' },
-    ...(sessao.papel === 'admin' ? [{ v: 'equipe', t: 'Equipe', i: '👥' }] : []),
+    { v: 'equipe', t: 'Equipe', i: '👥' },
     { v: 'cronograma', t: 'Cronograma', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
     { v: 'compras', t: 'Compras', i: '🛒' },
-    ...(sessao.papel === 'admin' ? [{ v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' }] : []),
-    ...(sessao.papel === 'admin' ? [{ v: 'config', t: 'Configurações', i: '⚙' }] : []),
-  ];
+    { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
+    { v: 'config', t: 'Configurações', i: '⚙' },
+  ].filter(a => pode(sessao, a.v));
+  const vis = (v) => abas.some(a => a.v === v);
+  useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -5856,22 +5941,22 @@ function Principal({ sessao, toast }) {
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
-        ${aba === 'inicio' && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
-        ${aba === 'projetos' && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-        ${aba === 'os' && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
+        ${aba === 'inicio' && vis('inicio') && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
+        ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
         ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} toast=${toast} />`}
-        ${aba === 'importar' && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-        ${aba === 'catalogo' && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
-        ${aba === 'equipe' && sessao.papel === 'admin' && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'contratos' && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
-        ${aba === 'compras' && html`<${TelaComprasGeral} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'financeiro' && sessao.papel === 'admin' && html`<${TelaFinanceiro} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'contas' && sessao.papel === 'admin' && html`<${TelaContas} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'pedidos' && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
-        ${aba === 'quadro' && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
-        ${aba === 'cronograma' && html`<${TelaCronograma} key=${cronoK} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
-        ${aba === 'config' && sessao.papel === 'admin' && html`<${TelaConfig} key=${STATUS_OS.map(x => x.v + x.t).join()} sessao=${sessao} toast=${toast} />`}
-        ${aba === 'excluir' && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'importar' && vis('importar') && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'catalogo' && vis('catalogo') && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
+        ${aba === 'equipe' && vis('equipe') && html`<${TelaEquipe} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'contratos' && vis('contratos') && html`<${TelaContratos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'compras' && vis('compras') && html`<${TelaComprasGeral} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'financeiro' && vis('financeiro') && html`<${TelaFinanceiro} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'contas' && vis('contas') && html`<${TelaContas} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'pedidos' && vis('pedidos') && html`<${TelaPedidos} sessao=${sessao} toast=${toast} abrirOS=${abrirOS} />`}
+        ${aba === 'quadro' && vis('quadro') && html`<${QuadroGeral} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} catalogo=${catalogo} />`}
+        ${aba === 'cronograma' && vis('cronograma') && html`<${TelaCronograma} key=${cronoK} sessao=${sessao} abrirOS=${abrirOS} toast=${toast} />`}
+        ${aba === 'config' && vis('config') && html`<${TelaConfig} key=${STATUS_OS.map(x => x.v + x.t).join()} sessao=${sessao} toast=${toast} />`}
+        ${aba === 'excluir' && vis('excluir') && html`<${TelaExcluir} sessao=${sessao} toast=${toast} />`}
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />

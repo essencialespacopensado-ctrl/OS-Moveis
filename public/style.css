@@ -1222,3 +1222,9 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .transf-btn{background:#ffffff22;color:#fff;border:0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;transition:transform .15s,background .15s}
 .transf-btn:hover{background:#ffffff38;transform:translateY(-1px)}
 .transf-barra.pausada i{animation:none;background:#f59e0b}
+/* v100 — acessos */
+.acs-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.acs-sec{border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.acs-tit{font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
+.acs-chk{display:flex;gap:7px;align-items:center;padding:4px 6px;border-radius:8px;cursor:pointer;font-size:14px;transition:background .15s}
+.acs-chk.on{background:color-mix(in srgb,var(--accent) 16%,transparent)}
