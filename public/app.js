@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['106', ['⚡ Quadro geral → "Agora em andamento": tudo que está sendo feito hoje e por quem ao mesmo tempo (marcenaria, serralheria, vidros, pintura, terceirizados). Veja por OS ou por quem.']],
   ['105', ['📅 Enviar ao cronograma: escolha 👷 Internos (equipe cadastrada) ou 🤝 Terceirizados (parceiros) e toque no nome.']],
   ['104', ['📅 Botões da OS (Enviar ao cronograma etc.) com o texto completo.', '📋 Folha de compras padrão na OS: item, quantidade, comprar ou estoque, com quem foi comprado, prazo de entrega e ✓ recebido (atrasados em vermelho). A impressão segue o mesmo modelo.']],
   ['103', ['📦 Nova aba Amostras (Geral): quem levou nossas amostras, o que voltou e o que o cliente deixou aqui — com atraso destacado.', '🧾 Notas & financeiro na OS: só lançar a nota, forma de pagamento e em quantas vezes — já vai para Contas a pagar.', '📦 Amostras também dentro de cada OS.', '📅 Janela "Enviar para cronograma" mais compacta.', '🆕 Esta mensagem de novidades aparece a cada atualização.']],
@@ -2901,6 +2902,35 @@ function parceirosDaOS(o) {
 }
 const infoSt = (st) => ST_PARC.find(x => x[0] === st) || ST_PARC[0];
 
+/* ---------- Agora em andamento: tudo que está sendo feito e por quem ---------- */
+function AgoraAndamento({ sessao, lista, abrirOS }) {
+  const [tar, setTar] = useState([]), [peds, setPeds] = useState([]), [ver, setVer] = useState('os'), [aberto, setAberto] = useState(true);
+  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setTar(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'pedidos'), s => setPeds(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); return () => { a(); b(); }; }, []);
+  const hoje = isoD(new Date());
+  const ativ = [];
+  tar.filter(t => t.status !== 'concluida' && t.inicio <= hoje && t.fim >= hoje).forEach(t => ativ.push({ osId: t.osId, quem: t.pessoa, oque: t.texto || (GRADES.find(g => g[0] === t.grade) || [])[1] || 'Tarefa', cor: corGrade(t.grade), ic: '👷', ate: t.fim, interno: true }));
+  (lista || []).filter(o => o.status !== 'concluida').forEach(o => {
+    parceirosDaOS(o).filter(p => p.st === 'pedido').forEach(p => ativ.push({ osId: o.id, quem: p.parceiro || p.fornecedor || p.nome || p.t, oque: p.t, cor: '#7c3aed', ic: p.ic, ate: p.previsao || p.prazo || '' }));
+    const et = o.execucao?.etapas || {}; ETAPAS_FAB.forEach(([k, t]) => { if (et[k]?.status === 'andamento' && !ativ.some(a => a.osId === o.id && norm(a.oque).includes(norm(t).split(' ')[0]))) ativ.push({ osId: o.id, quem: et[k].onde === 'terceirizada' ? 'Terceirizado' : 'Fábrica', oque: t, cor: '#d97706', ic: '🏭', ate: '' }); });
+  });
+  peds.filter(p => p.tipo === 'terceiro' && p.st === 'pedido').forEach(p => ativ.push({ osId: p.osId, quem: p.parceiro || 'Terceirizado', oque: resumoPed(p) || 'Peça terceirizada', cor: '#0d9488', ic: '🤝', ate: p.prazo || '' }));
+  const osDe = (id) => (lista || []).find(o => o.id === id);
+  const porOS = [...new Set(ativ.map(a => a.osId).filter(Boolean))].map(id => [osDe(id), ativ.filter(a => a.osId === id)]).filter(([o]) => o);
+  const porQuem = [...new Set(ativ.map(a => a.quem))].sort().map(q => [q, ativ.filter(a => a.quem === q)]);
+  const nomeOS = (o) => numOS(o) + ' ' + (o.cliente?.nome || '').split(/\s[-–]\s/)[0];
+  const Chip = (a, mostrarOS) => { const o = osDe(a.osId); return html`<div class="ag-chip" style=${{ '--c': a.cor }}><span>${a.ic}</span><span class="grow"><b>${mostrarOS ? (o ? nomeOS(o) : '') : a.quem}</b><small>${a.oque}${a.ate ? ' · até ' + dm(a.ate) : ''}${a.ate && a.ate < hoje ? ' ⚠' : ''}</small></span></div>`; };
+  return html`<div class="card ag-box">
+    <div class="row" style=${{ justifyContent: 'space-between', gap: '8px' }}>
+      <b style=${{ fontSize: '16px', cursor: 'pointer' }} onClick=${() => setAberto(!aberto)}>⚡ Agora em andamento <span class="ag-n">${ativ.length}</span> ${aberto ? '▾' : '▸'}</b>
+      ${aberto && html`<div class="seg-mini"><button class=${ver === 'os' ? 'on' : ''} onClick=${() => setVer('os')}>Por OS</button><button class=${ver === 'quem' ? 'on' : ''} onClick=${() => setVer('quem')}>Por quem</button></div>`}</div>
+    ${aberto && (!ativ.length ? html`<div class="dim">Nada em andamento hoje.</div>` : html`<div class="ag-grade">
+      ${ver === 'os' ? porOS.map(([o, l]) => html`<div key=${o.id} class="ag-col" style=${{ '--cc': corOS(o) }}><div class="ag-tit" onClick=${() => abrirOS(o.id)}>${nomeOS(o)} <small>${l.length} frente${l.length > 1 ? 's' : ''}</small></div>${l.map(a => Chip(a, false))}</div>`)
+        : porQuem.map(([q, l]) => html`<div key=${q} class="ag-col"><div class="ag-tit">${l[0].ic} ${q}</div>${l.map(a => Chip(a, true))}</div>`)}
+    </div>`)}
+  </div>`;
+}
+
 function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   const [lista, setLista] = useState(null);
   const [filtro, setFiltro] = useState('todas');
@@ -2973,6 +3003,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   return html`
     <div class="fade-up stack qg">
       <div><h2>Quadro geral</h2><div class="dim">Toque no cliente para ver o andamento de cada ambiente, parceiros e o diário de obra.</div></div>
+      <${AgoraAndamento} sessao=${sessao} lista=${lista} abrirOS=${abrirOS} />
       <div class="qg-filtros">
         ${[['todas', 'Todas', ativas.length], ['parceiros', 'Pendências de parceiro', cont.parceiros], ['aprovacao', 'Aguard. aprovação', cont.aprovacao], ['atrasadas', 'Atrasadas', cont.atrasadas]].map(([v, t, n]) => html`
           <button key=${v} class=${'qg-f' + (filtro === v ? ' on' : '') + (v === 'atrasadas' && n ? ' perigo' : '')} onClick=${() => setFiltro(v)}>${t} <b>${n}</b></button>`)}
