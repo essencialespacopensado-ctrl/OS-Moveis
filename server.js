@@ -365,10 +365,13 @@ ${d.temImagens ? 'As imagens são o detalhamento; leia tudo, inclusive legendas 
 
     case 'nota_fiscal':
       return `Leia esta NOTA FISCAL (DANFE/NF-e ou cupom) de compra de materiais de marcenaria.
-Extraia fornecedor (razão social ou nome fantasia), CNPJ, número da nota, data de emissão e TODOS os itens com quantidade, unidade, valor unitário e valor total do item, e o valor total da nota.
+Extraia do EMITENTE: nome fantasia (ou razão social), razão social, CNPJ, cidade, UF e endereço (é a unidade/filial que vendeu).
+Extraia número da nota, data de emissão e TODOS os itens com código, quantidade, unidade, valor unitário e valor total do item, e o valor total da nota.
+Classifique cada item em UMA destas categorias: ${(Array.isArray(d.categorias) && d.categorias.length ? d.categorias : ['Chapas', 'Lâminas', 'Fitas de borda', 'Ferragens', 'Puxadores', 'Perfis', 'Iluminação', 'Vidros', 'Pedras', 'Tecidos', 'Pintura', 'Acessórios', 'Químicos', 'Outros']).join(', ')}.
+${Array.isArray(d.exemplos) && d.exemplos.length ? 'Use estes EXEMPLOS já classificados pela empresa (siga o mesmo padrão):\n' + d.exemplos.slice(0, 120).map(e => '- ' + e.d + ' => ' + e.c).join('\n') : ''}
 Números com ponto como decimal (ex.: 1234.56). Não invente.
 Responda SOMENTE com JSON:
-{"fornecedor":"","cnpj":"","numero":"","data":"AAAA-MM-DD","total":0,"itens":[{"descricao":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
+{"fornecedor":"","razao":"","cnpj":"","cidade":"","uf":"","endereco":"","numero":"","data":"AAAA-MM-DD","total":0,"itens":[{"codigo":"","descricao":"","categoria":"","qtd":0,"unidade":"","valorUnit":0,"valorTotal":0}]}
 
 TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
