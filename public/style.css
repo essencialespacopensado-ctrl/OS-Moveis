@@ -1115,3 +1115,11 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .chamada.confirmando .ch-orb b{background:#f59e0b}
 .ch-st{font-weight:800}
 .ch-ouvido{font-size:13px;opacity:.9;text-align:center;font-style:italic;max-width:100%}
+
+/* v81 — chamada minimizada no cantinho */
+.ch-mini{position:fixed;right:18px;bottom:84px;z-index:390;display:flex;align-items:center;gap:6px;max-width:min(320px,calc(100vw - 36px));background:#312e81;color:#fff;border:none;border-radius:999px;padding:6px 8px 6px 6px;box-shadow:0 6px 18px #0004;font:inherit;cursor:pointer;animation:modalIn .3s}
+.ch-mini i{width:28px;height:28px;border-radius:50%;background:#6366f1;position:absolute;left:6px;animation:onda 1.8s ease-out infinite;opacity:.6}
+.ch-mini span{position:relative;width:28px;height:28px;border-radius:50%;background:#6366f1;display:grid;place-items:center;font-size:14px}
+.ch-mini.pensando span{background:#d97706}.ch-mini.falando span{background:#16a34a}
+.ch-mini em{font-style:normal;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.9}
+.ch-mini b{margin-left:2px;width:22px;height:22px;border-radius:50%;background:#fff3;display:grid;place-items:center;font-size:11px}

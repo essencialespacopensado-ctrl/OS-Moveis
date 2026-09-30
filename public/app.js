@@ -4811,8 +4811,8 @@ function Assistente({ sessao, osAberta }) {
   const processar = async (q) => {
     setOuvido('');
     if (faseRef.current === 'confirmando' && pendRef.current) {
-      if (/\b(sim|pode|confirm|aplica|isso|manda|beleza|ok|claro|faz)/i.test(q)) { setFase('pensando'); return aplicarPendentes(); }
-      if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); setFase('ouvindo'); return; }
+      if (/\b(sim|pode|confirm|aplica|isso|manda|beleza|ok|claro|faz|salva)/i.test(q)) { setFase('pensando'); await aplicarPendentes(); setTimeout(() => chamadaRef.current && setAberto(false), 1200); return; }
+      if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); setFase('ouvindo'); setAberto(false); return; }
       const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
     }
     if (comandoTela(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); setFase('ouvindo'); return; }
@@ -4830,12 +4830,12 @@ function Assistente({ sessao, osAberta }) {
       setMsgs(h => [...h, { role: 'assistant', content: txt || (acoes.length ? 'Preparei estas mudanças.' : ''), acoes }]);
       if (acoes.length) {
         pendRef.current = { i: idx, acoes };
-        await falar('Salvar?'); setFase('confirmando');
+        setAberto(true); await falar('Salvar?'); setFase('confirmando');
       }
       else if (!navs.length) await falar(txt || 'Não entendi, pode repetir?'); else setFase('ouvindo');
     } catch (e) { await falar('Tive um problema: ' + e.message); }
   };
-  const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(true); setFase('ouvindo'); falaCh.iniciar(); };
+  const ligar = () => { setChamada(true); chamadaRef.current = true; setAberto(false); setFase('ouvindo'); falaCh.iniciar(); };
   const desligar = () => { setChamada(false); chamadaRef.current = false; setFase(''); clearTimeout(timerRef.current); bufRef.current = ''; falaCh.parar(); try { window.speechSynthesis.cancel(); } catch {} };
   useEffect(() => () => desligar(), []);
   const marcar = (i, j, patch) => setMsgs(h => h.map((m, k) => k !== i ? m : { ...m, acoes: m.acoes.map((a, l) => l === j ? { ...a, ...patch } : a) }));
@@ -4850,6 +4850,9 @@ function Assistente({ sessao, osAberta }) {
     : ['Mande a OS 26.010 para a produção com o EDINHO de segunda a quarta', 'Quais OS estão em produção?', 'Quais projetos ainda não têm OS?', 'Sugira combinações de MDF para uma cozinha clara', 'Como eu faço a ata da reunião?'];
 
   return html`
+    ${chamada && !aberto && html`<button class=${'ch-mini ' + fase} onClick=${() => setAberto(true)} title="Chamada ativa — toque para ver">
+      <i></i><span>${fase === 'pensando' ? '⏳' : fase === 'falando' ? '🔊' : '🎙'}</span>${ouvido && html`<em>${ouvido.slice(-40)}</em>`}
+      <b onClick=${e => { e.stopPropagation(); desligar(); }} title="Encerrar">✕</b></button>`}
     <button class=${'assist-fab' + (aberto ? ' on' : '')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
       ${aberto ? '✕' : html`<span>✦</span><em class="txt-desk"> Assistente</em>`}
     </button>
