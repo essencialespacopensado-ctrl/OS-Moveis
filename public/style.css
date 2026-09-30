@@ -1301,3 +1301,11 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .pct-geral{display:flex;flex-direction:column;gap:10px;grid-column:1/-1}
 .pct-mini{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px}
 .pct-lin{display:flex;align-items:center;gap:8px;cursor:pointer}.pct-lin span:first-child{width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+/* v112 — previsão */
+.qg-visao{align-self:flex-start}
+.pv-alerta{border-left:5px solid #dc2626;display:flex;flex-direction:column;gap:5px}
+.pv-cli{border-left:5px solid var(--c);display:flex;flex-direction:column;gap:6px}
+.pv-l{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c);cursor:pointer;flex-wrap:wrap;transition:transform .15s}
+.pv-l:hover{transform:translateX(3px)}.pv-l small{display:block;opacity:.7;font-size:12px}
+.pv-st{font-size:18px}.pv-d{display:flex;flex-direction:column;align-items:center;min-width:64px}.pv-d small{font-size:11px;opacity:.65}
+.pv-tag{color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}

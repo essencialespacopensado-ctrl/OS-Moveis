@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['112', ['⏳ Ao dar mais dias no cronograma, aparece o alerta de cliente em atraso (e dos clientes empurrados junto), mostrando se passa do prazo de entrega.', '⏩ Quando alguém conclui antes do prazo, o app pergunta se quer adiantar as próximas tarefas dele ou ajudar uma OS atrasada, abatendo dias.', '🔮 Quadro geral → Previsão de finalização: por cliente e por OS, com base no cronograma, compras e parceiros, avisando prazos perto ou em risco.']],
   ['111', ['📈 Quadro geral: barra de conclusão em % por cliente, por OS e o andamento geral de todas as obras (etapa da OS + produção + parceiros).']],
   ['110', ['✏️ Nome do cliente editável direto na OS (lápis ao lado do nome). Se o cliente tiver outras OS, dá para trocar em todas de uma vez.']],
   ['109', ['👥 Clientes com nome quase igual (ex.: Silmara x Sillmara) aparecem em aviso no Quadro geral com botão para juntar.', '👥 Ao criar ou importar OS com nome parecido com um cliente existente, o app pergunta se é o mesmo.', '🤖 A IA também organiza: diga "junta a Sillmara com a Silmara".']],
@@ -2983,6 +2984,45 @@ function pctObra(o) {
 const corPct = (p) => p >= 100 ? '#16a34a' : p >= 70 ? '#65a30d' : p >= 40 ? '#d97706' : '#dc2626';
 function BarraPct({ p, grande }) { return html`<div class=${'pct-barra' + (grande ? ' g' : '')}><i style=${{ width: p + '%', background: corPct(p) }}></i><span>${p}%</span></div>`; }
 
+/* ---------- Previsão de finalização (cronograma + compras + parceiros) ---------- */
+function PrevisaoEntregas({ sessao, lista, abrirOS }) {
+  const [tar, setTar] = useState([]), [comp, setComp] = useState({}), [ver, setVer] = useState('cliente');
+  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setTar(s.docs.map(d => d.data())), () => {});
+    const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setComp(m); }, () => {}); return () => { a(); b(); }; }, []);
+  const hoje = isoD(new Date());
+  const prev = (lista || []).filter(o => o.status !== 'concluida').map(o => {
+    const ts = tar.filter(t => t.osId === o.id); const abertas = ts.filter(t => t.status !== 'concluida');
+    const fimCron = abertas.map(t => t.fim).sort().pop() || '';
+    const itens = (comp[o.id]?.itens || []).filter(i => !i.recebido && i.origem !== 'estoque');
+    const fimComp = itens.map(i => i.previsao).filter(Boolean).sort().pop() || '';
+    const semPrev = itens.filter(i => !i.previsao).length;
+    const pr = parceirosDaOS(o).filter(p => p.st !== 'recebido'); const fimParc = pr.map(p => paraIso(p.previsao)).filter(Boolean).sort().pop() || '';
+    const base = [fimComp, fimParc].filter(Boolean).sort().pop() || '';
+    const fim = [fimCron, base ? somaUteis(base, 2) : ''].filter(Boolean).sort().pop() || '';
+    const prazo = paraIso(o.prazoEntrega); const falta = prazo ? uteisEntre(hoje, prazo) : null;
+    const folga = prazo && fim ? (fim <= prazo ? uteisEntre(fim, prazo) : -uteisEntre(prazo, fim)) : null;
+    const st = !prazo ? 'sem' : prazo < hoje ? 'vencido' : folga !== null && folga < 0 ? 'estoura' : falta <= 5 ? 'perto' : folga !== null && folga <= 3 ? 'apertado' : !fim ? 'semdados' : 'ok';
+    return { o, fim, fimCron, fimComp, fimParc, semPrev, pend: itens.length, parcPend: pr.length, abertas: abertas.length, prazo, falta, folga, st };
+  });
+  const ST = { vencido: ['🔴', 'Prazo vencido', '#b91c1c'], estoura: ['🔴', 'Vai passar do prazo', '#dc2626'], perto: ['🟠', 'Prazo chegando', '#ea580c'], apertado: ['🟡', 'Apertado', '#ca8a04'], semdados: ['⚪', 'Sem cronograma/compras', '#64748b'], ok: ['🟢', 'No prazo', '#16a34a'], sem: ['⚪', 'Sem prazo de entrega', '#94a3b8'] };
+  const ordem = ['vencido', 'estoura', 'perto', 'apertado', 'semdados', 'ok', 'sem'];
+  const alertas = prev.filter(p => ['vencido', 'estoura', 'perto'].includes(p.st));
+  const porCli = {}; prev.forEach(p => { const k = baseCli(p.o.cliente?.nome) || '—'; (porCli[k] = porCli[k] || []).push(p); });
+  const cliRows = Object.entries(porCli).map(([k, l]) => { const pior = l.slice().sort((a, b) => ordem.indexOf(a.st) - ordem.indexOf(b.st))[0]; return { k, l, st: pior.st, fim: l.map(p => p.fim).filter(Boolean).sort().pop() || '', prazo: l.map(p => p.prazo).filter(Boolean).sort()[0] || '' }; }).sort((a, b) => ordem.indexOf(a.st) - ordem.indexOf(b.st) || String(a.prazo || '9').localeCompare(b.prazo || '9'));
+  const Det = (p) => html`<small>${[p.fimCron ? '📅 cronograma até ' + dm(p.fimCron) + (p.abertas ? ' (' + p.abertas + ' tarefa' + (p.abertas > 1 ? 's' : '') + ')' : '') : '📅 sem cronograma', p.pend ? '🛒 ' + p.pend + ' compra(s) a chegar' + (p.fimComp ? ' até ' + dm(p.fimComp) : '') + (p.semPrev ? ' · ' + p.semPrev + ' sem data' : '') : '🛒 compras ok', p.parcPend ? '🤝 ' + p.parcPend + ' parceiro(s)' + (p.fimParc ? ' até ' + dm(p.fimParc) : '') : ''].filter(Boolean).join(' · ')}</small>`;
+  const Linha = (p, cli) => { const s = ST[p.st]; return html`<div key=${p.o.id} class="pv-l" style=${{ '--c': s[2] }} onClick=${() => abrirOS(p.o.id)}>
+    <span class="pv-st">${s[0]}</span><span class="grow"><b>${numOS(p.o)} ${cli ? (p.o.cliente?.nome || '') : (p.o.ambientes || []).map(a => a.nome).join(', ') || p.o.ambienteResumo || ''}</b>${Det(p)}</span>
+    <span class="pv-d"><small>Previsão</small><b>${p.fim ? dm(p.fim) : '—'}</b></span><span class="pv-d"><small>Entrega</small><b>${p.prazo ? dm(p.prazo) : '—'}</b></span>
+    <span class="pv-tag" style=${{ background: s[2] }}>${s[1]}${p.folga !== null && p.st !== 'sem' ? ' · ' + (p.folga >= 0 ? p.folga + 'd folga' : -p.folga + 'd além') : ''}${p.st === 'perto' ? ' · faltam ' + p.falta + 'd' : ''}</span></div>`; };
+  return html`<div class="stack">
+    ${alertas.length > 0 && html`<div class="card pv-alerta"><b>⏰ Atenção: ${alertas.length} OS com prazo em risco</b>${alertas.map(p => html`<div key=${p.o.id} onClick=${() => abrirOS(p.o.id)} style=${{ cursor: 'pointer' }}>${ST[p.st][0]} <b>${numOS(p.o)} ${baseCli(p.o.cliente?.nome)}</b> — ${ST[p.st][1]}${p.prazo ? ' (entrega ' + dm(p.prazo) + (p.st === 'perto' ? ', faltam ' + p.falta + ' dias úteis' : '') + ')' : ''}</div>`)}</div>`}
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="seg-mini"><button class=${ver === 'cliente' ? 'on' : ''} onClick=${() => setVer('cliente')}>👤 Por cliente</button><button class=${ver === 'os' ? 'on' : ''} onClick=${() => setVer('os')}>📋 Por OS</button></div>
+      <small class="dim">Previsão = maior data entre cronograma e chegada de compras/parceiros (+2 dias úteis para produzir).</small></div>
+    ${ver === 'os' ? prev.slice().sort((a, b) => ordem.indexOf(a.st) - ordem.indexOf(b.st) || String(a.prazo || '9').localeCompare(b.prazo || '9')).map(p => Linha(p, true))
+      : cliRows.map(c => html`<div key=${c.k} class="card pv-cli" style=${{ '--c': ST[c.st][2] }}><div class="row" style=${{ justifyContent: 'space-between' }}><b>${ST[c.st][0]} ${c.k}</b><span class="row" style=${{ gap: '10px' }}><span class="pv-d"><small>Previsão final</small><b>${c.fim ? dm(c.fim) : '—'}</b></span><span class="pv-d"><small>1ª entrega</small><b>${c.prazo ? dm(c.prazo) : '—'}</b></span><span class="pv-tag" style=${{ background: ST[c.st][2] }}>${ST[c.st][1]}</span></span></div>${c.l.map(p => Linha(p, false))}</div>`)}
+  </div>`;
+}
+
 function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   const [lista, setLista] = useState(null);
   const [filtro, setFiltro] = useState('todas');
@@ -2990,6 +3030,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   const [sheet, setSheet] = useState(null); // {osId, tipo:'parc'|'prod'|'add', k}
   const [conf, setConf] = useState(null); // {titulo, oque, fazer(motivo)}
   const [cliSel, setCliSel] = useState(null);
+  const [visaoQ, setVisaoQ] = useState('obras');
   const [folha, setFolha] = useState(null);
   const [pedAb, setPedAb] = useState({});
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'pedidos'), s => { const m = {}; s.docs.forEach(d => { const x = d.data(); if (pedAberto(x)) m[x.osId] = (m[x.osId] || 0) + 1; }); setPedAb(m); }, () => {}), []);
@@ -3055,6 +3096,8 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
   return html`
     <div class="fade-up stack qg">
       <div><h2>Quadro geral</h2><div class="dim">Toque no cliente para ver o andamento de cada ambiente, parceiros e o diário de obra.</div></div>
+      <div class="seg-mini qg-visao"><button class=${visaoQ === 'obras' ? 'on' : ''} onClick=${() => setVisaoQ('obras')}>🏗 Obras</button><button class=${visaoQ === 'prev' ? 'on' : ''} onClick=${() => setVisaoQ('prev')}>🔮 Previsão de finalização</button></div>
+      ${visaoQ === 'prev' ? html`<${PrevisaoEntregas} sessao=${sessao} lista=${lista} abrirOS=${abrirOS} />` : html`<div class="stack">
       <${AvisoClientes} sessao=${sessao} lista=${lista} toast=${toast} />
       <${AgoraAndamento} sessao=${sessao} lista=${lista} abrirOS=${abrirOS} />
       <div class="qg-filtros">
@@ -3160,6 +3203,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
               </div>`}
           </div>
         </div>`, document.body)}
+      </div>`}
       ${folha && ReactDOM.createPortal(html`<${ImpressaoFolha} dados=${folha} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       ${conf && html`<${SenhaMotivo} titulo=${conf.titulo} texto="Este processo já foi iniciado. Para reabrir/voltar, informe o motivo e a senha." botao="Confirmar" onOk=${conf.fazer} fechar=${() => setConf(null)} />`}
     </div>`;
@@ -3286,6 +3330,17 @@ const addLinha = (txt, l) => (txt ? txt.replace(/\s+$/, '') + '\n' : '') + l;
 const isoD = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const deIsoD = (t) => { const [a, m, d] = String(t).split('-').map(Number); return new Date(a, m - 1, d); };
 const fimSemana = (d) => d.getDay() === 0 || d.getDay() === 6;
+const paraIso = (x) => { x = String(x || ''); if (/^\d{4}-\d{2}-\d{2}/.test(x)) return x.slice(0, 10); const d = lerPrazo(x); return d ? isoD(d) : ''; };
+async function alertaAtraso(sessao, lista) {
+  const { getDoc, updateDoc, increment } = F().fsMod; const linhas = [];
+  for (const { t, n, fim, auto } of lista) {
+    let prazo = '';
+    if (t.osId) { try { const d = await getDoc(docRef('empresas', sessao.empresaId, 'os', t.osId)); prazo = paraIso(d.data()?.prazoEntrega); await updateDoc(d.ref, { diasAtraso: increment(n), ultimoAtraso: { dias: n, em: nowIso(), pessoa: t.pessoa, auto: !!auto } }); } catch {} }
+    const estoura = prazo && fim > prazo;
+    linhas.push((estoura ? '🔴 ' : '🟠 ') + [t.osCod, (t.cliente || t.texto || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') + ' — +' + n + (n === 1 ? ' dia' : ' dias') + ' (' + t.pessoa + ', termina ' + dm(fim) + ')' + (prazo ? (estoura ? ' · PASSA do prazo de entrega ' + dm(prazo) : ' · prazo de entrega ' + dm(prazo)) : ''));
+  }
+  await escolher('Cliente em atraso', linhas.join('\n') + '\n\nQuando alguém terminar antes do prazo, o app vai perguntar se quer usar o dia para abater esse atraso.', [{ v: 'ok', t: 'Entendi', cls: 'btn-primary' }]);
+}
 function somaUteis(t, n) { const d = deIsoD(t); let k = Math.abs(n), s = Math.sign(n); while (k > 0) { d.setDate(d.getDate() + s); if (!fimSemana(d)) k--; } return isoD(d); }
 function uteisEntre(a, b) { if (b <= a) return 0; let n = 0; const d = deIsoD(a); while (isoD(d) < b) { d.setDate(d.getDate() + 1); if (!fimSemana(d)) n++; } return n; }
 const dm = (t) => t ? t.split('-').reverse().slice(0, 2).join('/') : '';
@@ -3421,7 +3476,38 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
   const [modo, setModo] = useState('');
   const hoje = isoD(new Date());
   const atrasada = t.status !== 'concluida' && t.fim < hoje;
-  const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } { const rp = v ? resultadoPrazo(t) : null; registrar(sessao, t.osId, v ? (rp.dif > 0 ? '⚠️' : '✅') : '↺', v ? 'Concluída (' + t.pessoa + ') — ' + rp.txt : 'Tarefa reaberta: ' + t.pessoa, v ? rp.d : mot); } try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); } };
+  const usarSobra = async () => {
+    const hoje = isoD(new Date()); if (!(hoje < t.fim)) return;
+    const sobra = uteisEntre(hoje, t.fim); if (sobra <= 0) return;
+    const minhas = todas.filter(x => x.id !== t.id && norm(x.pessoa) === norm(t.pessoa) && x.status !== 'concluida' && x.inicio > hoje).sort((a, b) => a.inicio.localeCompare(b.inicio));
+    const atrasadas = todas.filter(x => x.id !== t.id && x.status !== 'concluida' && norm(x.pessoa) !== norm(t.pessoa) && ((x.prorrogacoes || []).some(p => !p.auto) || x.fim < hoje));
+    const ops = [...(minhas.length ? [{ v: 'antecipar', t: '⏩ Adiantar as próximas tarefas de ' + t.pessoa + ' em ' + sobra + (sobra === 1 ? ' dia' : ' dias'), d: minhas.slice(0, 3).map(x => (x.osCod || x.texto) + ' ' + dm(x.inicio)).join(' · '), cls: 'btn-primary' }] : []),
+      ...atrasadas.slice(0, 6).map(x => ({ v: 'ajudar:' + x.id, t: '🤝 Ajudar ' + [x.osCod, (x.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') + ' (' + x.pessoa + ')', d: 'Abate até ' + sobra + ' dia(s) do atraso · termina ' + dm(x.fim) + ((x.prorrogacoes || []).filter(p => !p.auto).length ? ' · teve +' + (x.prorrogacoes || []).filter(p => !p.auto).reduce((a, p) => a + (p.dias || 0), 0) + 'd' : '') })),
+      { v: 'nao', t: 'Não usar agora' }];
+    const r = await escolher('Terminou antes!', t.pessoa + ' terminou ' + sobra + (sobra === 1 ? ' dia útil' : ' dias úteis') + ' antes do prazo (' + dm(t.fim) + ').\nQuer usar esse tempo para buscar prazo?', ops);
+    if (!r || r === 'nao') return;
+    const { writeBatch } = F().fsMod; const b = writeBatch(F().db); const E = sessao.empresaId; const amanha = somaUteis(hoje, 1);
+    b.update(docRef('empresas', E, 'tarefas', t.id), { fim: hoje, fimPlanejado: t.fim });
+    if (t.osCod) removerDaAgenda(sessao, t.grade, t.pessoa, amanha, t.fim, t.osCod).catch(() => {});
+    if (r === 'antecipar') {
+      for (const x of minhas) { const ni = somaUteis(x.inicio, -sobra) < amanha ? amanha : somaUteis(x.inicio, -sobra); const d = uteisEntre(ni, x.inicio); if (d <= 0) continue; const nf = somaUteis(x.fim, -d);
+        b.update(docRef('empresas', E, 'tarefas', x.id), { inicio: ni, fim: nf, antecipacoes: [...(x.antecipacoes || []), { dias: d, em: nowIso(), quem: sessao.nome, motivo: 'Terminou antes: ' + (t.osCod || t.texto) }] });
+        if (x.osCod) { removerDaAgenda(sessao, x.grade, x.pessoa, x.inicio, x.fim, x.osCod).catch(() => {}); escreverNaAgenda(sessao, x.grade, x.pessoa, ni, nf, [x.osCod, (x.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ')).catch(() => {}); }
+        registrar(sessao, x.osId, '⏩', 'Adiantado ' + d + 'd (' + x.pessoa + '): ' + dm(x.inicio) + ' → ' + dm(ni), t.pessoa + ' terminou ' + (t.osCod || '') + ' antes'); }
+      await b.commit(); toast('Próximas tarefas de ' + t.pessoa + ' adiantadas ' + sobra + ' dia(s).', 'ok'); return;
+    }
+    const x = todas.find(y => y.id === r.split(':')[1]); if (!x) return;
+    const k = Math.min(sobra, Math.max(1, uteisEntre(x.inicio > hoje ? x.inicio : hoje, x.fim)));
+    const nf = somaUteis(x.fim, -k) < hoje ? hoje : somaUteis(x.fim, -k);
+    b.update(docRef('empresas', E, 'tarefas', x.id), { fim: nf, ajudas: [...(x.ajudas || []), { pessoa: t.pessoa, dias: k, de: amanha, em: nowIso(), quem: sessao.nome }] });
+    await b.commit();
+    const linha = [x.osCod, (x.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') || x.texto;
+    if (x.osCod) removerDaAgenda(sessao, x.grade, x.pessoa, somaUteis(nf, 1), x.fim, x.osCod).catch(() => {});
+    escreverNaAgenda(sessao, t.grade, t.pessoa, amanha, somaUteis(amanha, k - 1), linha + ' (ajuda)').catch(() => {});
+    registrar(sessao, x.osId, '🤝', t.pessoa + ' ajuda ' + x.pessoa + ' — abate ' + k + 'd', 'Termina ' + dm(x.fim) + ' → ' + dm(nf));
+    toast(t.pessoa + ' vai ajudar ' + linha + '. Prazo ' + dm(x.fim) + ' → ' + dm(nf) + '.', 'ok');
+  };
+  const concluir = async (v) => { let mot = ''; if (!v) { mot = await pedirMotivo('Reabrir tarefa'); if (!mot) return; } { const rp = v ? resultadoPrazo(t) : null; registrar(sessao, t.osId, v ? (rp.dif > 0 ? '⚠️' : '✅') : '↺', v ? 'Concluída (' + t.pessoa + ') — ' + rp.txt : 'Tarefa reaberta: ' + t.pessoa, v ? rp.d : mot); } try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id), { status: v ? 'concluida' : 'andamento', concluidaEm: v ? nowIso() : '', concluidaPor: v ? sessao.nome : '' }); toast(v ? 'Tarefa concluída.' : 'Tarefa reaberta.', 'ok'); fechar(); if (v) usarSobra().catch(e => toast(e.message, 'erro')); } catch (e) { toast(e.message, 'erro'); } };
   const excluir = async () => { const mot = await pedirMotivo('Excluir do cronograma', 'A tarefa sai do cronograma de ' + t.pessoa + '. Informe o motivo.'); if (!mot) return; registrar(sessao, t.osId, '🗑', 'Excluída do cronograma: ' + t.pessoa + ' (' + dm(t.inicio) + ' a ' + dm(t.fim) + ')', mot); try { await F().fsMod.deleteDoc(docRef('empresas', sessao.empresaId, 'tarefas', t.id)); if (t.osCod) removerDaAgenda(sessao, t.grade, t.pessoa, t.inicio, t.fim, t.osCod).catch(() => {}); fechar(); } catch (e) { toast(e.message, 'erro'); } };
   const [mv, setMv] = useState({ pessoa: t.pessoa, grade: t.grade || 'producao', inicio: t.inicio, fim: t.fim, motivo: '' });
   const [nomesMv, setNomesMv] = useState([]);
@@ -3456,7 +3542,8 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
     const seguintes = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim);
     seguintes.forEach(x => b.update(docRef('empresas', sessao.empresaId, 'tarefas', x.id), { inicio: somaUteis(x.inicio, n), fim: somaUteis(x.fim, n), prorrogacoes: [...(x.prorrogacoes || []), { dias: n, motivo: 'Ajuste automático: ' + (t.cliente || t.texto) + ' atrasou (' + motivo.trim() + ')', quem: sessao.nome, em: nowIso(), fimAntes: x.fim, fimDepois: somaUteis(x.fim, n), auto: true }] }));
     registrar(sessao, t.osId, '⏳', `Prazo prorrogado +${n}d (${t.pessoa}): ${dm(t.fim)} → ${dm(novoFim)}`, motivo.trim()); seguintes.forEach(x => registrar(sessao, x.osId, '⏳', `Prazo ajustado +${n}d (${x.pessoa})`, 'Atraso em ' + (t.cliente || t.texto)));
-    try { await b.commit(); if (t.grade && t.pessoa) escreverNaAgenda(sessao, t.grade, t.pessoa, somaUteis(t.fim, 1), novoFim, [t.osCod, (t.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') || t.texto || 'Tarefa').catch(() => {}); toast(`+${n} ${n === 1 ? 'dia' : 'dias'}. ${seguintes.length ? seguintes.length + ' tarefa(s) seguinte(s) de ' + t.pessoa + ' ajustada(s).' : ''}`, 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
+    try { await b.commit(); if (t.grade && t.pessoa) escreverNaAgenda(sessao, t.grade, t.pessoa, somaUteis(t.fim, 1), novoFim, [t.osCod, (t.cliente || '').split(/\s[-–]\s/)[0]].filter(Boolean).join(' ') || t.texto || 'Tarefa').catch(() => {}); fechar();
+      alertaAtraso(sessao, [{ t, n, fim: novoFim }, ...seguintes.map(x => ({ t: x, n, fim: somaUteis(x.fim, n), auto: true }))]); } catch (e) { toast(e.message, 'erro'); }
   };
   const seguintesPrev = todas.filter(x => x.id !== t.id && x.pessoa === t.pessoa && x.status !== 'concluida' && x.inicio > t.fim && x.inicio >= t.inicio);
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
