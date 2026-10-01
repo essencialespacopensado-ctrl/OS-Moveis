@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['152', ['🧹 Saiu o aviso "Revisar: largura, altura…" dos móveis.']],
   ['151', ['🎨 Materiais (MDF, Fórmica, Lâmina, Madeira, Laca) viraram botões pequenos lado a lado.', '📦 Caixa, frentes, prateleiras e ⚙ espessuras ficam só dentro de Acabamentos & materiais.']],
   ['150', ['🧱 Saiu "parede revestida" dos conjuntos.', '⚙ Espessuras configuráveis (caixa, frentes e prateleiras) — botão ⚙ Espessuras no conjunto; e nova linha de espessura das prateleiras.', '📋 O conjunto mostra todas as etapas da OS de uma vez, cada uma fechada; o conteúdo só aparece ao tocar em Aplica.', '🎨 Catálogos coloridos por categoria, com fundo tecnológico animado; lâminas, perfis e puxadores agora são uma categoria só, em lista.']],
   ['149', ['🔘 Corrigido: o botão Aplica agora aparece (pulsando) embaixo do nome de cada categoria fechada.']],
@@ -4761,7 +4762,7 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
   const fFita = useMemo(() => ({ tipos: ['MDF'] }), []);
 
   return html`
-    <div class=${'movel-card' + ((m.revisar || []).length ? ' revisar' : '')}>
+    <div class="movel-card">
       <div class="movel-top">
         <input class="inp" value=${m.nome} placeholder="Nome do móvel" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
         <input class="inp inp-sm" style=${{ width: '64px' }} type="number" min="1" value=${m.quantidade} title="Quantidade" onInput=${e => upMovel(x => { x.quantidade = Number(e.target.value) || 1; })} />
@@ -4770,7 +4771,7 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
           ? html`<button class="btn btn-sm btn-danger" onClick=${remover}>Apagar</button>`
           : html`<button class="x-btn" onClick=${() => setConfirmar(true)} title="Apagar móvel">🗑</button>`}
       </div>
-      ${(m.revisar || []).length > 0 && html`<div class="warn-box" style=${{ padding: '6px 10px', fontSize: '13px' }}>Revisar: ${m.revisar.join(', ')}</div>`}
+
       <div class="field"><span class="lbl">Observações</span><textarea class="inp inp-sm" rows="2" style=${{ minHeight: '52px' }} value=${m.observacoes} onInput=${campo('observacoes')}></textarea></div>
     </div>`;
 }
