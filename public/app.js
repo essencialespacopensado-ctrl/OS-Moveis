@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['130', ['🎨 A aba "Por temas" saiu de dentro da OS.']],
   ['129', ['⏱ Tempo ganho/perdido virou botão (no Início e no Cronograma).', '✦ O botão do assistente pisca com "Peça qualquer coisa" (a barra de lembrete saiu).', '🆕 Botão discreto de atualizações no canto; o cartão de novidades no Início tem "Entendi" para fechar.']],
   ['128', ['👥 Ao tocar num cliente no Quadro geral, abre a lista de OS do cliente (com avançar/voltar etapa e projeto).', '🤝 Obra terceirizada: botão "Pedido do parceiro" para o parceiro pedir à fábrica molduras, usinagem, corte, fita, furação, pintura… (na OS → Andamento e em Peças extras).']],
   ['127', ['🆕 Novidades em ordem: da versão mais nova para a mais antiga.']],
@@ -4118,7 +4119,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
-  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha', temas: 'temas' })[m] || 'andamento'; });
+  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'andamento'; });
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
   const [todas, setTodas] = useState([]);
@@ -4165,9 +4166,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
         ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📅 Ver no cronograma</button>`
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
-        <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
+        <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'andamento' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
