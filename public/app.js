@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['155', ['📈 Toda OS começa em 0%: sem parceiros, o % é metade etapa da OS e metade produção.']],
   ['154', ['🧾 Cabeçalho da edição sem o nome do cliente repetido; 🎨 Cores num botão (abre as bolinhas só quando quiser).', '🔧 Corrigido: tocar na linha da categoria (Acabamentos, Portas, Lâminas, LED…) agora abre e fecha.']],
   ['153', ['🪑 "+ Adicionar móvel" cria um bloco novo (como um ambiente) com todas as categorias.', '👆 A própria linha da categoria abre/fecha (sem botão Aplica).', '🧱 Tamponamento foi para dentro de Acabamentos & materiais.']],
   ['152', ['🧹 Saiu o aviso "Revisar: largura, altura…" dos móveis.']],
@@ -2984,8 +2985,9 @@ function pctObra(o) {
   if (o.status === 'concluida') return 100;
   const i = Math.max(0, STATUS_OS.findIndex(x => x.v === o.status)), nS = Math.max(1, STATUS_OS.length - 1);
   const et = o.execucao?.etapas || {}; const fab = ETAPAS_FAB.reduce((n, [k]) => n + (et[k]?.status === 'pronto' ? 1 : et[k]?.status === 'andamento' ? 0.5 : 0), 0) / ETAPAS_FAB.length;
-  const pr = parceirosDaOS(o); const par = pr.length ? pr.filter(p => p.st === 'recebido').length / pr.length : 1;
-  return Math.round((i / nS) * 40 + fab * 40 + par * 20);
+  const pr = parceirosDaOS(o);
+  if (!pr.length) return Math.round((i / nS) * 50 + fab * 50);
+  return Math.round((i / nS) * 40 + fab * 40 + pr.filter(p => p.st === 'recebido').length / pr.length * 20);
 }
 const corPct = (p) => p >= 100 ? '#16a34a' : p >= 70 ? '#65a30d' : p >= 40 ? '#d97706' : '#dc2626';
 function BarraPct({ p, grande }) { return html`<div class=${'pct-barra' + (grande ? ' g' : '')}><i style=${{ width: p + '%', background: corPct(p) }}></i><span>${p}%</span></div>`; }
