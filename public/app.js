@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['144', ['🪑 Tudo o que se edita na etapa 2 fica dentro de cada conjunto de móveis: materiais, tamponamento, parede/painel, observações e catálogos. Saíram os blocos soltos da OS.']],
   ['143', ['🔒 A OS só fica bloqueada para edição depois de marcada como revisada (aí pede motivo para editar).']],
   ['142', ['📋 Edição da OS mais enxuta: cabeçalho numa linha só (nº, cliente, ambiente, prazo, etapa, revisar, PDF).', '🎨 Cada conjunto já mostra na frente a cor do MDF da caixa e das frentes com a espessura em um toque; o resto fica em "Mais detalhes".']],
   ['141', ['🙈 Catálogos começam escondidos; só abrem quando você toca em ✓ Aplica.']],
@@ -1955,64 +1956,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             ${!(os.ambientes || []).length && html`<div class="vazio dim">Nenhum conjunto ainda. Adicione, fale, ou gere a OS a partir de uma reunião.</div>`}
           </div>
         </div>
-        <div class="card page-card stack">
-            <div class="sec-title">🧱 Padrões de estrutura & tamponamento</div>
-            <span class="lbl">Tipo de tamponamento</span>
-            <div class="opcoes3">
-              ${[['aparente', 'Aparente', 'Laterais visíveis'], ['nao_aparente', 'Não aparente', 'Portas cobrem caixa'], ['sem', 'Sem tamponam.', 'Caixa simples']].map(([v, t, d]) => html`
-                <button key=${v} class=${'opc' + ((os.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), tipo: v }; })}><b>${t}</b><small>${d}</small></button>`)}
-            </div>
-            ${(os.tamponamento?.tipo || 'sem') !== 'sem' && html`
-              <span class="lbl">Espessura do tamponamento</span>
-              <div class="row" style=${{ gap: '6px' }}>${(window.OPCOES?.TAMP_ESP || []).map(x => html`<button key=${x} class=${'pill' + (os.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), espessura: x }; })}>${x}</button>`)}</div>`}
-            <div class="grid2">
-              <div class="field"><label class="lbl">MDF interno (caixaria)</label><input class="inp" placeholder="Ex: MDF Branco TX 15mm" value=${P.acab?.interno?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.interno = { ...(p.acab.interno || {}), desc: e.target.value }; })} /></div>
-              <div class="field"><label class="lbl">MDF externo (frentes e tamponamento)</label><input class="inp" placeholder="Ex: MDF Freijó Puro Duratex 18mm" value=${P.acab?.externo?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.externo = { ...(p.acab.externo || {}), desc: e.target.value }; })} /></div>
-            </div>
-            <div class="field"><label class="lbl" for="os-obs">Observações e detalhes técnicos acordados na reunião</label><textarea id="os-obs" class="inp" rows="3" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
-          </div>
-        <div class="card page-card stack">
-          <div class="row" style=${{ justifyContent: 'space-between' }}>
-            <div class="sec-title"><span class="num-sec">12</span> Paredes inteiras / painéis revestidos</div>
-            <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!P.parede?.ativo} onChange=${e => setP(p => { p.parede = { ...(p.parede || {}), ativo: e.target.checked }; })} /> Possui parede inteira</label>
-          </div>
-          ${P.parede?.ativo && html`
-            <textarea class="inp" rows="2" placeholder="Especificação da parede inteira" value=${P.parede?.espec || ''} onInput=${e => setP(p => { p.parede.espec = e.target.value; })}></textarea>
-            <div class="grid2">
-              <input class="inp" placeholder="Paginação / padrão (ex: friso vertical a cada 60cm)" value=${P.parede?.paginacao || ''} onInput=${e => setP(p => { p.parede.paginacao = e.target.value; })} />
-              <input class="inp" placeholder="Método de fixação" value=${P.parede?.fixacao || ''} onInput=${e => setP(p => { p.parede.fixacao = e.target.value; })} />
-            </div>`}
-        </div>
-        <details class="card page-card"><summary class="sec-title" style=${{ cursor: 'pointer' }}>📊 Andamento e checklist</summary><div class="stack" style=${{ marginTop: '10px' }}>
-        <div class="card page-card">
-          <div class="row" style=${{ justifyContent: 'space-between' }}>
-            <div class="sec-title">Fluxo de andamento da marcenaria</div>
-            ${diasPrazo !== null && html`<span class=${'chip ' + (diasPrazo < 0 ? 'chip-danger' : '')}>📅 ${diasPrazo < 0 ? Math.abs(diasPrazo) + ' dias de atraso' : diasPrazo + ' dias para o prazo'}</span>`}
-          </div>
-          <div class="dim" style=${{ margin: '4px 0 14px' }}>Etapa atual: <b>${STATUS_OS[idxSt].t.replace(/^\d\. /, '')}</b> (${idxSt + 1}/${STATUS_OS.length})</div>
-          <div class="trilho">
-            ${STATUS_OS.map((x, i) => html`
-              <button key=${x.v} class=${'trilho-pt' + (i < idxSt ? ' feito' : i === idxSt ? ' atual' : '')} onClick=${() => i < idxSt ? setPedirVoltar(x) : alterar(o => { o.status = x.v; })} title=${'Marcar como ' + x.t}>
-                <span class="bola">${i < idxSt ? '✓' : i + 1}</span><small>${x.t.replace(/^\d\. /, '')}</small>
-              </button>`)}
-            <div class="trilho-linha"><div style=${{ width: (idxSt / (STATUS_OS.length - 1) * 100) + '%' }}></div></div>
-          </div>
-          ${idxSt < (STATUS_OS.length - 1) && html`<button class="btn btn-marrom btn-block" style=${{ marginTop: '14px' }} onClick=${() => alterar(o => { o.status = STATUS_OS[idxSt + 1].v; })}>✓ Concluir ${STATUS_OS[idxSt].t.replace(/^\d\. /, '')} → Passar para ${STATUS_OS[idxSt + 1].t.replace(/^\d\. /, '')}</button>`}
-          ${idxSt === (STATUS_OS.length - 1) && html`<div class="ok-box" style=${{ marginTop: '12px' }}>OS concluída ✓</div>`}
-        </div>
-
-        ${(() => { const ck = [
-            ['1. Cliente & obra', !!(os.cliente?.nome && (os.cliente?.obra || os.cliente?.endereco))],
-            ['2. Ambiente & prazo', !!((os.ambienteResumo || (os.ambientes || []).length) && os.prazoEntrega)],
-            ['3. Tamponamento & MDF', !!(os.tamponamento?.tipo && (P.acab?.interno?.desc || P.acab?.externo?.desc))],
-            ['4. Ferragens', Object.values(P.ferragens || {}).some(f => Object.values(f || {}).some(Boolean))],
-          ]; const ok = ck.filter(c => c[1]).length;
-          return html`<div class="card page-card stack">
-            <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">✅ Checklist de prontidão da OS</div><span class=${'chip ' + (ok === 4 ? 'chip-accent' : '')}>${ok}/4 ${ok === 4 ? 'pronto para concluir' : 'recomendado preencher'}</span></div>
-            <div class="opcoes4">${ck.map(([t, v]) => html`<div key=${t} class=${'opc' + (v ? ' on' : '')}><b>${v ? '✓' : '!'} ${t}</b><small>${v ? 'Validado' : 'Incompleto'}</small></div>`)}</div>
-            <button class="btn btn-marrom btn-block" onClick=${() => ir(3)}>Salvar e avançar para Etapa 3 (Execução) →</button>
-          </div>`; })()}
-        </div></details>`}
+        `}
 
       ${etapa === 3 && html`<div class="card page-card vazio">🏭 A esteira de produção fica na OS, aba <b>Andamento</b> (toque na OS para abrir).</div>`}
       </fieldset>
@@ -4782,6 +4726,12 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
             </div>`)}</div>`; })()}
           <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>⚙️ Mais detalhes (portas, LED, ferragens, vidros…) ${esp ? '▴' : '▾'}</button>
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
+              <div class="card stack"><b>🧱 Tamponamento</b>
+                <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${[['sem', 'Sem'], ['aparente', 'Aparente'], ['nao_aparente', 'Não aparente']].map(([v, t]) => html`<button key=${v} class=${'pill' + ((amb.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), tipo: v }; })}>${t}</button>`)}
+                  ${(amb.tamponamento?.tipo || 'sem') !== 'sem' && (window.OPCOES?.TAMP_ESP || ['15', '18', '25', '36']).map(x => html`<button key=${x} class=${'pill' + (amb.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), espessura: x }; })}>${x}${/mm/.test(x) ? '' : 'mm'}</button>`)}</div></div>
+              <div class="card stack"><label class="row" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!amb.parede?.ativo} onChange=${e => up(a => { a.parede = { ...(a.parede || {}), ativo: e.target.checked }; })} /><b>🧱 Parede inteira / painel revestido</b></label>
+                ${amb.parede?.ativo && html`<input class="inp" placeholder="Especificação, paginação, fixação" value=${amb.parede?.espec || ''} onInput=${e => up(a => { a.parede = { ...(a.parede || {}), espec: e.target.value }; })} />`}</div>
+              <div class="card stack"><b>📝 Observações deste conjunto</b><textarea class="inp" rows="2" value=${amb.obs || ''} onInput=${e => up(a => { a.obs = e.target.value; })}></textarea></div>
               <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
         </div>`}
     </div>`;
