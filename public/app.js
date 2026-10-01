@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['164', ['📄 Nova folha de impressão da OS: colorida, compacta, organizada por conjunto de móveis, com as especificações de cada conjunto em blocos coloridos e sem campos vazios.', '🟢 Voz ligada ao abrir o app: no Início o assistente já fica ouvindo — fale "cozinha da Cris", "vai pra compras"... Botão Voz ligada/desligada para desligar quando quiser.', '🖱 Rolar dentro da lista de opções não fecha mais; ao rolar a página a lista acompanha.']],
   ['163', ['🔝 Listas de opções/catálogo agora abrem flutuando por cima de tudo, no lugar certo.']],
   ['162', ['👁 Botão "Ver OS" no topo da OS: abre a OS pronta, na folha. Fica destacado depois de revisada.', '⚡ Assistente instantâneo: fale ou escreva "abre a cozinha da Cris", "26 045", "imprime a OS da Aline" ou "vai pra compras" — abre na hora, sem esperar a IA. Perguntas e mudanças continuam indo para a IA.']],
   ['161', ['🔝 Listas de catálogo agora abrem na frente das outras linhas.']],
@@ -4396,7 +4397,7 @@ function Opcoes({ grupos, onPick, rotulo = 'Opções' }) {
   const [q, setQ] = useState('');
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
-  useEffect(() => { if (!aberto) return; const f = () => setAberto(false); const t = setTimeout(() => { window.addEventListener('scroll', f, true); window.addEventListener('resize', f); }, 50);
+  useEffect(() => { if (!aberto) return; const f = (e) => { if (e && e.target && e.target.closest && e.target.closest('.opc-pop')) return; if (e && e.type === 'scroll' && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return setAberto(false); setPos(p => p && ({ ...p, top: r.bottom + 4 + p.h < window.innerHeight ? r.bottom + 4 : Math.max(8, r.top - 4 - p.h), left: Math.max(8, Math.min(r.right - p.w, window.innerWidth - p.w - 8)) })); return; } setAberto(false); }; const t = setTimeout(() => { window.addEventListener('scroll', f, true); window.addEventListener('resize', f); }, 50);
     return () => { clearTimeout(t); window.removeEventListener('scroll', f, true); window.removeEventListener('resize', f); }; }, [aberto]);
   if (!grupos || !grupos.length) return null;
   const nq = norm(q);
@@ -4843,81 +4844,58 @@ async function padronizarNomesTudo(sessao, toast) {
   await updateDoc(docRef('empresas', E), { nomesPadronizados: 2 }).catch(() => {});
   toast && toast('🔤 ' + n + ' registro(s) com nomes padronizados.', 'ok'); return n;
 }
+function gruposEspec(P) {
+  P = P || {}; const F = P.ferragens || {};
+  const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
+  return [
+    ['🎨', 'Acabamentos', '#d97706', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Lâminas', (P.laminas || []).join('; ')], ['Outras', P.outras]]],
+    ['🚪', 'Portas', '#7c3aed', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs]]],
+    ['✋', 'Puxadores & perfis', '#0d9488', [['Itens', [...(P.puxadores || []), ...(P.perfis || [])].join('; ')]]],
+    ['💡', 'Iluminação', '#ca8a04', [['LED', P.led?.ativo !== false ? [P.led?.fita, P.led?.temp, P.led?.perfil, P.led?.fonte, P.led?.locais].filter(Boolean).join(' · ') : '']]],
+    ['🔩', 'Ferragens', '#2563eb', [['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Correr', fl('correr')], ['Passagem', fl('passagem')]]],
+    ['🔒', 'Fechaduras', '#dc2626', [['', textoFech(P.fech) || (P.fechaduras || []).join('; ')]]],
+    ['🪟', 'Vidros', '#0891b2', [['', textoVidro(P.vidros)]]],
+    ['🧵', 'Tecidos', '#db2777', [['', textoTec(P.tec) || (P.tecidos || []).join('; ')]]],
+  ].map(([i, t, c, l]) => [i, t, c, l.filter(([, v]) => v)]).filter(([, , , l]) => l.length);
+}
 function ImpressaoOS({ os, empresa }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
-  const P = os.padrao || {};
-  const F = P.ferragens || {};
-  const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
   const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
   const st = (STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0]).t.replace(/^\d\. /, '');
-  const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : 'Sem tamponamento';
+  const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : '';
   const info = [
-    ['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Prazo de entrega', os.prazoEntrega],
-    ['Endereço', os.cliente?.endereco, 2], ['📍 Endereço de montagem', os.cliente?.enderecoMontagem, 2], ['Arquiteto / designer', os.arquiteto], ['Responsável', os.responsavel],
-    ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']],
-  ];
-  const grupos = [
-    ['Acabamentos', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Outras', P.outras]]],
-    ['Portas & frentes', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs], ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')]]],
-    ['Puxadores & iluminação', [['Puxadores', (P.puxadores || []).join('; ')], ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : '']]],
-    ['Ferragens', [['Dobradiças', fl('dobradicas')], ['Corrediças', fl('corredicas')], ['Portas de correr', fl('correr')], ['Portas de passagem', fl('passagem')]]],
-    ['Fechaduras, vidros & tecidos', [['Fechaduras', textoFech(P.fech) || (P.fechaduras || []).join('; ')], ['Vidros', textoVidro(P.vidros)], ['Tecidos', textoTec(P.tec) || (P.tecidos || []).join('; ')]]],
-    ['Paredes / painéis', [['Parede inteira', P.parede?.ativo ? [P.parede.espec, P.parede.paginacao, P.parede.fixacao].filter(Boolean).join(' — ') : '']]],
-  ].map(([t, l]) => [t, l.filter(([, v]) => v)]).filter(([, l]) => l.length);
-  const et = os.execucao?.etapas || {};
-  const totalMov = (os.ambientes || []).reduce((n, a) => n + (a.moveis || []).length, 0);
+    ['👤', 'Cliente', nomePadrao(os.cliente?.nome)], ['📞', 'Telefone', os.cliente?.telefone], ['🚚', 'Entrega', os.prazoEntrega], ['🏗', 'Obra', os.cliente?.obra],
+    ['📍', 'Montagem', os.cliente?.enderecoMontagem || os.cliente?.endereco], ['📐', 'Arquiteto', os.arquiteto], ['🧑‍🔧', 'Responsável', os.responsavel], ['🧱', 'Tamponamento', tamp],
+  ].filter(([, , v]) => v);
+  const ambs = os.ambientes || [];
+  const totalMov = ambs.reduce((n, a) => n + (a.moveis || []).length, 0);
+  const COLS = [['Qtd', m => m.quantidade, 'c'], ['L × A × P', m => [m.largura, m.altura, m.profundidade].some(Boolean) ? [m.largura, m.altura, m.profundidade].map(x => x || '—').join('×') : '', 'c mono'], ['Caixa', m => mdf(m.mdfCaixa)], ['Frente', m => mdf(m.mdfFrente)], ['Fita', m => m.fitaBorda], ['Ferragens', m => (m.ferragens || []).map(f => (f.quantidade ? f.quantidade + '× ' : '') + [f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' ')).join('; ')], ['Puxador / LED', m => [m.puxador, m.iluminacao].filter(Boolean).join(' · ')]];
   return html`
-    <div class="po" style=${varsCores(cor)}>
+    <div class="po po2" style=${varsCores(cor)}>
       <div class="po-topo">
         <div class="row" style=${{ gap: '12px', flexWrap: 'nowrap', alignItems: 'center' }}><${LogoImp} empresa=${empresa} /><div>
           <div class="po-emp">${empresa || 'Gestão Pró'}</div>
-          <div class="po-tit">Ordem de Serviço</div>
-          <div class="po-sub">${(os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo || ''}</div>
+          <div class="po-tit">${nomePadrao(os.cliente?.nome) || 'Ordem de Serviço'}</div>
+          <div class="po-sub">Ordem de Serviço · ${ambs.length} conjunto(s) · ${totalMov} móvel(is)</div>
         </div></div>
         <div class="po-num">
           <div class="po-cod">${numOS(os)}</div>
           <div class="po-dots">${cor.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</div>
-          <div class="po-meta">${st} · emitida ${new Date().toLocaleDateString('pt-BR')}${os.numeroAntigo ? ' · antiga ' + os.numeroAntigo : ''}</div>
+          <div class="po-meta">${st} · ${new Date().toLocaleDateString('pt-BR')}${os.numeroAntigo ? ' · antiga ' + os.numeroAntigo : ''}</div>
         </div>
       </div>
-
-      <div class="po-info">
-        ${info.map(([k, v, span]) => html`<div key=${k} class="po-cel" style=${span ? { gridColumn: 'span ' + span } : undefined}><small>${k}</small><b>${v || '—'}</b></div>`)}
-      </div>
-
-      ${grupos.length > 0 && html`
-        <div class="po-sec"><span>01</span> Especificações gerais</div>
-        <div class="po-grid">
-          ${grupos.map(([t, l]) => html`<div key=${t} class="po-card"><div class="po-card-t">${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po-kv"><small>${k}</small><div>${v}</div></div>`)}</div>`)}
-        </div>`}
-
-      <div class="po-sec"><span>${grupos.length ? '02' : '01'}</span> Ambientes & móveis <em>${(os.ambientes || []).length} ambientes · ${totalMov} móveis</em></div>
-      ${(os.ambientes || []).map((a, ai) => html`
-        <div key=${a.id || ai} class="po-amb">
-          <div class="po-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span>${a.nome || 'Ambiente'}</div>
-          <table>
-            <thead><tr><th style=${{ width: '24%' }}>Móvel</th><th>Qtd</th><th>L × A × P (mm)</th><th>MDF caixa</th><th>MDF frente</th><th>Fita</th><th>Ferragens</th><th>Puxador / outros</th></tr></thead>
-            <tbody>
-              ${(a.moveis || []).map(m => html`<tr key=${m.id}>
-                <td><b>${m.nome}</b>${m.portas ? html`<br/><small>Portas: ${m.portas}</small>` : ''}${m.gavetas ? html`<br/><small>Gavetas: ${m.gavetas}</small>` : ''}${m.observacoes ? html`<br/><i>${m.observacoes}</i>` : ''}</td>
-                <td class="c">${m.quantidade}</td>
-                <td class="c mono">${[m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ')}</td>
-                <td>${mdf(m.mdfCaixa)}</td><td>${mdf(m.mdfFrente)}</td><td>${m.fitaBorda}</td>
-                <td>${(m.ferragens || []).map(f => html`<div>${f.quantidade ? f.quantidade + '× ' : ''}${[f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' · ')}</div>`)}</td>
-                <td>${m.puxador}${m.iluminacao ? html`<br/>${m.iluminacao}` : ''}</td>
-              </tr>`)}
-              ${!(a.moveis || []).length && html`<tr><td colspan="8" class="c"><i>Sem móveis cadastrados</i></td></tr>`}
-            </tbody>
-          </table>
-        </div>`)}
-
-      ${os.observacoesGerais && html`<div class="po-obs"><b>Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
-
-
-      <div class="po-ass">
-        ${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}
-      </div>
-      ${(os.alteracoes || []).length > 0 && html`<div class="po-sec"><span>⟳</span> Alterações</div><table><tbody>${os.alteracoes.map(a => html`<tr key=${a.n}><td style=${{ width: '18%' }}>${fmtData(a.quando)}</td><td><b>Nº ${a.n}</b> — ${a.motivo} <small>(${a.itens.length} itens · ${a.quem})</small></td></tr>`)}</tbody></table>`}
+      ${info.length > 0 && html`<div class="po2-info">${info.map(([i, k, v]) => html`<div key=${k} class="po2-cel"><span>${i}</span><div><small>${k}</small><b>${v}</b></div></div>`)}</div>`}
+      ${ambs.map((a, ai) => { const g = gruposEspec(a.padrao || os.padrao); const mv = a.moveis || []; const cols = COLS.filter(([, f]) => mv.some(m => f(m)));
+        return html`<div key=${a.id || ai} class="po2-amb">
+          <div class="po2-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span><b>${a.nome || mv.map(m => m.nome).filter(Boolean).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
+          ${g.length > 0 && html`<div class="po2-esp">${g.map(([i, t, c, l]) => html`<div key=${t} class="po2-tile" style=${{ '--k': c }}><div class="po2-tile-t">${i} ${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po2-kv">${k && html`<small>${k}</small>`}<span>${v}</span></div>`)}</div>`)}</div>`}
+          ${mv.length > 0 && html`<table class="po2-tab"><thead><tr><th>Móvel</th>${cols.map(([t]) => html`<th key=${t}>${t}</th>`)}</tr></thead><tbody>
+            ${mv.map(m => html`<tr key=${m.id}><td><b>${m.nome}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}
+          </tbody></table>`}
+        </div>`; })}
+      ${os.observacoesGerais && html`<div class="po-obs"><b>📝 Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
+      <div class="po-ass">${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+      ${(os.alteracoes || []).length > 0 && html`<div class="po-sec"><span>⟳</span> Alterações</div><table><tbody>${os.alteracoes.map(a => html`<tr key=${a.n}><td style=${{ width: '18%' }}>${fmtData(a.quando)}</td><td><b>Nº ${a.n}</b> — ${a.motivo}</td></tr>`)}</tbody></table>`}
       <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}${os.atualizadoEm ? ' · última modificação ' + fmtData(os.atualizadoEm) : ''}</span><span>Gerado pelo Gestão Pró</span></div>
     </div>`;
 }
@@ -6206,7 +6184,13 @@ function acharOSFala(lista, q) {
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
-  const falaB = useFala({ onInterim: (t) => setBusca(t), onFinal: (t) => { falaB.parar && falaB.parar(); const q = String(t).replace(/[.?!]$/, '').trim(); setBusca(q); const o = acharOSFala(listaRef.current || [], q); if (o) { setBusca(''); abrirOS(o.id); } } });
+  const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
+  const autoRef = useRef(vozAuto); autoRef.current = vozAuto;
+  const falaB = useFala({ onInterim: (t) => setBusca(t), onFinal: (t) => { const q = String(t).replace(/[.?!]$/, '').trim(); if (!autoRef.current) falaB.parar && falaB.parar();
+    if (acaoRapida(q)) { setBusca(''); return; } const o = acharOSFala(listaRef.current || [], q); if (o) { setBusca(''); abrirOS(o.id); } else setBusca(q); } });
+  useEffect(() => { if (vozAuto) { const t = setTimeout(() => falaB.iniciar(), 400); return () => clearTimeout(t); } }, []);
+  useEffect(() => () => { try { falaB.parar(); } catch {} }, []);
+  const togAuto = () => { const v = !vozAuto; setVozAuto(v); try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) falaB.iniciar(); else falaB.parar(); };
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_ini_vista') || 'compacto'; } catch { return 'compacto'; } });
   useEffect(() => { try { localStorage.setItem('osm_ini_vista', vista); } catch {} }, [vista]);
@@ -6245,7 +6229,8 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
       <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente… ou fale" value=${busca} onInput=${e => setBusca(e.target.value)} />
-        <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button></div>`;
+        <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button>
+        <button class=${'btn btn-sm voz-auto' + (vozAuto ? ' on' : '')} title="Assistente de voz sempre ouvindo ao abrir o app" onClick=${togAuto}>${vozAuto ? '🟢 Voz ligada' : '⚪ Voz desligada'}</button></div>`;
   if (vista === 'cliente') {
     const grupos = {};
     filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
