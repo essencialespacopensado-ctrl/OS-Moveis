@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['149', ['🔘 Corrigido: o botão Aplica agora aparece (pulsando) embaixo do nome de cada categoria fechada.']],
   ['148', ['🔘 Botão único "Aplica" animado, logo abaixo do nome de cada categoria e de cada material.']],
   ['147', ['🎨 Em Acabamentos & materiais, cada tipo (MDF, Fórmica, Lâmina, Madeira, Laca) é uma linha numerada com Aplica / Não aplica; só o que aplica abre.']],
   ['146', ['📏 Catálogos da OS em lista, um embaixo do outro e numerados em sequência, todos fechados; cada linha só tem Aplica / Não aplica (saíram os botões "possui LED" etc.).']],
