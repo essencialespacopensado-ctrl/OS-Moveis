@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['124', ['🏭 A esteira de produção aparece num lugar só: na OS, aba Andamento. Um botão escolhe Produção interna, Terceirizada interna ou Terceirizada externa. Os parceiros (vidros, esquadrias, pintura…) continuam.']],
   ['123', ['🆕 A janela "O que mudou" agora aparece sempre depois de cada atualização (também no celular) e tem o botão 🆕 Novidades no topo para rever.']],
   ['122', ['👤 Nova aba Clientes (Geral): cadastro manual ou pelo contrato; ao salvar, os dados vão para todas as OS do cliente e saem na folha de impressão.', '✏️ Na edição da OS, os dados do cliente ficam num botão discreto (👤 Dados do cliente).']],
   ['121', ['🏭 Ao abrir a OS, a primeira aba é "Andamento": % de conclusão, compras e parceiros recebidos, pendências e a execução (etapa 3) para marcar ali mesmo.', '← Botão Voltar para a página anterior em todas as telas.']],
@@ -1915,7 +1916,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       ${etapa === 1 && html`
         <div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><button class="btn btn-sm btn-ghost" onClick=${() => setPainelCA('cliente')}>👤 Dados do cliente</button><small class="dim">${os.cliente?.nome || ''}${os.prazoEntrega ? ' · entrega ' + os.prazoEntrega : ''}</small>
           <button class="btn btn-marrom btn-sm" style=${{ marginLeft: 'auto' }} onClick=${() => ir(2)}>Conjuntos de móveis →</button></div>
-        <${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
+        <div class="card page-card vazio dim">🏭 A esteira de produção fica na OS, aba <b>Andamento</b>.</div>`}
 
       ${etapa === 2 && html`
         ${cartaoVoz}
@@ -1944,10 +1945,6 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
               <div class="field"><label class="lbl">MDF interno (caixaria)</label><input class="inp" placeholder="Ex: MDF Branco TX 15mm" value=${P.acab?.interno?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.interno = { ...(p.acab.interno || {}), desc: e.target.value }; })} /></div>
               <div class="field"><label class="lbl">MDF externo (frentes e tamponamento)</label><input class="inp" placeholder="Ex: MDF Freijó Puro Duratex 18mm" value=${P.acab?.externo?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.externo = { ...(p.acab.externo || {}), desc: e.target.value }; })} /></div>
             </div>
-            <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
-              <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
-                <option value="interna">Execução 100% interna</option><option value="terceirizada">Execução 100% terceirizada</option><option value="mista">Mista / híbrida</option>
-              </select></div>
             <div class="field"><label class="lbl" for="os-obs">Observações e detalhes técnicos acordados na reunião</label><textarea id="os-obs" class="inp" rows="3" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
           </div>
         <div class="card page-card stack">
@@ -1993,7 +1990,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           </div>`; })()}
         </div></details>`}
 
-      ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
+      ${etapa === 3 && html`<div class="card page-card vazio">🏭 A esteira de produção fica na OS, aba <b>Andamento</b> (toque na OS para abrir).</div>`}
       </fieldset>
       ${pedirVoltar && html`<${SenhaMotivo} titulo=${'Voltar a OS para ' + pedirVoltar.t.replace(/^\d\. /, '')} texto="Voltar um processo que já começou precisa de senha e motivo." botao="Voltar etapa"
         onOk=${async (motivo) => { alterar(o => { o.reaberturas = [...(o.reaberturas || []), { oque: 'Status da OS: ' + (STATUS_OS.find(x => x.v === o.status) || {}).t + ' → ' + pedirVoltar.t, motivo, quem: sessao.nome, quando: nowIso() }]; o.status = pedirVoltar.v; }); toast('Processo reaberto.', 'ok'); }} fechar=${() => setPedirVoltar(null)} />`}
@@ -4665,66 +4662,32 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
   const setPar = (k, v) => alterar(o => { o.execucao = o.execucao || {}; o.execucao.parceiro = { ...(o.execucao.parceiro || {}), [k]: v }; });
   const MODOS = [['interna', 'Execução 100% interna', 'Toda a produção na marcenaria própria: corte, fita, usinagem, acabamento e montagem.', 'Controle total de prazos'], ['terceirizada', 'Execução 100% terceirizada', 'Produção entregue pronta por parceiro externo (central de corte, nesting ou prestador).', 'Escalabilidade alta'], ['mista', 'Execução mista / híbrida', 'Por etapa: ex. corte na central parceira, fita, laca e montagem internas.', 'Flexibilidade ideal']];
 
+  const modo = os.modoExecucao === 'terceirizada' ? 'terc_ext' : (os.modoExecucao || 'interna');
+  const MODOS3 = [['interna', '🏭 Produção interna'], ['terc_int', '🤝 Terceirizada interna'], ['terc_ext', '🚚 Terceirizada externa']];
+  const escolherModo = (m) => alterar(o => { o.modoExecucao = m; o.execucao = o.execucao || {}; o.execucao.etapas = o.execucao.etapas || {}; ETAPAS_FAB.forEach(([k]) => { o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), onde: m === 'interna' ? 'interna' : 'terceirizada' }; }); });
   return html`
-    <div class="card page-card stack" style=${{ display: 'none' }}>
-      <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div><span class="chip chip-accent">AUTOMAÇÃO DA OFICINA</span> <b>Esteira de produção</b><div class="dim">Ao concluir uma etapa, a próxima começa sozinha e o status da OS acompanha.</div></div>
-        ${ETAPAS_FAB.every(([k]) => et(k).status === 'pendente') && html`<button class="btn btn-primary" onClick=${() => setEt('corte', { status: 'andamento' })}>▶ Iniciar produção</button>`}
+    <div class="card page-card stack">
+      <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+        <div><b>🏭 Esteira de produção</b><div class="dim">Ao concluir uma etapa, a próxima começa sozinha e o status da OS acompanha.</div></div>
+        <div class="seg-mini">${MODOS3.map(([v, t]) => html`<button key=${v} class=${modo === v ? 'on' : ''} onClick=${() => escolherModo(v)}>${t}</button>`)}</div>
       </div>
+      ${ETAPAS_FAB.every(([k]) => et(k).status === 'pendente') && html`<button class="btn btn-primary btn-anim" style=${{ alignSelf: 'flex-start' }} onClick=${() => setEt(ETAPAS_FAB[0][0], { status: 'andamento' })}>▶ Iniciar produção</button>`}
       <div class="esteira">
         ${ETAPAS_FAB.map(([k, t], i) => { const e = et(k); return html`
           <div key=${k} class=${'est-card ' + e.status}>
-            <div class="row" style=${{ justifyContent: 'space-between' }}><small class="mono">0${i + 1}</small><small class="est-st">${ST_FAB[e.status]}</small></div>
-            <b>${t}</b><small class="dim">${e.onde === 'terceirizada' ? 'Terceirizada' : 'Interna'}</small>
+            <div class="row" style=${{ justifyContent: 'space-between' }}><small class="mono">${String(i + 1).padStart(2, '0')}</small><small class="est-st">${ST_FAB[e.status]}</small></div>
+            <b>${t}</b>
             ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setReabrir(k)}>↺ Reabrir</button>`
               : e.status === 'andamento' ? html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir</button>`
               : html`<button class="btn btn-sm" onClick=${() => setEt(k, { status: 'andamento' })}>▶ Iniciar</button>`}
           </div>`; })}
       </div>
-    </div>
-
-    <div class="card page-card stack">
-      <div class="sec-title">1. Seleção do modelo operacional</div>
-      <div class="opcoes3">
-        ${MODOS.map(([v, t, d, tag]) => html`
-          <button key=${v} class=${'opc grande' + ((os.modoExecucao || 'interna') === v ? ' on' : '')} onClick=${() => setModo(v)}>
-            ${(os.modoExecucao || 'interna') === v && html`<span class="chip chip-teal" style=${{ alignSelf: 'flex-end' }}>✓ Selecionado</span>`}
-            <b>${t}</b><small>${d}</small><small style=${{ color: 'var(--text)', fontWeight: 700, marginTop: '6px' }}>${tag}</small>
-          </button>`)}
-      </div>
-    </div>
-
-    <div class="card page-card stack">
-      <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div class="sec-title">2. Etapas de fabricação & controles</div>
-        <span class="chip">${nInt} internas • ${6 - nInt} terceirizadas</span>
-      </div>
-      ${ETAPAS_FAB.map(([k, t, d], i) => { const e = et(k); return html`
-        <div key=${k} class="fab-linha">
-          <div class="grow"><b>${t}</b> <span class=${'chip ' + (e.status === 'pronto' ? 'chip-ok' : e.status === 'andamento' ? 'chip-accent' : '')}>${ST_FAB[e.status]}</span><div class="dim">${d}</div>
-            ${e.onde === 'terceirizada' && html`<div class="grid3" style=${{ marginTop: '6px' }}>
-              <input class="inp inp-sm" placeholder="Parceiro / central externa" value=${e.parceiro || ''} onInput=${ev => setEt(k, { parceiro: ev.target.value })} />
-              <input class="inp inp-sm" placeholder="Prazo previsto (dd/mm/aaaa)" value=${e.prazo || ''} onInput=${ev => setEt(k, { prazo: ev.target.value })} />
-              <input class="inp inp-sm" placeholder="Status no parceiro" value=${e.stParceiro || ''} onInput=${ev => setEt(k, { stParceiro: ev.target.value })} />
-            </div>`}
-          </div>
-          <div class="seg-mini">
-            <button class=${e.onde === 'interna' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'interna' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Interna</button>
-            <button class=${e.onde === 'terceirizada' ? 'on' : ''} onClick=${() => { setEt(k, { onde: 'terceirizada' }); if (os.modoExecucao !== 'mista') alterar(o => { o.modoExecucao = 'mista'; }); }}>Terceirizada</button>
-          </div>
-          ${e.status === 'pronto' ? html`<button class="btn btn-sm" onClick=${() => setReabrir(k)}>↺ Reabrir</button>` : html`<button class="btn btn-sm btn-primary" onClick=${() => concluir(i)}>✓ Concluir & avançar</button>`}
-        </div>`; })}
-    </div>
-
-    <div class="card page-card stack">
-      <div class="sec-title">🚚 3. Central parceira & logística externa</div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Central / fornecedor parceiro</span><input class="inp" value=${par.nome || ''} onInput=${e => setPar('nome', e.target.value)} /></div>
+      ${modo !== 'interna' && html`<details><summary class="dim" style=${{ cursor: 'pointer' }}>🚚 Dados do parceiro (${modo === 'terc_int' ? 'terceirizada interna' : 'terceirizada externa'})</summary><div class="grid2" style=${{ marginTop: '8px' }}>
+        <div class="field"><span class="lbl">Parceiro</span><input class="inp" value=${par.nome || ''} onInput=${e => setPar('nome', e.target.value)} /></div>
         <div class="field"><span class="lbl">Contato / WhatsApp</span><input class="inp" value=${par.contato || ''} onInput=${e => setPar('contato', e.target.value)} /></div>
-        <div class="field"><span class="lbl">Código do pedido / orçamento</span><input class="inp" value=${par.pedido || ''} onInput=${e => setPar('pedido', e.target.value)} /></div>
-        <div class="field"><span class="lbl">Custo estimado do parceiro (R$)</span><input class="inp mono" inputmode="decimal" value=${par.custo || ''} onInput=${e => setPar('custo', e.target.value)} /></div>
-      </div>
-      <div class="field"><span class="lbl">Observações de produção & arquivos de corte</span><textarea class="inp" rows="2" value=${par.obs || ''} onInput=${e => setPar('obs', e.target.value)}></textarea></div>
+        <div class="field"><span class="lbl">Pedido / orçamento</span><input class="inp" value=${par.pedido || ''} onInput=${e => setPar('pedido', e.target.value)} /></div>
+        <div class="field"><span class="lbl">Custo (R$)</span><input class="inp mono" inputmode="decimal" value=${par.custo || ''} onInput=${e => setPar('custo', e.target.value)} /></div>
+      </div></details>`}
       ${reabrir && html`<${SenhaMotivo} titulo=${'Reabrir etapa: ' + (ETAPAS_FAB.find(e => e[0] === reabrir) || [])[1]} texto="Esta etapa já foi concluída. Para reabrir, informe o motivo e a senha." botao="Reabrir etapa"
         onOk=${async (motivo) => { alterar(o => { o.reaberturas = [...(o.reaberturas || []), { oque: 'Etapa ' + (ETAPAS_FAB.find(e => e[0] === reabrir) || [])[1] + ' reaberta', motivo, quem: sessao?.nome || '', quando: nowIso() }]; o.execucao.etapas[reabrir] = { ...(o.execucao.etapas[reabrir] || {}), status: 'andamento' }; }); toast && toast('Etapa reaberta.', 'ok'); }} fechar=${() => setReabrir(null)} />`}
     </div>`;
