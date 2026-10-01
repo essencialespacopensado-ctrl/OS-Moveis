@@ -116,7 +116,7 @@ function rateOk(uid) {
 
 // ---------- Modelos de dados que a IA devolve ----------
 const OS_SCHEMA = `{
-  "cliente": {"nome": "", "telefone": "", "endereco": "", "obra": ""},
+  "cliente": {"nome": "", "telefone": "", "endereco": "", "enderecoMontagem": "", "obra": ""},
   "prazoEntrega": "dd/mm/aaaa",
   "observacoesGerais": "",
   "responsavel": "", "arquiteto": "", "ambienteResumo": "Cozinha, Suíte",
@@ -288,6 +288,10 @@ Leia o CONTRATO (e anexos/detalhamentos) de móveis planejados e extraia TUDO o 
 cliente (nome, telefone, endereço, obra), prazo de entrega, arquiteto, ambientes e móveis contratados com medidas e materiais,
 acabamentos, cores de MDF, ferragens, puxadores, LED, vidros, fechaduras, tecidos e observações técnicas.
 Coloque cada informação no seu campo. Não invente nada.
+LEIA COM ATENÇÃO: o CONTRATANTE é o cliente (não a marcenaria/contratada). Nome completo do cliente sem CPF. Telefone com DDD.
+"endereco" = endereço do cliente (residencial/cobrança). "enderecoMontagem" = local da obra/entrega/montagem dos móveis (se for o mesmo, repita).
+"obra" = nome curto do empreendimento/condomínio/apartamento. Prazo de entrega no formato dd/mm/aaaa (se vier em dias, calcule a partir da data de assinatura).
+Valor total com R$. Forma de pagamento resumida (entrada + parcelas). Cada AMBIENTE contratado (cozinha, suíte, banheiro…) é um item separado em "ambientes", com os móveis listados.
 Além da OS, devolva no topo "contrato": {"numero": "", "dataAssinatura": "", "valorTotal": "", "formaPagamento": "",
 "prazoContratual": "", "garantia": "", "clausulasImportantes": ["multas, condições de entrega, o que NÃO está incluso, etc."]}.
 
