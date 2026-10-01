@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['138', ['📑 Leitura do contrato revisável: todos os dados lidos (cliente, endereços, prazo, arquiteto, nº, valor, pagamento) ficam editáveis antes de criar as OS; campos vazios em amarelo.', '📍 Novo campo "Endereço de montagem" no cliente e na OS (também lido do contrato).']],
   ['137', ['🧪 Botão de testes ao lado do 🛠 Desenvolvedor: escolha OS e zere as esteiras (escritório e produção) e os tempos.']],
   ['136', ['▶ Botão para iniciar cada esteira (escritório e produção).', '⏱ Tempo de cada etapa aparece embaixo dela (e o tempo da etapa atual correndo), mais o total do escritório e da produção.']],
   ['135', ['🗂🏭 Duas esteiras na OS (aba Andamento): uma com as etapas do escritório e outra com as etapas da produção, cada uma com avançar/voltar.']],
@@ -234,7 +235,7 @@ function sanearOS(o) {
   const s = (v) => (v == null ? '' : String(v));
   const mdf = (m) => ({ fabricante: s(m?.fabricante), cor: s(m?.cor), espessura: s(m?.espessura || '').replace(/\D/g, '') || '' });
   return {
-    cliente: { nome: s(o.cliente?.nome), telefone: s(o.cliente?.telefone), endereco: s(o.cliente?.endereco), obra: s(o.cliente?.obra) },
+    cliente: { nome: s(o.cliente?.nome), telefone: s(o.cliente?.telefone), endereco: s(o.cliente?.endereco), enderecoMontagem: s(o.cliente?.enderecoMontagem), obra: s(o.cliente?.obra) },
     prazoEntrega: s(o.prazoEntrega),
     observacoesGerais: s(o.observacoesGerais),
     ...(o.padrao && typeof o.padrao === 'object' ? { padrao: o.padrao } : {}),
@@ -1930,7 +1931,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
               <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
               <div class="field"><label class="lbl" for="os-obra">Obra / local</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
             </div>
-            <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
+            <div class="field"><label class="lbl" for="os-end">Endereço do cliente</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
+            <div class="field"><label class="lbl" for="os-endm">📍 Endereço de montagem</label><input id="os-endm" class="inp" placeholder="Se for diferente do endereço do cliente" value=${os.cliente?.enderecoMontagem || ''} onInput=${setCli('enderecoMontagem')} /></div>
             <div class="grid2">
               <div class="field"><label class="lbl" for="os-resp">Responsável</label><input id="os-resp" class="inp" value=${os.responsavel || ''} placeholder=${sessao.nome} onInput=${e => alterar(o => { o.responsavel = e.target.value; })} /></div>
               <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} onBlur=${e => alterar(o => { o.arquiteto = nomePadrao(e.target.value); })} /></div>
@@ -2287,9 +2289,10 @@ function TelaContratos({ sessao, catalogo, toast, abrirOS }) {
 
       ${res && html`
         <div class="card page-card stack" style=${{ borderColor: '#b45309' }}>
-          <div class="sec-title">✅ Confira o que a IA encontrou</div>
+          <div class="sec-title">✅ Revise o que a IA leu do contrato</div>
+          <div class="dim" style=${{ marginTop: '-6px' }}>Tudo é editável. Campos em amarelo ficaram vazios — preencha antes de criar as OS.</div>
           <div class="grid3">
-            ${[['Cliente', res.os.cliente.nome], ['Telefone', res.os.cliente.telefone], ['Obra', res.os.cliente.obra], ['Endereço', res.os.cliente.endereco], ['Prazo de entrega', res.os.prazoEntrega], ['Nº contrato', txtC(C.numero)], ['Assinatura', txtC(C.dataAssinatura)], ['Valor', txtC(C.valorTotal)], ['Pagamento', txtC(C.formaPagamento)]].map(([k, v]) => html`<div key=${k} class="kv-mini"><small>${k}</small><b>${v || '—'}</b></div>`)}
+            ${[['Cliente', 'c', 'nome'], ['Telefone', 'c', 'telefone'], ['Obra', 'c', 'obra'], ['Endereço do cliente', 'c', 'endereco'], ['Endereço de montagem', 'c', 'enderecoMontagem'], ['Prazo de entrega', 'o', 'prazoEntrega'], ['Arquiteto', 'o', 'arquiteto'], ['Nº contrato', 'k', 'numero'], ['Assinatura', 'k', 'dataAssinatura'], ['Valor', 'k', 'valorTotal'], ['Pagamento', 'k', 'formaPagamento']].map(([t, onde, k]) => { const v = onde === 'c' ? res.os.cliente[k] : onde === 'o' ? res.os[k] : txtC(C[k]); return html`<div key=${k} class="field"><span class="lbl">${t}</span><input class=${'inp inp-sm' + (!v ? ' need-review' : '')} value=${v || ''} onInput=${e => { const val = e.target.value; setRes(r => onde === 'c' ? { ...r, os: { ...r.os, cliente: { ...r.os.cliente, [k]: val } } } : onde === 'o' ? { ...r, os: { ...r.os, [k]: val } } : { ...r, contrato: { ...r.contrato, [k]: val } }); }} onBlur=${e => ['nome', 'obra', 'arquiteto'].includes(k) && setRes(r => onde === 'c' ? { ...r, os: { ...r.os, cliente: { ...r.os.cliente, [k]: nomePadrao(e.target.value) } } } : { ...r, os: { ...r.os, [k]: nomePadrao(e.target.value) } })} /></div>`; })}
           </div>
           ${txtC(C.clausulasImportantes) && html`<div class="dica"><b>Cláusulas importantes:</b><div style=${{ whiteSpace: 'pre-wrap' }}>${txtC(C.clausulasImportantes)}</div></div>`}
           <span class="lbl">Ambientes encontrados (${res.os.ambientes.length})</span>
@@ -4030,7 +4033,7 @@ function VisaoTemas({ os }) {
   const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
   const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura + ' mm' : '') : '';
   const temas = [
-    ['cli', '👤', 'Cliente & obra', [['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Endereço', os.cliente?.endereco], ['Prazo de entrega', os.prazoEntrega ? dm(os.prazoEntrega) + '/' + os.prazoEntrega.slice(0, 4) : ''], ['Arquiteto', os.arquiteto], ['Responsável', os.responsavel], ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']]]],
+    ['cli', '👤', 'Cliente & obra', [['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Endereço', os.cliente?.endereco], ['Endereço de montagem', os.cliente?.enderecoMontagem], ['Prazo de entrega', os.prazoEntrega ? dm(os.prazoEntrega) + '/' + os.prazoEntrega.slice(0, 4) : ''], ['Arquiteto', os.arquiteto], ['Responsável', os.responsavel], ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']]]],
     ['acab', '🎨', 'Acabamentos', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Outras', P.outras]]],
     ['portas', '🚪', 'Portas & frentes', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs], ['Lâminas', (P.laminas || []).join('; ')], ['Perfis', (P.perfis || []).join('; ')]]],
     ['pux', '💡', 'Puxadores & iluminação', [['Puxadores', (P.puxadores || []).join('; ')], ['LED', P.led?.ativo ? [P.led.fita, P.led.temp, P.led.perfil, P.led.fonte, P.led.locais].filter(Boolean).join(' · ') : '']]],
@@ -4883,7 +4886,7 @@ function ImpressaoOS({ os, empresa }) {
   const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : 'Sem tamponamento';
   const info = [
     ['Cliente', os.cliente?.nome], ['Telefone', os.cliente?.telefone], ['Obra', os.cliente?.obra], ['Prazo de entrega', os.prazoEntrega],
-    ['Endereço', os.cliente?.endereco, 2], ['Arquiteto / designer', os.arquiteto], ['Responsável', os.responsavel],
+    ['Endereço', os.cliente?.endereco, 2], ['📍 Endereço de montagem', os.cliente?.enderecoMontagem, 2], ['Arquiteto / designer', os.arquiteto], ['Responsável', os.responsavel],
     ['Tamponamento', tamp], ['Execução', ({ interna: 'Interna', terceirizada: 'Terceirizada', mista: 'Mista' })[os.modoExecucao || 'interna']],
   ];
   const grupos = [
@@ -5613,14 +5616,14 @@ function TelaManual({ abas, irPara }) {
 }
 
 /* ---------- Cadastro de clientes (manual ou pelo contrato) → repassa para todas as OS ---------- */
-const CAMPOS_CLI = [['nome', 'Nome do cliente'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['documento', 'CPF / CNPJ'], ['endereco', 'Endereço'], ['obra', 'Obra / local'], ['arquiteto', 'Arquiteto / designer'], ['obs', 'Observações']];
+const CAMPOS_CLI = [['nome', 'Nome do cliente'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['documento', 'CPF / CNPJ'], ['endereco', 'Endereço do cliente'], ['enderecoMontagem', 'Endereço de montagem'], ['obra', 'Obra / local'], ['arquiteto', 'Arquiteto / designer'], ['obs', 'Observações']];
 async function aplicarClienteNasOS(sessao, c, nomeAntigo) {
   const { getDocs, writeBatch } = F().fsMod; const E = sessao.empresaId;
   const oss = (await getDocs(col('empresas', E, 'os'))).docs.map(d => ({ id: d.id, ...d.data() }));
   const alvo = oss.filter(o => [norm(baseCli(nomeAntigo || c.nome)), norm(c.nome)].includes(norm(baseCli(o.cliente?.nome))));
   const b = writeBatch(F().db);
   alvo.forEach(o => { const nm = String(o.cliente?.nome || ''); const suf = nm.slice(baseCli(nm).length);
-    b.update(docRef('empresas', E, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: c.nome + suf, telefone: c.telefone || o.cliente?.telefone || '', endereco: c.endereco || o.cliente?.endereco || '', obra: c.obra || o.cliente?.obra || '', email: c.email || o.cliente?.email || '' }, ...(c.arquiteto ? { arquiteto: c.arquiteto } : {}), clienteId: c.id || '', atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); });
+    b.update(docRef('empresas', E, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: c.nome + suf, telefone: c.telefone || o.cliente?.telefone || '', endereco: c.endereco || o.cliente?.endereco || '', enderecoMontagem: c.enderecoMontagem || o.cliente?.enderecoMontagem || '', obra: c.obra || o.cliente?.obra || '', email: c.email || o.cliente?.email || '' }, ...(c.arquiteto ? { arquiteto: c.arquiteto } : {}), clienteId: c.id || '', atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); });
   if (alvo.length) await b.commit();
   alvo.forEach(o => registrar(sessao, o.id, '👤', 'Dados do cliente atualizados pelo cadastro', c.nome));
   return alvo.length;
@@ -5643,7 +5646,7 @@ function TelaClientes({ sessao, toast, catalogo }) {
     if (!file) return; setLendo('Lendo contrato…');
     try { const { texto, imagens } = await extrairArquivo(file); const r = await chamarIA('contrato_os', { texto, temImagens: imagens.length > 0, os: {}, catalogo: [] }, imagens);
       const cl = r.cliente || {}; const ex = (lista || []).find(c => norm(c.nome) === norm(baseCli(cl.nome)) || cliParecido(c.nome, cl.nome));
-      setEd({ ...(ex || {}), nome: ex?.nome || baseCli(cl.nome) || '', telefone: cl.telefone || ex?.telefone || '', endereco: cl.endereco || ex?.endereco || '', obra: cl.obra || ex?.obra || '', arquiteto: r.arquiteto || ex?.arquiteto || '', _antigo: ex?.nome || '' });
+      setEd({ ...(ex || {}), nome: ex?.nome || nomePadrao(baseCli(cl.nome)) || '', telefone: cl.telefone || ex?.telefone || '', endereco: cl.endereco || ex?.endereco || '', enderecoMontagem: cl.enderecoMontagem || ex?.enderecoMontagem || '', obra: cl.obra || ex?.obra || '', arquiteto: r.arquiteto || ex?.arquiteto || '', _antigo: ex?.nome || '' });
       toast('Confira os dados lidos do contrato e salve.', 'ok');
     } catch (e) { toast('Não li o contrato: ' + e.message, 'erro'); }
     setLendo('');
@@ -5663,7 +5666,7 @@ function TelaClientes({ sessao, toast, catalogo }) {
       <b>${c.nome}</b><small>${[c.telefone, c.obra || c.endereco, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ') || 'sem dados'}</small><span class="chip">${os.length} OS</span></div>`; })}</div>`}
     ${ed && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEd(null)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">👤 ${ed.id ? 'Editar cliente' : 'Novo cliente'}</div><button class="x-btn" onClick=${() => setEd(null)}>✕</button></div>
-      <div class="grid2">${CAMPOS_CLI.map(([k, t]) => html`<div key=${k} class="field" style=${k === 'obs' || k === 'endereco' ? { gridColumn: '1/-1' } : null}><span class="lbl">${t}</span><input class="inp" value=${ed[k] || ''} onInput=${e => setEd({ ...ed, [k]: e.target.value })} onBlur=${e => ['nome', 'arquiteto', 'obra'].includes(k) && setEd(x => ({ ...x, [k]: nomePadrao(e.target.value) }))} /></div>`)}</div>
+      <div class="grid2">${CAMPOS_CLI.map(([k, t]) => html`<div key=${k} class="field" style=${['obs', 'endereco', 'enderecoMontagem'].includes(k) ? { gridColumn: '1/-1' } : null}><span class="lbl">${t}</span><input class="inp" value=${ed[k] || ''} onInput=${e => setEd({ ...ed, [k]: e.target.value })} onBlur=${e => ['nome', 'arquiteto', 'obra'].includes(k) && setEd(x => ({ ...x, [k]: nomePadrao(e.target.value) }))} /></div>`)}</div>
       <small class="dim">Ao salvar, nome, telefone, endereço, obra e arquiteto são atualizados em ${osDe(ed._antigo || ed.nome).length} OS deste cliente.</small>
       <button class="btn btn-primary btn-block btn-anim" onClick=${salvar}>💾 Salvar e atualizar as OS</button></div></div>`, document.body)}
   </div>`;
