@@ -1389,3 +1389,9 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .amb-esp .grid2,.amb-esp .grid3{gap:6px!important}
 .amb-esp>.stack{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px!important}
 .movel-card{padding:8px 10px!important;border-radius:12px!important}
+.sec-apl{position:relative}
+.tog-apl{position:absolute;top:10px;right:10px;display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;z-index:2}
+.tog-apl button{border:0;background:transparent;color:var(--text);padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s}
+.tog-apl button.on{background:#16a34a;color:#fff}.tog-apl button.on.nao{background:#9ca3af}
+.sec-apl>:nth-child(2){padding-right:170px}
+.nao-aplica{opacity:.65}.nao-aplica>*:not(.tog-apl):not(:nth-child(2)){display:none!important}

@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['140', ['✓/✕ Cada catálogo (acabamentos, portas, LED, ferragens, fechaduras, vidros, tecidos) tem botão Aplica / Não aplica; ao marcar Não aplica ele fecha.']],
   ['139', ['🎨 Acabamentos e materiais agora ficam dentro de cada conjunto de móveis (botão "Acabamentos & materiais deste conjunto"), e não mais soltos na OS.']],
   ['138', ['📑 Leitura do contrato revisável: todos os dados lidos (cliente, endereços, prazo, arquiteto, nº, valor, pagamento) ficam editáveis antes de criar as OS; campos vazios em amarelo.', '📍 Novo campo "Endereço de montagem" no cliente e na OS (também lido do contrato).']],
   ['137', ['🧪 Botão de testes ao lado do 🛠 Desenvolvedor: escolha OS e zere as esteiras (escritório e produção) e os tempos.']],
@@ -4571,10 +4572,12 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
   const setTec = (k, v) => setP(p => { p.tec = { ...(p.tec || tec), [k]: v }; });
   const vid = P.vidros || {};
   const setVid = (k, v) => setP(p => { p.vidros = { ...(p.vidros || {}), [k]: v }; });
+  const naoApl = (k) => !!(P.naoAplica || {})[k];
+  const togApl = (k) => html`<div class="tog-apl"><button class=${!naoApl(k) ? 'on' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: false }; })}>✓ Aplica</button><button class=${naoApl(k) ? 'on nao' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: true }; })}>✕ Não aplica</button></div>`;
   const simNao = (ativo, set, sim, nao) => html`<div class="seg-mini"><button class=${!ativo ? 'on' : ''} onClick=${() => set('ativo', false)}>${nao}</button><button class=${ativo ? 'on' : ''} onClick=${() => set('ativo', true)}>${sim}</button></div>`;
 
   return html`
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('acab') ? ' nao-aplica' : '')}>${togApl('acab')}
       <div class="sec-title"><span class="num-sec">1</span> Acabamentos & materiais</div>
       <div class="dim" style=${{ marginTop: '-6px' }}>Padrão geral da OS. Cada móvel pode seguir este padrão ou ter o seu próprio (item 11).</div>
       <div class="grid2" style=${{ alignItems: 'start' }}>
@@ -4584,7 +4587,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
       <div class="field"><span class="lbl">Outras características da especificação</span><input class="inp" placeholder="Ex: fita de borda ABS 1mm colada com PUR nas áreas molhadas" value=${P.outras || ''} onInput=${e => setP(p => { p.outras = e.target.value; })} /></div>
     </div>
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('portas') ? ' nao-aplica' : '')}>${togApl('portas')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div class="sec-title"><span class="num-sec">2</span> Portas (modelo, usinagem & estilo)</div>
         ${P.portas?.modelo && html`<span class="chip chip-accent">✓ ${P.portas.modelo}</span>`}
@@ -4605,7 +4608,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
     </div>
     <${ListaItens} num="5" titulo="Puxadores" itens=${P.puxadores} onChange=${v => setP(p => { p.puxadores = v; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} grupos=${op.PUXADOR} />
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('led') ? ' nao-aplica' : '')}>${togApl('led')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div class="sec-title"><span class="num-sec">6</span> Iluminação LED</div>
         ${simNao(!!led.ativo, setLed, 'Sim, possui LED', 'Sem LED')}
@@ -4621,7 +4624,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
         </div>`}
     </div>
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('ferr') ? ' nao-aplica' : '')}>${togApl('ferr')}
       <div class="sec-title"><span class="num-sec">7</span> Ferragens & sistemas de portas de correr</div>
       <div class="dim" style=${{ marginTop: '-6px' }}>Escreva livre em qualquer campo ou use ☰ Opções com marcas e modelos consagrados.</div>
       <div class="abas-linha">${FER_ABAS.map(x => html`<button key=${x.k} class=${aba === x.k ? 'on' : ''} onClick=${() => setAba(x.k)}>${x.t}${Object.values((P.ferragens || {})[x.k] || {}).some(Boolean) ? ' ✓' : ''}</button>`)}</div>
@@ -4633,7 +4636,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
       </div>
     </div>
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('fech') ? ' nao-aplica' : '')}>${togApl('fech')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div class="sec-title"><span class="num-sec">8</span> Fechaduras & travamentos</div>
         ${simNao(!!fech.ativo, setFech, 'Sim, possui trava', 'Sem fechadura')}
@@ -4653,7 +4656,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
         </div>`}
     </div>
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('vidros') ? ' nao-aplica' : '')}>${togApl('vidros')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div class="sec-title"><span class="num-sec">9</span> Vidros & espelhos</div>
         ${simNao(!!vid.ativo, setVid, 'Sim, possui vidro', 'Sem vidro')}
@@ -4670,7 +4673,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
         <input class="inp" placeholder="Observações (fornecedor, medidas, furação)" value=${vid.obs || ''} onInput=${e => setVid('obs', e.target.value)} />`}
     </div>
 
-    <div class="card page-card stack">
+    <div class=${'card page-card stack sec-apl' + (naoApl('tec') ? ' nao-aplica' : '')}>${togApl('tec')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
         <div class="sec-title"><span class="num-sec">10</span> Tecidos & tapeçaria / estofamento</div>
         ${simNao(!!tec.ativo, setTec, 'Sim, possui estofado', 'Sem estofado')}
