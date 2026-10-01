@@ -1456,3 +1456,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .nao-aplica>*:not(.apl-ov):not(:nth-child(2)){display:none!important}
 .nao-aplica{opacity:1;padding:10px 12px!important}
 .sec-apl:hover{transform:translateX(4px)}
+.nao-aplica>.apl-ov,.sec-apl>.apl-ov{display:block!important;order:0}

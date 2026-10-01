@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['154', ['🧾 Cabeçalho da edição sem o nome do cliente repetido; 🎨 Cores num botão (abre as bolinhas só quando quiser).', '🔧 Corrigido: tocar na linha da categoria (Acabamentos, Portas, Lâminas, LED…) agora abre e fecha.']],
   ['153', ['🪑 "+ Adicionar móvel" cria um bloco novo (como um ambiente) com todas as categorias.', '👆 A própria linha da categoria abre/fecha (sem botão Aplica).', '🧱 Tamponamento foi para dentro de Acabamentos & materiais.']],
   ['152', ['🧹 Saiu o aviso "Revisar: largura, altura…" dos móveis.']],
   ['151', ['🎨 Materiais (MDF, Fórmica, Lâmina, Madeira, Laca) viraram botões pequenos lado a lado.', '📦 Caixa, frentes, prateleiras e ⚙ espessuras ficam só dentro de Acabamentos & materiais.']],
@@ -1782,6 +1783,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const [imprimirPedido, setImprimirPedido] = useState(null);
   const [pedirVoltar, setPedirVoltar] = useState(null);
   const [painelCA, setPainelCA] = useState(null);
+  const [verCores, setVerCores] = useState(false);
   const [pedirLib, setPedirLib] = useState(false);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
@@ -1867,8 +1869,9 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <span class="dim">${salvando ? 'Salvando…' : dup ? '' : sujo ? 'Alterações pendentes' : 'Tudo salvo ✓'}</span>
           <button class="btn btn-sm btn-verde" disabled=${sairDepois} onClick=${() => setSairDepois(true)}>${sairDepois ? 'Salvando…' : '💾 Salvar e fechar'}</button>
         </div>
-        <div class="row" style=${{ gap: '6px' }}><span class="os-num num-badge">${numOS(os)}</span><b>${os.cliente?.nome || 'Cliente'}</b><span class="dim">• ${(os.ambientes || []).map(x => x.nome).join(', ') || 'sem ambientes'}</span>
-          <${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} travada=${bloqueada} />
+        <div class="row" style=${{ gap: '6px' }}>
+          <button class=${'btn btn-sm' + (verCores ? ' btn-primary' : '')} onClick=${() => setVerCores(v => !v)}>🎨 Cores</button>
+          ${verCores && html`<${PaletaOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} travada=${bloqueada} />`}
           <button class="btn btn-sm" onClick=${organizar} disabled=${organizando || bloqueada} title="A IA coloca cada informação no seu campo">${organizando ? 'Organizando…' : '✨ Organizar campos'}</button>
         </div>
       </div>
