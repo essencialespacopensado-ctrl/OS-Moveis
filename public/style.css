@@ -1459,3 +1459,7 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .nao-aplica>.apl-ov,.sec-apl>.apl-ov{display:block!important;order:0}
 .sec-apl.nao-aplica>button.apl-ov.apl-ov,.sec-apl>button.apl-ov.apl-ov{display:block!important}
 .amb-head>input.inp{display:none!important}.amb-head{justify-content:flex-end!important;min-height:0!important;padding:2px 6px!important;background:none!important;border:0!important}
+/* v161 menus de catálogo na frente */
+.sec-apl,.card,.amb-bloco{position:relative}
+.sec-apl:focus-within,.sec-apl:hover,.card:focus-within{z-index:60!important}
+.sec-apl:focus-within ~ .sec-apl{z-index:1}

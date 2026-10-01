@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['161', ['🔝 Listas de catálogo agora abrem na frente das outras linhas.']],
   ['159', ['🎤 Busca por voz no Início: fale o cliente, nº ou ambiente (ex.: "cozinha da Cris", "26 045") e a OS já abre.', '🧲 Uma categoria só para puxadores, perfis, cavas, Zen e pegadores; lâminas ficam só em Acabamentos.']],
   ['157', ['🪑 Sem nome de ambiente no bloco (o ambiente já está no nº/nome da OS): cada "+ Adicionar móvel" abre direto o móvel para preencher.']],
   ['156', ['🪑 Móvel novo começa sem nome (você escolhe: balcão, guarda-roupa…).', '🎨 Acabamentos começam em MDF; saiu "chapa rápida" (fabricantes) — use a busca.', '📐 Acabamento interno e externo um embaixo do outro, sem espaços em branco.']],
