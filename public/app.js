@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['145', ['👤 Dados do cliente: toque no nome do cliente no topo da OS.', '✏️ A edição já abre direto nos conjuntos de móveis; o aviso da esteira saiu.']],
   ['144', ['🪑 Tudo o que se edita na etapa 2 fica dentro de cada conjunto de móveis: materiais, tamponamento, parede/painel, observações e catálogos. Saíram os blocos soltos da OS.']],
   ['143', ['🔒 A OS só fica bloqueada para edição depois de marcada como revisada (aí pede motivo para editar).']],
   ['142', ['📋 Edição da OS mais enxuta: cabeçalho numa linha só (nº, cliente, ambiente, prazo, etapa, revisar, PDF).', '🎨 Cada conjunto já mostra na frente a cor do MDF da caixa e das frentes com a espessura em um toque; o resto fica em "Mais detalhes".']],
@@ -1765,7 +1766,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     onFinal: (t) => setFalaTexto(v => (v ? v + ' ' : '') + t),
     onInterim: setFalaInterim,
   });
-  const [etapa, setEtapa] = useState(1);
+  const [etapa, setEtapa] = useState(2);
   const [organizando, setOrganizando] = useState(false);
   const [liberada, setLiberada] = useState(false);
   const [snapLib, setSnapLib] = useState(null);
@@ -1864,7 +1865,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>
       </div>
 
-      <div class="card page-card etapas-bar">
+      <div class="card page-card etapas-bar" style=${{ display: 'none' }}>
         ${ETAPAS.map((e, i) => html`
           ${i > 0 && html`<span class="dim">›</span>`}
           <button key=${e.n} class=${'etapa-bt' + (etapa === e.n ? ' on' : '')} onClick=${() => ir(e.n)}>
@@ -1877,7 +1878,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       ${(() => { const rev = os.revisao; const ok = rev?.em && (!os.atualizadoEm || rev.em >= os.atualizadoEm); const stx = STATUS_OS[idxSt] || STATUS_OS[0];
         return html`<div class="os-cab" style=${{ '--cc': corOS(os) }}>
           <span class="os-num num-badge">${numOS(os)}</span>
-          <div class="grow"><b>${nomePadrao(os.cliente?.nome) || 'Cliente não informado'}</b><small>${nomePadrao((os.ambientes || []).map(x => x.nome).join(', ') || os.ambienteResumo) || '—'}${os.prazoEntrega ? ' · 🚚 ' + os.prazoEntrega : ''}</small></div>
+          <div class="grow os-cab-cli" title="Dados do cliente" onClick=${() => setPainelCA('cliente')}><b>${nomePadrao(os.cliente?.nome) || 'Cliente não informado'} <span class="dim" style=${{ fontSize: '12px' }}>👤 ✏️</span></b><small>${nomePadrao((os.ambientes || []).map(x => x.nome).join(', ') || os.ambienteResumo) || '—'}${os.prazoEntrega ? ' · 🚚 ' + os.prazoEntrega : ''}</small></div>
           <span class=${stx.c}>${stx.t.replace(/^\d+\. /, '')}</span>
           ${ok ? html`<span class="rev-ok" title=${'Revisada por ' + rev.por}>✅ Revisada</span>` : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Revisar</button>`}
           <button class="btn btn-sm" title="Exportar PDF" onClick=${pdf}>📄</button>
@@ -1939,12 +1940,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           </div>
 </div>` : painelCA === 'contrato' ? html`<${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />` : html`<${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />`}
       </div></div>`, document.body)}
-      ${etapa === 1 && html`
-        <div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><button class="btn btn-sm btn-ghost" onClick=${() => setPainelCA('cliente')}>👤 Dados do cliente</button><small class="dim">${os.cliente?.nome || ''}${os.prazoEntrega ? ' · entrega ' + os.prazoEntrega : ''}</small>
-          <button class="btn btn-marrom btn-sm" style=${{ marginLeft: 'auto' }} onClick=${() => ir(2)}>Conjuntos de móveis →</button></div>
-        <div class="card page-card vazio dim">🏭 A esteira de produção fica na OS, aba <b>Andamento</b>.</div>`}
-
-      ${etapa === 2 && html`
+      ${etapa !== 3 && html`
         ${cartaoVoz}
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -1958,7 +1954,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>
         `}
 
-      ${etapa === 3 && html`<div class="card page-card vazio">🏭 A esteira de produção fica na OS, aba <b>Andamento</b> (toque na OS para abrir).</div>`}
+
       </fieldset>
       ${pedirVoltar && html`<${SenhaMotivo} titulo=${'Voltar a OS para ' + pedirVoltar.t.replace(/^\d\. /, '')} texto="Voltar um processo que já começou precisa de senha e motivo." botao="Voltar etapa"
         onOk=${async (motivo) => { alterar(o => { o.reaberturas = [...(o.reaberturas || []), { oque: 'Status da OS: ' + (STATUS_OS.find(x => x.v === o.status) || {}).t + ' → ' + pedirVoltar.t, motivo, quem: sessao.nome, quando: nowIso() }]; o.status = pedirVoltar.v; }); toast('Processo reaberto.', 'ok'); }} fechar=${() => setPedirVoltar(null)} />`}
@@ -1970,8 +1966,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
         <div class="row">
           <button class="btn btn-sm" onClick=${pdf}>📄 PDF da OS</button>
-          ${etapa < 3 ? html`<button class="btn btn-amarelo" onClick=${() => ir(etapa + 1)}>Avançar para etapa ${etapa + 1}: ${ETAPAS[etapa].t} →</button>`
-            : html`<button class="btn btn-amarelo" onClick=${voltar}>✓ Concluir e voltar para a lista</button>`}
+          <button class="btn btn-amarelo" onClick=${voltar}>✓ Salvar e voltar para a lista</button>
         </div>
       </div>
 

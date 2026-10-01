@@ -1401,3 +1401,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .amb-rapido{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
 .amb-mat{background:var(--surface2);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:5px}
 .amb-mat .pill{padding:3px 9px;font-size:12px}
+.os-cab-cli{cursor:pointer}.os-cab-cli:hover b{text-decoration:underline}
