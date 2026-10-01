@@ -1511,3 +1511,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .bg-chips{display:flex;flex-wrap:wrap;gap:5px}
 .bt-cli{background:linear-gradient(135deg,#db2777,#f59e0b)!important}
 @media print{.bg-barra{display:none!important}}
+.bg-barra{left:50%!important;transform:translateX(-50%)}
+.bg-erro{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;padding:6px 9px;font-size:12px;margin-bottom:5px}

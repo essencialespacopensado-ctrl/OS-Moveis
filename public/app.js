@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['167', ['🎤 No PC a voz agora liga sozinha no primeiro clique ou tecla (o Chrome exige isso) e não briga mais com o microfone do assistente/busca do Início. Se o navegador bloquear o microfone, aparece o aviso de como liberar.', '📍 Barra de busca no centro, embaixo, sem ficar atrás de outros botões.']],
   ['166', ['📌 Busca e voz agora ficam fixas e discretas no canto da tela, em TODAS as páginas: fale ou digite e abre na hora (OS, cliente, telas). Toque no 🎤 para ligar/desligar a voz.', '🔧 Corrigido: a busca do Início não apagava mais o que você digita.']],
   ['165', ['🔍 A busca do Início agora acha tudo: OSs, clientes e também telas e funções (compras, financeiro, equipe, amostras, cronograma, catálogo…). Digite ou fale e toque no resultado — ou Enter para ir direto.']],
   ['164', ['📄 Nova folha de impressão da OS: colorida, compacta, organizada por conjunto de móveis, com as especificações de cada conjunto em blocos coloridos e sem campos vazios.', '🟢 Voz ligada ao abrir o app: no Início o assistente já fica ouvindo — fale "cozinha da Cris", "vai pra compras"... Botão Voz ligada/desligada para desligar quando quiser.', '🖱 Rolar dentro da lista de opções não fecha mais; ao rolar a página a lista acompanha.']],
@@ -637,7 +638,7 @@ async function extrairArquivo0(file) {
    Voz: reconhecimento pelo microfone (Chrome / Edge)
    ========================================================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-function useFala({ onFinal, onInterim } = {}) {
+function useFala({ onFinal, onInterim, global: ehGlobal } = {}) {
   const [ouvindo, setOuvindo] = useState(false);
   const [erro, setErro] = useState('');
   const recRef = useRef(null);
@@ -673,10 +674,11 @@ function useFala({ onFinal, onInterim } = {}) {
     rec.onend = () => {
       cbRef.current.onInterim?.('');
       // O Chrome para sozinho depois de um tempo; se ainda queremos ouvir, reinicia.
-      if (querRef.current) { try { rec.start(); } catch {} } else setOuvindo(false);
+      if (querRef.current) { try { rec.start(); } catch {} } else { setOuvindo(false); if (!ehGlobal) setTimeout(() => window.__vozGlobal?.retomar(), 300); }
     };
     recRef.current = rec;
     querRef.current = true;
+    if (!ehGlobal) window.__vozGlobal?.pausar();
     try { rec.start(); setOuvindo(true); } catch (e) { setErro('Não consegui ligar o microfone.'); }
   }, []);
 
@@ -684,6 +686,7 @@ function useFala({ onFinal, onInterim } = {}) {
     querRef.current = false;
     try { recRef.current?.stop(); } catch {}
     setOuvindo(false);
+    if (!ehGlobal) setTimeout(() => window.__vozGlobal?.retomar(), 300);
   }, []);
 
   useEffect(() => () => { querRef.current = false; try { recRef.current?.abort(); } catch {} }, []);
@@ -6207,9 +6210,16 @@ function BuscaGlobal({ sessao, irPara }) {
   useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => { const l = s.docs.map(d => ({ id: d.id, ...d.data() })); setLista(l); if (!window.__listaOS || !window.__listaOS.length || window.__listaOS.length !== l.length) window.__listaOS = l; }, () => {}); }, [sessao.empresaId]);
   const executar = (t) => { const x = String(t || '').replace(/[.?!]$/, '').trim(); if (!x) return; window.__listaOS = lista; if (acaoRapida(x)) { setQ(''); setAberta(false); } else { setQ(x); setAberta(true); } };
-  const fala = useFala({ onInterim: (t) => { if (t && t.trim()) { setQ(t); setAberta(true); } }, onFinal: executar });
-  useEffect(() => { if (vozAuto) { const t = setTimeout(() => fala.iniciar(), 600); return () => clearTimeout(t); } }, []);
-  const tog = () => { const v = !vozAuto; setVozAuto(v); try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) fala.iniciar(); else fala.parar(); };
+  const fala = useFala({ global: true, onInterim: (t) => { if (t && t.trim()) { setQ(t); setAberta(true); } }, onFinal: executar });
+  const autoRef = useRef(vozAuto); autoRef.current = vozAuto; const ouvRef = useRef(false); ouvRef.current = fala.ouvindo; const pausadaRef = useRef(false);
+  useEffect(() => { window.__vozGlobal = { pausar: () => { if (ouvRef.current) { pausadaRef.current = true; fala.parar(); } }, retomar: () => { if (pausadaRef.current && autoRef.current) { pausadaRef.current = false; fala.iniciar(); } } };
+    const ligar = () => { if (autoRef.current && !ouvRef.current && !pausadaRef.current) fala.iniciar(); };
+    const t = setTimeout(ligar, 600);
+    /* O Chrome no PC só libera o microfone depois de um clique/tecla: liga no primeiro toque */
+    const g = (e) => { if (e.target && e.target.closest && e.target.closest('.bg-mic')) return; ligar(); };
+    window.addEventListener('pointerdown', g, true); window.addEventListener('keydown', g, true);
+    return () => { clearTimeout(t); window.removeEventListener('pointerdown', g, true); window.removeEventListener('keydown', g, true); }; }, []);
+  const tog = () => { const v = !(vozAuto && fala.ouvindo); setVozAuto(v); autoRef.current = v; try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) fala.iniciar(); else fala.parar(); };
   const nq = norm(q);
   const telas = q ? acharTelas(q) : [];
   const oss = nq.length >= 2 ? lista.filter(o => norm(`${numOS(o)} ${o.numeroAntigo || ''} ${o.cliente?.nome} ${o.cliente?.obra || ''} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(nq)).slice(0, 6) : [];
@@ -6221,6 +6231,7 @@ function BuscaGlobal({ sessao, irPara }) {
       ${Object.keys(cliMap).length > 0 && html`<div class="bg-chips">${Object.keys(cliMap).map(c => html`<button key=${c} class="bt-chip bt-cli" onClick=${() => { setQ(''); setAberta(false); window.__buscaOS = c; (window.__irPara || irPara)('os'); }}>👤 Todas de ${c}</button>`)}</div>`}
       ${telas.length > 0 && html`<div class="bg-chips">${telas.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setQ(''); setAberta(false); (window.__irPara || irPara)(x.aba); }}>${x.t}</button>`)}</div>`}
     </div>` : null}
+    ${fala.erro && html`<div class="bg-erro">🎤 ${fala.erro}</div>`}
     <div class="bg-linha">
       <button class=${'bg-mic' + (fala.ouvindo ? ' on' : '')} title=${vozAuto ? 'Voz ligada — toque para desligar' : 'Voz desligada — toque para ligar'} onClick=${tog}>${fala.ouvindo ? '🎙' : '🎤'}</button>
       <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); } }} />
