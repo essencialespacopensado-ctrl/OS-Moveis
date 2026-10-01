@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['163', ['🔝 Listas de opções/catálogo agora abrem flutuando por cima de tudo, no lugar certo.']],
   ['162', ['👁 Botão "Ver OS" no topo da OS: abre a OS pronta, na folha. Fica destacado depois de revisada.', '⚡ Assistente instantâneo: fale ou escreva "abre a cozinha da Cris", "26 045", "imprime a OS da Aline" ou "vai pra compras" — abre na hora, sem esperar a IA. Perguntas e mudanças continuam indo para a IA.']],
   ['161', ['🔝 Listas de catálogo agora abrem na frente das outras linhas.']],
   ['159', ['🎤 Busca por voz no Início: fale o cliente, nº ou ambiente (ex.: "cozinha da Cris", "26 045") e a OS já abre.', '🧲 Uma categoria só para puxadores, perfis, cavas, Zen e pegadores; lâminas ficam só em Acabamentos.']],
@@ -4393,20 +4394,26 @@ const FER_ABAS = [
 function Opcoes({ grupos, onPick, rotulo = 'Opções' }) {
   const [aberto, setAberto] = useState(false);
   const [q, setQ] = useState('');
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  useEffect(() => { if (!aberto) return; const f = () => setAberto(false); const t = setTimeout(() => { window.addEventListener('scroll', f, true); window.addEventListener('resize', f); }, 50);
+    return () => { clearTimeout(t); window.removeEventListener('scroll', f, true); window.removeEventListener('resize', f); }; }, [aberto]);
   if (!grupos || !grupos.length) return null;
   const nq = norm(q);
+  const abrir = () => { if (aberto) return setAberto(false); const r = btnRef.current.getBoundingClientRect(); const w = Math.min(420, window.innerWidth * 0.9), h = Math.min(360, window.innerHeight * 0.6);
+    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)); const baixo = r.bottom + 4 + h < window.innerHeight; setPos({ left, top: baixo ? r.bottom + 4 : Math.max(8, r.top - 4 - h), w, h }); setAberto(true); };
   return html`
     <span class="opc-wrap">
-      <button type="button" class="btn btn-ghost btn-sm" onClick=${() => setAberto(!aberto)}>☰ ${rotulo}</button>
-      ${aberto && html`
-        <div class="opc-pop" onMouseLeave=${() => setAberto(false)}>
+      <button type="button" ref=${btnRef} class="btn btn-ghost btn-sm" onClick=${abrir}>☰ ${rotulo}</button>
+      ${aberto && pos && ReactDOM.createPortal(html`<div class="opc-fundo" onClick=${() => setAberto(false)}></div>
+        <div class="opc-pop opc-fixo" style=${{ left: pos.left + 'px', top: pos.top + 'px', width: pos.w + 'px', maxHeight: pos.h + 'px' }} onScroll=${e => e.stopPropagation()}>
           <input class="inp inp-sm" placeholder="Filtrar…" value=${q} onInput=${e => setQ(e.target.value)} autoFocus />
           ${grupos.map(gr => {
             const its = gr.itens.filter(i => !nq || norm(i.n + ' ' + i.b + ' ' + i.d).includes(nq));
             return its.length ? html`<div key=${gr.grupo}><div class="opc-g">${gr.grupo}</div>
               ${its.map(i => html`<button type="button" key=${i.n} class="opc-i" onClick=${() => { onPick(i.n); setAberto(false); setQ(''); }}>
                 <span><b>${i.n}</b>${i.d && html`<small>${i.d}</small>`}</span>${i.b && html`<span class="chip">${i.b}</span>`}</button>`)}</div>` : null; })}
-        </div>`}
+        </div>`, document.body)}
     </span>`;
 }
 
