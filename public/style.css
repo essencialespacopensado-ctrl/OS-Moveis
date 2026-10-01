@@ -1402,3 +1402,12 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .amb-mat{background:var(--surface2);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:5px}
 .amb-mat .pill{padding:3px 9px;font-size:12px}
 .os-cab-cli{cursor:pointer}.os-cab-cli:hover b{text-decoration:underline}
+/* v146 — catálogos em linhas */
+.amb-esp>.stack{display:flex!important;flex-direction:column!important;gap:6px!important}
+.sec-apl{display:flex;flex-direction:column;gap:8px;padding:10px 12px!important}
+.sec-apl>.tog-apl{position:static!important;order:0;align-self:flex-end;margin-bottom:-38px}
+.sec-apl>:nth-child(2){padding-right:180px;min-height:28px;display:flex;align-items:center}
+.nao-aplica{padding:6px 12px!important;opacity:.8}
+.nao-aplica>.tog-apl{margin-bottom:-32px}
+.sec-apl .sec-title{margin:0!important}
+@media(max-width:600px){.sec-apl>.tog-apl{margin-bottom:0;align-self:flex-start}.sec-apl>:nth-child(2){padding-right:0}}
