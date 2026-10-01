@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['139', ['🎨 Acabamentos e materiais agora ficam dentro de cada conjunto de móveis (botão "Acabamentos & materiais deste conjunto"), e não mais soltos na OS.']],
   ['138', ['📑 Leitura do contrato revisável: todos os dados lidos (cliente, endereços, prazo, arquiteto, nº, valor, pagamento) ficam editáveis antes de criar as OS; campos vazios em amarelo.', '📍 Novo campo "Endereço de montagem" no cliente e na OS (também lido do contrato).']],
   ['137', ['🧪 Botão de testes ao lado do 🛠 Desenvolvedor: escolha OS e zere as esteiras (escritório e produção) e os tempos.']],
   ['136', ['▶ Botão para iniciar cada esteira (escritório e produção).', '⏱ Tempo de cada etapa aparece embaixo dela (e o tempo da etapa atual correndo), mais o total do escritório e da produção.']],
@@ -1955,11 +1956,10 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar conjunto</button>
           </div>
           <div class="stack">
-            ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} />`)}
+            ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} padraoGeral=${P} />`)}
             ${!(os.ambientes || []).length && html`<div class="vazio dim">Nenhum conjunto ainda. Adicione, fale, ou gere a OS a partir de uma reunião.</div>`}
           </div>
         </div>
-        <${EspecificacoesOS} P=${P} setP=${setP} catalogo=${catalogo} sessao=${sessao} />
         <div class="card page-card stack">
             <div class="sec-title">🧱 Padrões de estrutura & tamponamento</div>
             <span class="lbl">Tipo de tamponamento</span>
@@ -4757,7 +4757,8 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
     </div>`;
 }
 
-function AmbienteOS({ amb, ai, alterar, catalogo, sessao }) {
+function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
+  const [esp, setEsp] = useState(false);
   const [fechado, setFechado] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const up = (fn) => alterar(o => fn(o.ambientes[ai]));
@@ -4775,6 +4776,9 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao }) {
         <div class="amb-body">
           ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
           <button class="btn btn-sm" onClick=${() => up(a => { a.moveis = a.moveis || []; a.moveis.push(novoMovel('Novo móvel')); })}>+ Adicionar móvel</button>
+          <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>🎨 Acabamentos & materiais deste conjunto ${esp ? '▴' : '▾'}</button>
+            ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
+              <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
         </div>`}
     </div>`;
 }

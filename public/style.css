@@ -1378,3 +1378,14 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .est-os-p.f i{background:#16a34a;color:#fff}.est-os-p.a i{background:#f59e0b;color:#fff;box-shadow:0 0 0 5px #f59e0b33;animation:mmPulso 2s infinite}
 .est-os-p.a small{font-weight:800;opacity:1}
 .est-t{font-style:normal;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--surface2);border-radius:999px;padding:1px 6px}
+.amb-esp{border-top:1px dashed var(--line);padding-top:8px;margin-top:6px}
+/* v139 — conjuntos compactos e visuais */
+.amb{border-radius:16px!important;border-left:6px solid var(--accent)!important;padding:10px 12px!important;box-shadow:0 4px 14px #0000000f}
+.amb-body{gap:8px!important}
+.amb-esp .card,.amb-esp .page-card{padding:10px!important;margin:0!important;box-shadow:none!important;border-radius:12px!important}
+.amb-esp .sec-title{font-size:13px!important}
+.amb-esp .opc{padding:8px!important}.amb-esp .opc small{font-size:11px}
+.amb-esp .inp{padding:6px 9px;font-size:13.5px}
+.amb-esp .grid2,.amb-esp .grid3{gap:6px!important}
+.amb-esp>.stack{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px!important}
+.movel-card{padding:8px 10px!important;border-radius:12px!important}
