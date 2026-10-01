@@ -46,6 +46,8 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['148', ['🔘 Botão único "Aplica" animado, logo abaixo do nome de cada categoria e de cada material.']],
+  ['147', ['🎨 Em Acabamentos & materiais, cada tipo (MDF, Fórmica, Lâmina, Madeira, Laca) é uma linha numerada com Aplica / Não aplica; só o que aplica abre.']],
   ['146', ['📏 Catálogos da OS em lista, um embaixo do outro e numerados em sequência, todos fechados; cada linha só tem Aplica / Não aplica (saíram os botões "possui LED" etc.).']],
   ['145', ['👤 Dados do cliente: toque no nome do cliente no topo da OS.', '✏️ A edição já abre direto nos conjuntos de móveis; o aviso da esteira saiu.']],
   ['144', ['🪑 Tudo o que se edita na etapa 2 fica dentro de cada conjunto de móveis: materiais, tamponamento, parede/painel, observações e catálogos. Saíram os blocos soltos da OS.']],
@@ -4413,7 +4415,7 @@ function textoVidro(v) { return v?.ativo ? [v.tipo, v.esp, (v.proc || []).join('
 function AcabBox({ lado, a, set, catalogo, sessao }) {
   const fMDF = useMemo(() => ({ tipos: ['MDF'] }), []);
   const [fMarca, setFMarca] = useState(''); const [fTom, setFTom] = useState('');
-  const tipo = a.tipo || 'mdf';
+  const tipo = a.tipo || '';
   const off = a.aplica === false;
   const op = O();
   const titulo = lado === 'interno' ? ['Acabamento interno', 'Caixaria, prateleiras, divisões e estrutura'] : ['Acabamento externo', 'Frentes, portas, vistas, painéis e tamponamentos'];
@@ -4427,8 +4429,8 @@ function AcabBox({ lado, a, set, catalogo, sessao }) {
         <label class="row dim" style=${{ gap: '5px' }}><input type="checkbox" checked=${!off} onChange=${e => set('aplica', e.target.checked)} /> Aplicável</label>
       </div>
       ${off ? html`<div class="dica">Este acabamento está marcado como <b>não aplicável</b> nesta OS. <button class="btn btn-ghost btn-sm" onClick=${() => set('aplica', true)}>Habilitar agora →</button></div>` : html`
-      <span class="lbl">Tipo de material / acabamento</span>
-      <div class="opcoes5">${MATERIAIS.map(([v, n, d]) => html`<button key=${v} class=${'opc' + (tipo === v ? ' on' : '')} onClick=${() => set('tipo', v)}><b>${n}</b><small>${d}</small></button>`)}</div>
+      <div class="mat-linhas">${MATERIAIS.map(([v, n, d], i) => html`<div key=${v} class=${'mat-l' + (a.tipo === v ? ' on' : '')}><span class="num-sec">${i + 1}</span><b>${n}</b><small class="dim grow">${d}</small>
+        <button class=${'btn-apl' + (a.tipo === v ? ' on' : '')} onClick=${() => set('tipo', a.tipo === v ? '' : v)}><i></i>${a.tipo === v ? 'Aplica' : 'Aplica?'}</button></div>`)}</div>
 
       ${tipo === 'mdf' && html`
         <span class="lbl">Descrição da chapa de MDF (busca no catálogo)</span>
@@ -4507,7 +4509,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
   const vid = P.vidros || {};
   const setVid = (k, v) => setP(p => { p.vidros = { ...(p.vidros || {}), [k]: v }; });
   const naoApl = (k) => (P.naoAplica || {})[k] !== false;
-  const togApl = (k) => html`<div class="tog-apl"><button class=${!naoApl(k) ? 'on' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: false }; const m = { led: 'led', fech: 'fech', vidros: 'vidros', tec: 'tec' }[k]; if (m) p[m] = { ...(p[m] || {}), ativo: true }; })}>✓ Aplica</button><button class=${naoApl(k) ? 'on nao' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: true }; const m = { led: 'led', fech: 'fech', vidros: 'vidros', tec: 'tec' }[k]; if (m) p[m] = { ...(p[m] || {}), ativo: false }; })}>✕ Não aplica</button></div>`;
+  const togApl = (k) => html`<button class=${'btn-apl' + (!naoApl(k) ? ' on' : '')} onClick=${() => setP(p => { const v = !naoApl(k); p.naoAplica = { ...(p.naoAplica || {}), [k]: v }; const m = { led: 'led', fech: 'fech', vidros: 'vidros', tec: 'tec' }[k]; if (m) p[m] = { ...(p[m] || {}), ativo: !v }; })}><i></i>${!naoApl(k) ? 'Aplica' : 'Aplica?'}</button>`;
   const simNao = () => null;
   const simNao0 = (ativo, set, sim, nao) => html`<div class="seg-mini"><button class=${!ativo ? 'on' : ''} onClick=${() => set('ativo', false)}>${nao}</button><button class=${ativo ? 'on' : ''} onClick=${() => set('ativo', true)}>${sim}</button></div>`;
 

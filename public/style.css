@@ -1411,3 +1411,17 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .nao-aplica>.tog-apl{margin-bottom:-32px}
 .sec-apl .sec-title{margin:0!important}
 @media(max-width:600px){.sec-apl>.tog-apl{margin-bottom:0;align-self:flex-start}.sec-apl>:nth-child(2){padding-right:0}}
+.mat-linhas{display:flex;flex-direction:column;gap:5px}
+.mat-l{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.mat-l.on{border-color:#16a34a;background:color-mix(in srgb,#16a34a 8%,var(--surface))}
+.tog-in{position:static!important;flex:none}
+/* v148 — botão Aplica */
+.sec-apl{display:flex!important;flex-direction:column}
+.sec-apl>*{order:3}.sec-apl>:nth-child(2){order:1;padding-right:0!important}.sec-apl>.btn-apl{order:2}
+.btn-apl{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:2px solid var(--line-strong);background:var(--surface-solid);color:var(--text);border-radius:999px;padding:4px 12px 4px 5px;font-weight:700;font-size:12.5px;cursor:pointer;transition:all .25s}
+.btn-apl i{width:22px;height:22px;border-radius:50%;background:var(--surface2);transition:all .25s;position:relative}
+.btn-apl.on{border-color:#16a34a;background:#16a34a;color:#fff;animation:mmPop .35s}
+.btn-apl.on i{background:#fff}.btn-apl.on i::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#16a34a;font-weight:900;font-size:13px}
+.btn-apl:hover{transform:scale(1.05)}
+.mat-l{flex-wrap:wrap}.mat-l .btn-apl{flex-basis:auto;margin-left:30px;order:5}.mat-l small.grow{flex-basis:100%;order:4;margin-left:30px}
+.nao-aplica>*:not(.btn-apl):not(:nth-child(2)){display:none!important}
