@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['132', ['🔤 Todos os nomes já cadastrados (clientes, ambientes, arquitetos, cronograma, pedidos, amostras) foram corrigidos para o mesmo padrão. OS novas já entram padronizadas.']],
   ['131', ['🔤 Nomes de clientes e ambientes sempre escritos do mesmo jeito (ex.: "SUÍTE MASTER" e "suite master" → "Suíte Master"; siglas como BWC e LED ficam em maiúsculas).', '🔴 Na folha da OS, palavras-chave como VIDROS, SERRALHERIA, PINTURA, LACA, PEDRA, ESPELHO, TAPEÇARIA, ESQUADRIA, LED aparecem em CAIXA ALTA e em vermelho.']],
   ['130', ['🎨 A aba "Por temas" saiu de dentro da OS.']],
   ['129', ['⏱ Tempo ganho/perdido virou botão (no Início e no Cronograma).', '✦ O botão do assistente pisca com "Peça qualquer coisa" (a barra de lembrete saiu).', '🆕 Botão discreto de atualizações no canto; o cartão de novidades no Início tem "Entendi" para fechar.']],
@@ -452,6 +453,7 @@ function AvisoClientes({ sessao, lista, toast }) {
 async function criarOS(sessao, conteudo, extras = {}) {
   const { fsMod } = F();
   const os = sanearOS(conteudo);
+  os.cliente.nome = nomePadrao(os.cliente.nome); (os.ambientes || []).forEach(a => { a.nome = nomePadrao(a.nome); }); if (os.ambienteResumo) os.ambienteResumo = nomePadrao(os.ambienteResumo);
   try { const nm = baseCli(os.cliente?.nome); if (nm) { const lst = (await fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => d.data()); const par = [...new Set(lst.map(o => baseCli(o.cliente?.nome)).filter(x => cliParecido(nm, x)))];
     if (par.length) { const r = await escolher('Cliente parecido', 'Já existe cliente com nome quase igual:\n"' + par.join('", "') + '"\nNovo: "' + nm + '"', [...par.map(x => ({ v: x, t: 'É o mesmo — usar "' + x + '"', cls: 'btn-primary' })), { v: '__novo', t: 'É outro cliente — manter "' + nm + '"' }]);
       if (r && r !== '__novo') os.cliente = { ...os.cliente, nome: r + String(os.cliente.nome).slice(baseCli(os.cliente.nome).length) }; } } } catch {}
@@ -4815,6 +4817,24 @@ function destacarChaves(raiz) {
   nos.forEach(n => { const f = document.createDocumentFragment(); let last = 0; const t = n.nodeValue; t.replace(RE_CHAVE, (m, _g, off) => { f.append(t.slice(last, off)); const b = document.createElement('b'); b.className = 'kw'; b.textContent = m.toUpperCase(); f.append(b); last = off + m.length; return m; }); f.append(t.slice(last)); n.replaceWith(f); });
 }
 function ComChaves({ children, dep }) { const r = useRef(null); useEffect(() => { const id = setTimeout(() => destacarChaves(r.current), 50); return () => clearTimeout(id); }, [dep]); return html`<div ref=${r} key=${dep}>${children}</div>`; }
+async function padronizarNomesTudo(sessao, toast) {
+  const { getDocs, writeBatch, updateDoc } = F().fsMod; const E = sessao.empresaId; let n = 0;
+  const lotes = []; let b = writeBatch(F().db), k = 0; const add = (ref, patch) => { b.update(ref, patch); n++; if (++k >= 400) { lotes.push(b); b = writeBatch(F().db); k = 0; } };
+  (await getDocs(col('empresas', E, 'os'))).docs.forEach(d => { const o = d.data(); const patch = {};
+    const cn = nomePadrao(o.cliente?.nome); if (o.cliente?.nome && cn !== o.cliente.nome) patch.cliente = { ...o.cliente, nome: cn };
+    if (Array.isArray(o.ambientes) && o.ambientes.some(a => a?.nome && nomePadrao(a.nome) !== a.nome)) patch.ambientes = o.ambientes.map(a => ({ ...a, nome: nomePadrao(a.nome) }));
+    if (o.ambienteResumo && nomePadrao(o.ambienteResumo) !== o.ambienteResumo) patch.ambienteResumo = nomePadrao(o.ambienteResumo);
+    if (o.arquiteto && nomePadrao(o.arquiteto) !== o.arquiteto) patch.arquiteto = nomePadrao(o.arquiteto);
+    if (Object.keys(patch).length) add(d.ref, patch); });
+  for (const c of ['tarefas', 'pedidos', 'compras', 'lancamentos', 'amostras']) { try { (await getDocs(col('empresas', E, c))).docs.forEach(d => { const x = d.data(); const patch = {};
+    if (x.cliente && nomePadrao(x.cliente) !== x.cliente) patch.cliente = nomePadrao(x.cliente);
+    if (c === 'amostras' && x.quem && nomePadrao(x.quem) !== x.quem) patch.quem = nomePadrao(x.quem);
+    if (Object.keys(patch).length) add(d.ref, patch); }); } catch {} }
+  try { (await getDocs(col('empresas', E, 'clientes'))).docs.forEach(d => { const x = d.data(); const patch = {}; ['nome', 'arquiteto'].forEach(f => { if (x[f] && nomePadrao(x[f]) !== x[f]) patch[f] = nomePadrao(x[f]); }); if (Object.keys(patch).length) add(d.ref, patch); }); } catch {}
+  lotes.push(b); for (const l of lotes) await l.commit();
+  await updateDoc(docRef('empresas', E), { nomesPadronizados: 1 }).catch(() => {});
+  toast && toast('🔤 ' + n + ' registro(s) com nomes padronizados.', 'ok'); return n;
+}
 function ImpressaoOS({ os, empresa }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const P = os.padrao || {};
@@ -6390,6 +6410,7 @@ function Principal({ sessao, toast }) {
   const [statusIA, setStatusIA] = useState(null);
   const catalogo = useCatalogo(sessao.empresaId);
   window.__CATALOGO = catalogo;
+  useEffect(() => { if (sessao.papel !== 'admin') return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId)).then(d => { if (!d.data()?.nomesPadronizados) padronizarNomesTudo(sessao, toast).catch(e => toast('Não padronizou: ' + e.message, 'erro')); }).catch(() => {}); }, []);
 
   useEffect(() => { try { localStorage.setItem('osm_aba', aba); } catch {} }, [aba]);
   useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => setStatusIA({ ia: false })); }, []);
