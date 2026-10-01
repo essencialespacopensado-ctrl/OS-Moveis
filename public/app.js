@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['166', ['📌 Busca e voz agora ficam fixas e discretas no canto da tela, em TODAS as páginas: fale ou digite e abre na hora (OS, cliente, telas). Toque no 🎤 para ligar/desligar a voz.', '🔧 Corrigido: a busca do Início não apagava mais o que você digita.']],
   ['165', ['🔍 A busca do Início agora acha tudo: OSs, clientes e também telas e funções (compras, financeiro, equipe, amostras, cronograma, catálogo…). Digite ou fale e toque no resultado — ou Enter para ir direto.']],
   ['164', ['📄 Nova folha de impressão da OS: colorida, compacta, organizada por conjunto de móveis, com as especificações de cada conjunto em blocos coloridos e sem campos vazios.', '🟢 Voz ligada ao abrir o app: no Início o assistente já fica ouvindo — fale "cozinha da Cris", "vai pra compras"... Botão Voz ligada/desligada para desligar quando quiser.', '🖱 Rolar dentro da lista de opções não fecha mais; ao rolar a página a lista acompanha.']],
   ['163', ['🔝 Listas de opções/catálogo agora abrem flutuando por cima de tudo, no lugar certo.']],
@@ -6197,13 +6198,42 @@ function acharTelas(q) {
     (MAPA[aba] || []).forEach(([f, d]) => { const s2 = pont(f, 2.5) + pont(d, 0.6); if (s2 >= 2) res.push({ aba, t: nome + ' › ' + f, f, sc: s2 }); }); });
   return res.sort((a, b) => b.sc - a.sc).slice(0, 6);
 }
+/* Barra global de busca/voz: fica fixa em todas as telas */
+function BuscaGlobal({ sessao, irPara }) {
+  const [q, setQ] = useState('');
+  const [lista, setLista] = useState([]);
+  const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
+  const [aberta, setAberta] = useState(false);
+  useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod;
+    return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => { const l = s.docs.map(d => ({ id: d.id, ...d.data() })); setLista(l); if (!window.__listaOS || !window.__listaOS.length || window.__listaOS.length !== l.length) window.__listaOS = l; }, () => {}); }, [sessao.empresaId]);
+  const executar = (t) => { const x = String(t || '').replace(/[.?!]$/, '').trim(); if (!x) return; window.__listaOS = lista; if (acaoRapida(x)) { setQ(''); setAberta(false); } else { setQ(x); setAberta(true); } };
+  const fala = useFala({ onInterim: (t) => { if (t && t.trim()) { setQ(t); setAberta(true); } }, onFinal: executar });
+  useEffect(() => { if (vozAuto) { const t = setTimeout(() => fala.iniciar(), 600); return () => clearTimeout(t); } }, []);
+  const tog = () => { const v = !vozAuto; setVozAuto(v); try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) fala.iniciar(); else fala.parar(); };
+  const nq = norm(q);
+  const telas = q ? acharTelas(q) : [];
+  const oss = nq.length >= 2 ? lista.filter(o => norm(`${numOS(o)} ${o.numeroAntigo || ''} ${o.cliente?.nome} ${o.cliente?.obra || ''} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(nq)).slice(0, 6) : [];
+  const voz1 = !oss.length && q ? acharOSFala(lista, q) : null; const ossV = voz1 ? [voz1] : oss;
+  const cliMap = {}; ossV.forEach(o => { const c = nomePadrao(o.cliente?.nome || ''); if (c) cliMap[c] = 1; });
+  return html`<div class=${'bg-barra' + (fala.ouvindo ? ' ouv' : '') + (aberta && q ? ' com-res' : '')}>
+    ${aberta && q && (telas.length || ossV.length) ? html`<div class="bg-res">
+      ${ossV.map(o => html`<button key=${o.id} class="bg-os" onClick=${() => { setQ(''); setAberta(false); window.__abrirOS && window.__abrirOS(o.id); }}><b>${numOS(o)}</b> ${nomePadrao(o.cliente?.nome)} <small>${nomePadrao((o.ambientes || []).map(a => a.nome).join(', '))}</small></button>`)}
+      ${Object.keys(cliMap).length > 0 && html`<div class="bg-chips">${Object.keys(cliMap).map(c => html`<button key=${c} class="bt-chip bt-cli" onClick=${() => { setQ(''); setAberta(false); window.__buscaOS = c; (window.__irPara || irPara)('os'); }}>👤 Todas de ${c}</button>`)}</div>`}
+      ${telas.length > 0 && html`<div class="bg-chips">${telas.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setQ(''); setAberta(false); (window.__irPara || irPara)(x.aba); }}>${x.t}</button>`)}</div>`}
+    </div>` : null}
+    <div class="bg-linha">
+      <button class=${'bg-mic' + (fala.ouvindo ? ' on' : '')} title=${vozAuto ? 'Voz ligada — toque para desligar' : 'Voz desligada — toque para ligar'} onClick=${tog}>${fala.ouvindo ? '🎙' : '🎤'}</button>
+      <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); } }} />
+      ${q && html`<button class="bg-x" onClick=${() => { setQ(''); setAberta(false); }}>✕</button>`}
+    </div>
+  </div>`;
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
-  const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
+  const [vozAuto, setVozAuto] = useState(false);
   const autoRef = useRef(vozAuto); autoRef.current = vozAuto;
-  const falaB = useFala({ onInterim: (t) => setBusca(t), onFinal: (t) => { const q = String(t).replace(/[.?!]$/, '').trim(); if (!autoRef.current) falaB.parar && falaB.parar();
+  const falaB = useFala({ onInterim: (t) => { if (t && t.trim()) setBusca(t); }, onFinal: (t) => { const q = String(t).replace(/[.?!]$/, '').trim(); if (!autoRef.current) falaB.parar && falaB.parar();
     if (acaoRapida(q)) { setBusca(''); return; } const o = acharOSFala(listaRef.current || [], q); if (o) { setBusca(''); abrirOS(o.id); } else setBusca(q); } });
-  useEffect(() => { if (vozAuto) { const t = setTimeout(() => falaB.iniciar(), 400); return () => clearTimeout(t); } }, []);
   useEffect(() => () => { try { falaB.parar(); } catch {} }, []);
   const togAuto = () => { const v = !vozAuto; setVozAuto(v); try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) falaB.iniciar(); else falaB.parar(); };
   const [lista, setLista] = useState(null);
@@ -6246,8 +6276,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
       <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="🔍 Buscar OS, cliente, tela, função… ou fale" value=${busca} onInput=${e => setBusca(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && busca.trim()) { if (acaoRapida(busca) ) setBusca(''); } }} />
-        <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button>
-        <button class=${'btn btn-sm voz-auto' + (vozAuto ? ' on' : '')} title="Assistente de voz sempre ouvindo ao abrir o app" onClick=${togAuto}>${vozAuto ? '🟢 Voz ligada' : '⚪ Voz desligada'}</button></div>${resTelas}`;
+        <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button></div>${resTelas}`;
   if (vista === 'cliente') {
     const grupos = {};
     filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
@@ -6571,6 +6600,7 @@ function Principal({ sessao, toast }) {
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
+      <${BuscaGlobal} sessao=${sessao} irPara=${irPara} />
       <${BarraTransferencia} />
       <${Novidades} sessao=${sessao} />
       ${testeZ && html`<${ZerarEsteiras} sessao=${sessao} toast=${toast} fechar=${() => setTesteZ(false)} />`}
