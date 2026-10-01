@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['162', ['👁 Botão "Ver OS" no topo da OS: abre a OS pronta, na folha. Fica destacado depois de revisada.', '⚡ Assistente instantâneo: fale ou escreva "abre a cozinha da Cris", "26 045", "imprime a OS da Aline" ou "vai pra compras" — abre na hora, sem esperar a IA. Perguntas e mudanças continuam indo para a IA.']],
   ['161', ['🔝 Listas de catálogo agora abrem na frente das outras linhas.']],
   ['159', ['🎤 Busca por voz no Início: fale o cliente, nº ou ambiente (ex.: "cozinha da Cris", "26 045") e a OS já abre.', '🧲 Uma categoria só para puxadores, perfis, cavas, Zen e pegadores; lâminas ficam só em Acabamentos.']],
   ['157', ['🪑 Sem nome de ambiente no bloco (o ambiente já está no nº/nome da OS): cada "+ Adicionar móvel" abre direto o móvel para preencher.']],
@@ -1898,6 +1899,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <div class="grow os-cab-cli" title="Dados do cliente" onClick=${() => setPainelCA('cliente')}><b>${nomePadrao(os.cliente?.nome) || 'Cliente não informado'} <span class="dim" style=${{ fontSize: '12px' }}>👤 ✏️</span></b><small>${nomePadrao((os.ambientes || []).map(x => x.nome).join(', ') || os.ambienteResumo) || '—'}${os.prazoEntrega ? ' · 🚚 ' + os.prazoEntrega : ''}</small></div>
           <span class=${stx.c}>${stx.t.replace(/^\d+\. /, '')}</span>
           ${ok ? html`<span class="rev-ok" title=${'Revisada por ' + rev.por}>✅ Revisada</span>` : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Revisar</button>`}
+          ${os.id && html`<button class=${'btn btn-sm ver-os-btn' + (ok ? ' pronta' : '')} title="Ver a OS pronta" onClick=${() => { if (sujo && !confirm('Há mudanças não salvas. Ver a OS mesmo assim?')) return; window.__modoFicha = 'folha'; window.__abrirOS && window.__abrirOS(os.id); }}>👁 Ver OS</button>`}
           <button class="btn btn-sm" title="Exportar PDF" onClick=${pdf}>📄</button>
         </div>`; })()}
 
@@ -5923,6 +5925,17 @@ async function montarContexto(sessao, osAbertaId) {
   return linhas.join('\n').slice(0, 40000);
 }
 
+/* Atalho instantâneo (sem IA): telas e OS abertas na hora */
+function acaoRapida(q) {
+  if (comandoTela(q)) return true;
+  const t = norm(q), n = t.split(/\s+/).length;
+  const abrir = /\b(abre|abrir|abra|mostra|mostrar|ver|entra|entrar|vai|vamos|imprime|imprimir)\b/.test(t);
+  if (!abrir && (n > 4 || /\b(qual|quando|quanto|quem|como|por que|porque|muda|mudar|coloca|adiciona|marca|conclui)\b/.test(t))) return false;
+  const o = acharOSFala(window.__listaOS || [], q); if (!o || !window.__abrirOS) return false;
+  window.__ultimaOS = o.id; window.__abrirOS(o.id);
+  if (/imprim/.test(t)) { window.__modoFicha = 'folha'; setTimeout(() => { document.body.classList.add('imp-ficha'); window.print(); document.body.classList.remove('imp-ficha'); }, 900); }
+  return true;
+}
 function Assistente({ sessao, osAberta }) {
   const chave = 'osm_chat_' + sessao.uid;
   const [aberto, setAberto] = useState(false);
@@ -5942,7 +5955,7 @@ function Assistente({ sessao, osAberta }) {
     if (!q || pensando) return;
     fala.parar();
     setErro(''); setTexto(''); setInterim('');
-    if (comandoTela(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); return; }
+    if (acaoRapida(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); setAberto(false); return; }
     const hist = [...msgs, { role: 'user', content: q }];
     setMsgs(hist);
     setPensando(true);
@@ -5992,7 +6005,7 @@ function Assistente({ sessao, osAberta }) {
       if (/\b(n[aã]o|cancela|esquece|deixa)/i.test(q)) { const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' })); setFase('ouvindo'); setAberto(false); return; }
       const p = pendRef.current; pendRef.current = null; p.acoes.forEach((_, j) => marcar(p.i, j, { _st: 'descartada' }));
     }
-    if (comandoTela(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); setFase('ouvindo'); return; }
+    if (acaoRapida(q)) { setMsgs(h => [...h, { role: 'user', content: q }]); setFase('ouvindo'); return; }
     setFase('pensando');
     const hist = [...msgsRef.current, { role: 'user', content: q }];
     setMsgs(hist);
@@ -6194,7 +6207,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState('');
   const [amb, setAmb] = useState('');
-  listaRef.current = lista;
+  listaRef.current = lista; window.__listaOS = lista;
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));

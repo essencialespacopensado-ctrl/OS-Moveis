@@ -1463,3 +1463,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .sec-apl,.card,.amb-bloco{position:relative}
 .sec-apl:focus-within,.sec-apl:hover,.card:focus-within{z-index:60!important}
 .sec-apl:focus-within ~ .sec-apl{z-index:1}
+.ver-os-btn{font-weight:700}
+.ver-os-btn.pronta{background:linear-gradient(135deg,#16a34a,#0ea5e9);color:#fff;border:0;box-shadow:0 2px 10px #16a34a55}
