@@ -1356,3 +1356,7 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 /* v121 — voltar */
 .btn-voltar{position:fixed;left:14px;bottom:70px;z-index:900;border:0;border-radius:999px;padding:10px 16px;background:#1f2937;color:#fff;font-weight:700;box-shadow:0 6px 18px #0004;cursor:pointer;transition:transform .15s}
 .btn-voltar:hover{transform:translateX(-3px)}
+.cli-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.cli-card{cursor:pointer;display:flex;flex-direction:column;gap:4px;border-left:5px solid var(--cc);transition:transform .15s,box-shadow .15s}
+.cli-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px #0002}.cli-card small{opacity:.7}.cli-card .chip{align-self:flex-start}
+.novid-fundo{z-index:3500!important}.novid-caixa{max-height:85vh;overflow:auto;animation:mmPop .4s both}

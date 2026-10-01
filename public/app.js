@@ -46,6 +46,8 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['123', ['🆕 A janela "O que mudou" agora aparece sempre depois de cada atualização (também no celular) e tem o botão 🆕 Novidades no topo para rever.']],
+  ['122', ['👤 Nova aba Clientes (Geral): cadastro manual ou pelo contrato; ao salvar, os dados vão para todas as OS do cliente e saem na folha de impressão.', '✏️ Na edição da OS, os dados do cliente ficam num botão discreto (👤 Dados do cliente).']],
   ['121', ['🏭 Ao abrir a OS, a primeira aba é "Andamento": % de conclusão, compras e parceiros recebidos, pendências e a execução (etapa 3) para marcar ali mesmo.', '← Botão Voltar para a página anterior em todas as telas.']],
   ['120', ['📑 Contrato e 🎤 Iniciar reunião viraram botões no topo da edição da OS (abrem em janela).', '🏭 A execução (etapa 3) já aparece ao abrir a edição, abaixo dos dados do cliente.', '🪑 Conjuntos de móveis simplificados: só nome, quantidade e observações — medidas e materiais ficam nas Especificações.']],
   ['119', ['✏️ Edição da OS: a etapa 1 tem só os dados do cliente; a etapa 2 começa pelos conjuntos de móveis (+ Adicionar conjunto), depois especificações. Contrato, ata e andamento ficam no fim, recolhidos.']],
@@ -68,14 +70,20 @@ const NOVIDADES = [
   ['100', ['🔐 Grupos e permissões: escolha quem vê cada tela (Equipe → Grupos e permissões).']],
   ['99', ['⏸ Pausar / ✖ Cancelar envios e 🔁 tentar de novo quando a IA falha.']],
 ];
-function Novidades() {
+function Novidades({ sessao }) {
   const atual = NOVIDADES[0][0];
-  const [ver, setVer] = useState(() => { try { const v = localStorage.getItem('gp-versao-vista') || '101'; return v !== atual ? v : null; } catch { return null; } });
+  const lsGet = () => { try { return localStorage.getItem('gp-versao-vista') || ''; } catch { return ''; } };
+  const [ver, setVer] = useState(null);
+  useEffect(() => {
+    window.__abrirNovidades = () => setVer(String(Number(atual) - 3));
+    (async () => { let v = lsGet(); try { const d = await F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid)); const fv = d.data()?.versaoVista || ''; if (!v || (fv && Number(fv) < Number(v))) v = fv; } catch {}
+      if (Number(v || 0) < Number(atual)) setTimeout(() => setVer(v || String(Number(atual) - 3)), 1200); })();
+  }, []);
   if (!ver) return null;
   const lista = NOVIDADES.filter(([v]) => Number(v) > Number(ver));
-  const ok = () => { try { localStorage.setItem('gp-versao-vista', atual); } catch {} setVer(null); };
+  const ok = () => { try { localStorage.setItem('gp-versao-vista', atual); } catch {} F().fsMod.setDoc(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), { versaoVista: atual }, { merge: true }).catch(() => {}); setVer(null); };
   if (!lista.length) return null;
-  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && ok()}><div class="card modal-caixa stack" style=${{ width: 'min(480px,100%)' }}>
+  return ReactDOM.createPortal(html`<div class="modal-fundo novid-fundo" onClick=${e => e.target === e.currentTarget && ok()}><div class="card modal-caixa stack novid-caixa" style=${{ width: 'min(520px,100%)' }}>
     <div class="sec-title">🆕 O que mudou</div>
     ${lista.map(([v, itens]) => html`<div key=${v}><small class="dim">Versão ${v}</small><ul class="novid">${itens.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`)}
     <button class="btn btn-primary btn-block" onClick=${ok}>Entendi</button></div></div>`, document.body);
@@ -153,7 +161,7 @@ const STATUS_OS = [
 ];
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
-  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
+  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['clientes', 'Clientes'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
   ['Produção', [['os', 'Ordens de Serviço'], ['cronograma', 'Cronograma'], ['pedidos', 'Peças extras'], ['catalogo', 'Catálogo'], ['excluir', 'Excluir OSs']]],
   ['Compras', [['compras', 'Compras, notas e parceiros']]],
   ['Equipe', [['equipe', 'Equipe e acessos']]],
@@ -164,10 +172,10 @@ const TODAS_TELAS = TELAS_ACESSO.flatMap(g => g[1].map(t => t[0]));
 const GRUPOS_PADRAO = [
   { v: 'admin', t: 'Administrador', abas: TODAS_TELAS, fixo: true },
   { v: 'gerente', t: 'Gerente', abas: TODAS_TELAS.filter(x => !['equipe', 'config'].includes(x)) },
-  { v: 'financeiro', t: 'Financeiro', abas: ['inicio', 'quadro', 'contratos', 'os', 'compras', 'financeiro', 'contas'] },
+  { v: 'financeiro', t: 'Financeiro', abas: ['inicio', 'quadro', 'contratos', 'clientes', 'os', 'compras', 'financeiro', 'contas'] },
   { v: 'compras', t: 'Compras', abas: ['inicio', 'os', 'pedidos', 'catalogo', 'compras'] },
-  { v: 'projetista', t: 'Projetista', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'importar', 'os', 'cronograma', 'pedidos', 'catalogo', 'amostras'] },
-  { v: 'vendedor', t: 'Vendedor', abas: ['inicio', 'quadro', 'contratos', 'projetos', 'os', 'catalogo', 'amostras'] },
+  { v: 'projetista', t: 'Projetista', abas: ['inicio', 'quadro', 'contratos', 'clientes', 'projetos', 'importar', 'os', 'cronograma', 'pedidos', 'catalogo', 'amostras'] },
+  { v: 'vendedor', t: 'Vendedor', abas: ['inicio', 'quadro', 'contratos', 'clientes', 'projetos', 'os', 'catalogo', 'amostras'] },
   { v: 'producao', t: 'Produção', abas: ['inicio', 'os', 'cronograma', 'pedidos', 'catalogo'] },
   { v: 'montador', t: 'Montador', abas: ['inicio', 'os', 'cronograma', 'pedidos'] },
 ];
@@ -1886,12 +1894,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         <button class="btn btn-anim btn-teal" onClick=${() => setPainelCA('ata')}>🎤 Iniciar reunião</button>
       </div>
       ${painelCA && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setPainelCA(null)}><div class="card modal-caixa stack" style=${{ width: 'min(760px,100%)' }}>
-        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${painelCA === 'contrato' ? '📑 Contrato' : '🎤 Reunião / ata'}</div><button class="x-btn" onClick=${() => setPainelCA(null)}>✕</button></div>
-        ${painelCA === 'contrato' ? html`<${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />` : html`<${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />`}
-      </div></div>`, document.body)}
-      ${etapa === 1 && html`
-        <div style=${{ maxWidth: '760px', width: '100%', margin: '0 auto' }} class="stack">
-          <div class="card page-card stack">
+        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${painelCA === 'contrato' ? '📑 Contrato' : painelCA === 'cliente' ? '👤 Dados do cliente' : '🎤 Reunião / ata'}</div><button class="x-btn" onClick=${() => setPainelCA(null)}>✕</button></div>
+        ${painelCA === 'cliente' ? html`<div class="stack"><small class="dim">Para mudar em todas as OS do cliente, use Geral → 👤 Clientes.</small>          <div class="card page-card stack">
             <div class="sec-title">👤 Dados do cliente</div>
             <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
             <div class="grid2">
@@ -1906,8 +1910,11 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             <div class="field"><label class="lbl" for="os-amb">Ambiente(s) planejado(s)</label><input id="os-amb" class="inp" placeholder="Ex: Cozinha gourmet, suíte master, closet" value=${os.ambienteResumo || (os.ambientes || []).map(a => a.nome).join(', ')} onInput=${e => alterar(o => { o.ambienteResumo = e.target.value; })} /></div>
             <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
           </div>
-          <button class="btn btn-marrom btn-block" onClick=${() => ir(2)}>Salvar e ir para os conjuntos de móveis →</button>
-        </div>
+</div>` : painelCA === 'contrato' ? html`<${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />` : html`<${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />`}
+      </div></div>`, document.body)}
+      ${etapa === 1 && html`
+        <div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><button class="btn btn-sm btn-ghost" onClick=${() => setPainelCA('cliente')}>👤 Dados do cliente</button><small class="dim">${os.cliente?.nome || ''}${os.prazoEntrega ? ' · entrega ' + os.prazoEntrega : ''}</small>
+          <button class="btn btn-marrom btn-sm" style=${{ marginLeft: 'auto' }} onClick=${() => ir(2)}>Conjuntos de móveis →</button></div>
         <${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
 
       ${etapa === 2 && html`
@@ -5477,6 +5484,7 @@ const MAPA = {
     ['Diário de obra', 'Toque 📓 Diário no cartão → escolha o tipo → fale/foto → Salvar.', 'Cria pendência/registro; o número de pendências aparece no cartão.', ['os']],
     ['Juntar clientes parecidos', 'No aviso vermelho, toque "Juntar como…".', 'Troca o nome do cliente em todas as OS e tarefas.', ['os', 'cronograma']],
   ],
+  clientes: [['Novo cliente', '＋ Novo cliente → preencha nome, telefone, e-mail, CPF/CNPJ, endereço, obra, arquiteto → Salvar.', 'Cria o cadastro e atualiza os dados em todas as OS do cliente.', ['os', 'quadro']], ['Cadastrar pelo contrato', '📑 Cadastrar pelo contrato → envie o arquivo → confira → Salvar.', 'A IA lê os dados do cliente do contrato.', ['os']], ['Editar cliente', 'Toque no cartão → corrija → Salvar.', 'Repassa para todas as OS (nome, telefone, endereço, obra, arquiteto) e sai na folha de impressão.', ['os', 'cronograma']]],
   contratos: [['Enviar contrato', 'Toque para enviar o PDF/Word. A IA lê cliente, ambientes, valores e prazo.', 'Guarda o contrato e os dados do cliente.', ['os', 'financeiro']], ['Gerar OS do contrato', 'Após ler, gere as OS por ambiente. Se o número existir, escolha uma opção no aviso.', 'Cria OS novas com número, prazo e valor.', ['os', 'quadro', 'financeiro']]],
   projetos: [['Novo projeto', 'Cadastre o cliente e anexe contrato, detalhamentos e imagens.', 'Cria o projeto do cliente.', ['contratos']], ['Ata com microfone', 'Na reunião toque 🎤. A IA escreve a ata por ambiente e ignora conversas paralelas.', 'Salva a ata no projeto.', []], ['Gerar OS automática', 'Toque "Gerar OS automática" e revise.', 'Cria a OS preenchida (MDF, fitas, ferragens).', ['os', 'quadro']]],
   amostras: [['Emprestar amostra', '📤 Emprestar → item, quem levou, contato, até quando.', 'Entra em "Fora com alguém"; se passar da data fica vermelho.', ['os']], ['Cliente deixou algo', '📥 Cliente deixou algo → o quê, de quem, até quando devolver.', 'Entra em "Do cliente, com a gente".', ['os']], ['Devolver', 'Marque o quadradinho. Desfazer pede motivo.', 'Vai para Devolvidas e registra na OS.', ['os']]],
@@ -5506,7 +5514,7 @@ const MAPA = {
   contas: [['Nova conta', '＋ A pagar / ＋ A receber → valor, vencimento, forma, conta, parcelas.', 'Cria as parcelas; mostra "X de N pagas" e quanto falta.', ['financeiro']], ['Pagar / receber', 'Marque a parcela como paga/recebida.', 'Atualiza os totais.', ['financeiro']]],
   config: [['Etapas e logo', 'Edite etapas da OS/fábrica e envie a logo.', 'Muda as etapas em todo o app e a logo nas impressões.', ['os', 'quadro']]],
 };
-const NOMES_ABA = { inicio: '⌂ Início', quadro: '📊 Quadro geral', contratos: '📑 Contratos', projetos: '✨ Reuniões & Projetos', amostras: '📦 Amostras', importar: '🗂️ Importar', os: '📋 Ordens de Serviço', cronograma: '📅 Cronograma', pedidos: '🪵 Peças extras', catalogo: '🎨 Catálogo', excluir: '🗑 Excluir OSs', compras: '🛒 Compras', equipe: '👥 Equipe', financeiro: '💰 Resultado por OS', contas: '📒 Contas', config: '⚙ Configurações' };
+const NOMES_ABA = { inicio: '⌂ Início', quadro: '📊 Quadro geral', clientes: '👤 Clientes', contratos: '📑 Contratos', projetos: '✨ Reuniões & Projetos', amostras: '📦 Amostras', importar: '🗂️ Importar', os: '📋 Ordens de Serviço', cronograma: '📅 Cronograma', pedidos: '🪵 Peças extras', catalogo: '🎨 Catálogo', excluir: '🗑 Excluir OSs', compras: '🛒 Compras', equipe: '👥 Equipe', financeiro: '💰 Resultado por OS', contas: '📒 Contas', config: '⚙ Configurações' };
 const MANUAL = Object.fromEntries(Object.keys(MAPA).map(k => [k, [NOMES_ABA[k], '', MAPA[k].map(f => [f[0], f[1]])]]));
 function ManualAba({ aba }) {
   const l = MAPA[aba]; if (!l) return null;
@@ -5541,6 +5549,59 @@ function TelaManual({ abas, irPara }) {
         <div class="mm-card-t" style=${{ cursor: 'pointer' }} onClick=${() => setSec(k)}>${t}</div>
         <ul class="mm-ul">${vs.map(a => html`<li key=${a}><b>${NOMES_ABA[a]}:</b> ${MAPA[a].map(f => f[0]).join(' · ')}</li>`)}</ul></div>`)}</div>`}
     </div>
+  </div>`;
+}
+
+/* ---------- Cadastro de clientes (manual ou pelo contrato) → repassa para todas as OS ---------- */
+const CAMPOS_CLI = [['nome', 'Nome do cliente'], ['telefone', 'Telefone'], ['email', 'E-mail'], ['documento', 'CPF / CNPJ'], ['endereco', 'Endereço'], ['obra', 'Obra / local'], ['arquiteto', 'Arquiteto / designer'], ['obs', 'Observações']];
+async function aplicarClienteNasOS(sessao, c, nomeAntigo) {
+  const { getDocs, writeBatch } = F().fsMod; const E = sessao.empresaId;
+  const oss = (await getDocs(col('empresas', E, 'os'))).docs.map(d => ({ id: d.id, ...d.data() }));
+  const alvo = oss.filter(o => [norm(baseCli(nomeAntigo || c.nome)), norm(c.nome)].includes(norm(baseCli(o.cliente?.nome))));
+  const b = writeBatch(F().db);
+  alvo.forEach(o => { const nm = String(o.cliente?.nome || ''); const suf = nm.slice(baseCli(nm).length);
+    b.update(docRef('empresas', E, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: c.nome + suf, telefone: c.telefone || o.cliente?.telefone || '', endereco: c.endereco || o.cliente?.endereco || '', obra: c.obra || o.cliente?.obra || '', email: c.email || o.cliente?.email || '' }, ...(c.arquiteto ? { arquiteto: c.arquiteto } : {}), clienteId: c.id || '', atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); });
+  if (alvo.length) await b.commit();
+  alvo.forEach(o => registrar(sessao, o.id, '👤', 'Dados do cliente atualizados pelo cadastro', c.nome));
+  return alvo.length;
+}
+function TelaClientes({ sessao, toast, catalogo }) {
+  const [lista, setLista] = useState(null), [oss, setOss] = useState([]), [ed, setEd] = useState(null), [q, setQ] = useState(''), [lendo, setLendo] = useState('');
+  const E = sessao.empresaId; const inp = useRef(null);
+  useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', E, 'clientes'), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
+    const b = F().fsMod.onSnapshot(col('empresas', E, 'os'), s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); return () => { a(); b(); }; }, []);
+  const osDe = (nome) => oss.filter(o => norm(baseCli(o.cliente?.nome)) === norm(nome));
+  const semCad = [...new Set(oss.map(o => baseCli(o.cliente?.nome)).filter(Boolean))].filter(n => !(lista || []).some(c => norm(c.nome) === norm(n)));
+  const salvar = async () => {
+    const c = { ...ed }; if (!c.nome?.trim()) return toast('Digite o nome do cliente.'); c.nome = c.nome.trim();
+    try { const { id, _antigo, ...dados } = c; const ref = id ? docRef('empresas', E, 'clientes', id) : F().fsMod.doc(col('empresas', E, 'clientes'));
+      await F().fsMod.setDoc(ref, { ...dados, atualizadoEm: nowIso(), por: sessao.nome }, { merge: true });
+      const n = await aplicarClienteNasOS(sessao, { ...c, id: ref.id }, _antigo); toast('Cliente salvo' + (n ? ' e atualizado em ' + n + ' OS.' : '.'), 'ok'); setEd(null); }
+    catch (e) { toast(e.message, 'erro'); }
+  };
+  const doContrato = async (file) => {
+    if (!file) return; setLendo('Lendo contrato…');
+    try { const { texto, imagens } = await extrairArquivo(file); const r = await chamarIA('contrato_os', { texto, temImagens: imagens.length > 0, os: {}, catalogo: [] }, imagens);
+      const cl = r.cliente || {}; const ex = (lista || []).find(c => norm(c.nome) === norm(baseCli(cl.nome)) || cliParecido(c.nome, cl.nome));
+      setEd({ ...(ex || {}), nome: ex?.nome || baseCli(cl.nome) || '', telefone: cl.telefone || ex?.telefone || '', endereco: cl.endereco || ex?.endereco || '', obra: cl.obra || ex?.obra || '', arquiteto: r.arquiteto || ex?.arquiteto || '', _antigo: ex?.nome || '' });
+      toast('Confira os dados lidos do contrato e salve.', 'ok');
+    } catch (e) { toast('Não li o contrato: ' + e.message, 'erro'); }
+    setLendo('');
+  };
+  const vis = (lista || []).filter(c => !q || norm(JSON.stringify(c)).includes(norm(q))).sort((a, b) => a.nome.localeCompare(b.nome));
+  return html`<div class="fade-up stack">
+    <div class="page-head"><div><h2>👤 Clientes</h2><div class="dim">Cadastre uma vez — os dados vão para todas as OS do cliente (e saem na folha de impressão).</div></div>
+      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-anim" disabled=${!!lendo} onClick=${() => inp.current?.click()}>${lendo || '📑 Cadastrar pelo contrato'}</button><button class="btn btn-primary btn-anim" onClick=${() => setEd({ nome: '' })}>＋ Novo cliente</button></div></div>
+    <input ref=${inp} type="file" hidden accept=".pdf,.doc,.docx,image/*" onChange=${e => { doContrato(e.target.files[0]); e.target.value = ''; }} />
+    ${semCad.length > 0 && html`<div class="card warn-box"><b>${semCad.length} cliente(s) das OS ainda sem cadastro:</b><div class="row" style=${{ gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>${semCad.map(n => { const o = osDe(n)[0]; return html`<button key=${n} class="pill" onClick=${() => setEd({ nome: n, telefone: o?.cliente?.telefone || '', endereco: o?.cliente?.endereco || '', obra: o?.cliente?.obra || '', arquiteto: o?.arquiteto || '', _antigo: n })}>＋ ${n}</button>`; })}</div></div>`}
+    <input class="inp" placeholder="🔍 Buscar cliente" value=${q} onInput=${e => setQ(e.target.value)} />
+    ${lista === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nenhum cliente cadastrado.</div>` : html`<div class="cli-grade">${vis.map(c => { const os = osDe(c.nome); return html`<div key=${c.id} class="card cli-card" style=${{ '--cc': corCliente(c.nome) }} onClick=${() => setEd({ ...c, _antigo: c.nome })}>
+      <b>${c.nome}</b><small>${[c.telefone, c.obra || c.endereco, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ') || 'sem dados'}</small><span class="chip">${os.length} OS</span></div>`; })}</div>`}
+    ${ed && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEd(null)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">👤 ${ed.id ? 'Editar cliente' : 'Novo cliente'}</div><button class="x-btn" onClick=${() => setEd(null)}>✕</button></div>
+      <div class="grid2">${CAMPOS_CLI.map(([k, t]) => html`<div key=${k} class="field" style=${k === 'obs' || k === 'endereco' ? { gridColumn: '1/-1' } : null}><span class="lbl">${t}</span><input class="inp" value=${ed[k] || ''} onInput=${e => setEd({ ...ed, [k]: e.target.value })} /></div>`)}</div>
+      <small class="dim">Ao salvar, nome, telefone, endereço, obra e arquiteto são atualizados em ${osDe(ed._antigo || ed.nome).length} OS deste cliente.</small>
+      <button class="btn btn-primary btn-block btn-anim" onClick=${salvar}>💾 Salvar e atualizar as OS</button></div></div>`, document.body)}
   </div>`;
 }
 
@@ -5712,7 +5773,7 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'clientes', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
@@ -6332,6 +6393,7 @@ function Principal({ sessao, toast }) {
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
     { v: 'quadro', t: 'Quadro geral', i: '📊' },
+    { v: 'clientes', t: 'Clientes', i: '👤' },
     { v: 'pedidos', t: 'Peças extras', i: '🪵' },
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
     { v: 'contratos', t: 'Contratos', i: '📑' },
@@ -6375,6 +6437,7 @@ function Principal({ sessao, toast }) {
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
+            <button class="btn btn-ghost btn-sm" title="O que mudou" onClick=${() => window.__abrirNovidades && window.__abrirNovidades()}>🆕<span class="txt-desk"> Novidades</span></button>
             <button class="btn btn-ghost btn-sm" title="Compartilhar o app" onClick=${async () => { const url = location.origin + '/'; const txt = 'Gestão Pró — gestão de ordens de serviço, produção, compras e financeiro para marcenarias. Acesse: ' + url; try { if (navigator.share) await navigator.share({ title: 'Gestão Pró', text: txt, url }); else { await navigator.clipboard.writeText(txt); toast('Link copiado: ' + url, 'ok'); } } catch {} }}>🔗<span class="txt-desk"> Compartilhar</span></button>
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
@@ -6395,6 +6458,7 @@ function Principal({ sessao, toast }) {
         ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
         ${ficha && html`<${FichaOS} key=${ficha} sessao=${sessao} osId=${ficha} fechar=${() => setFicha(null)} editar=${abrirDireto} toast=${toast} />`}
         ${aba === 'manual' && html`<${TelaManual} abas=${abas} irPara=${irPara} />`}
+        ${aba === 'clientes' && vis('clientes') && html`<${TelaClientes} sessao=${sessao} toast=${toast} catalogo=${catalogo} />`}
         ${aba === 'amostras' && vis('amostras') && html`<${TelaAmostras} sessao=${sessao} toast=${toast} />`}
         ${aba === 'importar' && vis('importar') && html`<${TelaImportar} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'catalogo' && vis('catalogo') && html`<${TelaCatalogo} sessao=${sessao} catalogo=${catalogo} toast=${toast} />`}
@@ -6412,7 +6476,7 @@ function Principal({ sessao, toast }) {
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
       <${BarraTransferencia} />
-      <${Novidades} />
+      <${Novidades} sessao=${sessao} />
       ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
