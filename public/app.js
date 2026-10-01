@@ -4730,6 +4730,7 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
       </div>
       ${!fechado && html`
         <div class="amb-body">
+          ${!(amb.moveis || []).length && html`<div class="movel-card"><div class="movel-top"><input class="inp" placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onBlur=${e => e.target.value.trim() && up(a => { a.moveis = [novoMovel(nomePadrao(e.target.value))]; })} /></div></div>`}
           ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
           <div class="amb-esp">
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>
