@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['131', ['🔤 Nomes de clientes e ambientes sempre escritos do mesmo jeito (ex.: "SUÍTE MASTER" e "suite master" → "Suíte Master"; siglas como BWC e LED ficam em maiúsculas).', '🔴 Na folha da OS, palavras-chave como VIDROS, SERRALHERIA, PINTURA, LACA, PEDRA, ESPELHO, TAPEÇARIA, ESQUADRIA, LED aparecem em CAIXA ALTA e em vermelho.']],
   ['130', ['🎨 A aba "Por temas" saiu de dentro da OS.']],
   ['129', ['⏱ Tempo ganho/perdido virou botão (no Início e no Cronograma).', '✦ O botão do assistente pisca com "Peça qualquer coisa" (a barra de lembrete saiu).', '🆕 Botão discreto de atualizações no canto; o cartão de novidades no Início tem "Entendi" para fechar.']],
   ['128', ['👥 Ao tocar num cliente no Quadro geral, abre a lista de OS do cliente (com avançar/voltar etapa e projeto).', '🤝 Obra terceirizada: botão "Pedido do parceiro" para o parceiro pedir à fábrica molduras, usinagem, corte, fita, furação, pintura… (na OS → Andamento e em Peças extras).']],
@@ -1626,14 +1627,14 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
         };
         return html`${reab && html`<${SenhaMotivo} titulo=${numOS(reab.o) + ': voltar para ' + reab.volta.t.replace(/^\d+\. /, '')} texto="Voltar uma etapa pede motivo e senha." botao="Voltar" onOk=${(m) => voltar(reab.o, reab.volta, m)} fechar=${() => setReab(null)} />`}<div class="os-clis">${grupos.map(x => html`
           <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')} style=${{ '--cc': corCliente(x.nome) }}>
-            <div class="os-cli-top"><b>${x.nome}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
+            <div class="os-cli-top"><b>${nomePadrao(x.nome)}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
             ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
               const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i] || { c: 'chip', t: st || '' };
               const iniciada = st !== 'elaboracao' && st !== 'concluida';
               return html`<div key=${o.id} class=${'os-cli-os st-bg-' + st + (iniciada ? ' iniciada' : '') + (atrasada(o) ? ' atras' : '')}>
                 <button class="os-cli-info" onClick=${() => setOsAberta(o.id)}>
                   <span class="mono">${numOS(o)}${bolinhas(o)}</span>
-                  <span class="nm"><b>${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo || '—'}</b>
+                  <span class="nm"><b>${nomePadrao((o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo) || '—'}</b>
                     <small>${o.prazoEntrega ? '🚚 ' + o.prazoEntrega : ''}${atrasada(o) ? ' ⚠ atrasada' : ''}</small></span>
                   <span class="os-trilho">${STATUS_OS.map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j < i ? 'f' : j === i ? 'a' : ''}></i>`)}</span>
                   <span class=${x2.c + ' mini'}>${x2.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
@@ -3167,7 +3168,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
           const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
           const cor = corCliente(g.nome);
           return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor, flex: g.cards.length + ' 1 ' + Math.min(560, 180 + g.cards.length * 70) + 'px' }} onClick=${() => { window.__buscaOS = g.nome; window.__irPara && window.__irPara('os'); }}>
-            <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
+            <div class="qg-cli"><b>${nomePadrao(g.nome)}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
             <div class="pct-rot"><small>Conclusão da obra</small><${BarraPct} p=${Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length)} /></div>
             <div class="qg-badges">
               <span title="Produção">🏭 ${Math.round(tot ? feitas / tot * 100 : 0)}%</span>
@@ -4153,7 +4154,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
       <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
-        <b>${o.cliente?.nome || ''} <button class="edit-cli" title="Editar nome do cliente" onClick=${async () => {
+        <b>${nomePadrao(o.cliente?.nome)} <button class="edit-cli" title="Editar nome do cliente" onClick=${async () => {
           const antigo = o.cliente?.nome || ''; const novo = (await pedirTexto('✏️ Nome do cliente', 'Nome do cliente', antigo) || '').trim(); if (!novo || novo === antigo) return;
           const outras = baseCli(antigo) && baseCli(antigo) !== baseCli(novo) ? (await F().fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.id !== o.id && baseCli(x.cliente?.nome) === baseCli(antigo)) : [];
           let todas = false; if (outras.length) { const r = await escolher('Trocar em todas?', '"' + baseCli(antigo) + '" tem mais ' + outras.length + ' OS.', [{ v: 't', t: 'Trocar em todas as ' + (outras.length + 1) + ' OS', cls: 'btn-primary' }, { v: 'u', t: 'Só nesta OS' }]); if (!r) return; todas = r === 't'; }
@@ -4176,7 +4177,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
-      <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></div>
+      <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}></div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
@@ -4800,6 +4801,20 @@ function FerragemLinha({ f, catalogo, sessao, up, remover }) {
     </div>`;
 }
 
+/* ---------- Escrita padronizada de nomes e destaque de palavras-chave ---------- */
+const SIGLAS = /^(bwc|wc|pt|led|mdf|tv|os|cnpj|cpf|rt|ii|iii|iv|xl)$/i;
+const MINUSC = /^(de|da|do|das|dos|e|em|com|para|p\/|a|o)$/i;
+function nomePadrao(t) {
+  return String(t || '').trim().replace(/\s+/g, ' ').toLowerCase().split(' ').map((w, i) => SIGLAS.test(w) ? w.toUpperCase() : (i > 0 && MINUSC.test(w)) ? w : w.replace(/^(\p{L})/u, c => c.toUpperCase()).replace(/-(\p{L})/gu, (m, c) => '-' + c.toUpperCase())).join(' ');
+}
+const PALAVRAS_CHAVE = ['vidros?', 'espelhos?', 'serralheria', 'serralheiro', 'pintura', 'laca', 'laqueado', 'pedras?', 'm[aá]rmore', 'granito', 'quartzo', 'tape[cç]aria', 'estofado', 'esquadrias?', 'metal(ica|ico)?', 'alum[ií]nio', 'perfil gola', 'led', 'fechadura', 'terceirizad[oa]'];
+const RE_CHAVE = new RegExp('\\b(' + PALAVRAS_CHAVE.join('|') + ')\\b', 'gi');
+function destacarChaves(raiz) {
+  if (!raiz) return; const w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT); const nos = [];
+  while (w.nextNode()) { const n = w.currentNode; if (n.parentElement?.closest('.kw')) continue; RE_CHAVE.lastIndex = 0; if (RE_CHAVE.test(n.nodeValue)) nos.push(n); }
+  nos.forEach(n => { const f = document.createDocumentFragment(); let last = 0; const t = n.nodeValue; t.replace(RE_CHAVE, (m, _g, off) => { f.append(t.slice(last, off)); const b = document.createElement('b'); b.className = 'kw'; b.textContent = m.toUpperCase(); f.append(b); last = off + m.length; return m; }); f.append(t.slice(last)); n.replaceWith(f); });
+}
+function ComChaves({ children, dep }) { const r = useRef(null); useEffect(() => { const id = setTimeout(() => destacarChaves(r.current), 50); return () => clearTimeout(id); }, [dep]); return html`<div ref=${r} key=${dep}>${children}</div>`; }
 function ImpressaoOS({ os, empresa }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const P = os.padrao || {};
@@ -6166,7 +6181,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
       <div class="ini-clis">
         ${Object.values(grupos).sort((a, b) => a.nome.localeCompare(b.nome)).map(g => { const c = corOS(g.oss[0]); const atr = g.oss.filter(atrasada).length; return html`
           <div key=${g.nome} class="ini-cli" style=${{ '--cc': c }}>
-            <div class="ini-cli-top"><b>${g.nome}</b><span>${g.oss.length} ${g.oss.length === 1 ? 'OS' : 'OSs'}${atr ? html` · <em>⚠ ${atr}</em>` : ''}</span></div>
+            <div class="ini-cli-top"><b>${nomePadrao(g.nome)}</b><span>${g.oss.length} ${g.oss.length === 1 ? 'OS' : 'OSs'}${atr ? html` · <em>⚠ ${atr}</em>` : ''}</span></div>
             <div class="ini-cli-oss">
               ${g.oss.map(o => { const x = STATUS_OS.find(y => y.v === o.status) || STATUS_OS[0]; return html`
                 <button key=${o.id} class=${'ini-cli-os' + (atrasada(o) ? ' atras' : '')} onClick=${() => abrirOS(o.id)}>

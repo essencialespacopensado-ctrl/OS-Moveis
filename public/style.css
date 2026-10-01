@@ -1370,3 +1370,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @keyframes fabPisca{0%,100%{box-shadow:0 0 0 0 #7c3aed88}50%{box-shadow:0 0 0 12px #7c3aed00;filter:brightness(1.15)}}
 .btn-novid{position:fixed;left:14px;bottom:126px;z-index:900;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface-solid);font-size:15px;cursor:pointer;opacity:.75;transition:opacity .15s,transform .15s}
 .btn-novid:hover{opacity:1;transform:scale(1.1)}
+.kw{color:#dc2626;font-weight:900;letter-spacing:.02em;background:#fee2e2;padding:0 3px;border-radius:3px}@media print{.kw{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
