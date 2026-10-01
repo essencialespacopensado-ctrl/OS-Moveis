@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['121', ['🏭 Ao abrir a OS, a primeira aba é "Andamento": % de conclusão, compras e parceiros recebidos, pendências e a execução (etapa 3) para marcar ali mesmo.', '← Botão Voltar para a página anterior em todas as telas.']],
   ['120', ['📑 Contrato e 🎤 Iniciar reunião viraram botões no topo da edição da OS (abrem em janela).', '🏭 A execução (etapa 3) já aparece ao abrir a edição, abaixo dos dados do cliente.', '🪑 Conjuntos de móveis simplificados: só nome, quantidade e observações — medidas e materiais ficam nas Especificações.']],
   ['119', ['✏️ Edição da OS: a etapa 1 tem só os dados do cliente; a etapa 2 começa pelos conjuntos de móveis (+ Adicionar conjunto), depois especificações. Contrato, ata e andamento ficam no fim, recolhidos.']],
   ['118', ['🛠 Acesso do desenvolvedor com login + senha e "Esqueci a senha" (link no seu e-mail).']],
@@ -4048,6 +4049,30 @@ function CalendarioOS({ sessao, os }) {
 }
 
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
+/* Andamento da OS dentro da ficha: % + parceiros + execução (etapa 3) editável */
+function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
+  const alterar = async (fn) => {
+    const c = JSON.parse(JSON.stringify(o)); fn(c); const patch = {};
+    Object.keys(c).forEach(k => { if (k !== 'id' && JSON.stringify(c[k]) !== JSON.stringify(o[k])) patch[k] = c[k]; });
+    if (!Object.keys(patch).length) return;
+    if (patch.status && patch.status !== o.status) patch.statusHist = [...(o.statusHist || []), { st: patch.status, em: nowIso(), quem: sessao.nome }];
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ...patch, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
+  };
+  const p = pctObra(o), parc = parceirosDaOS(o), rec = compras.filter(i => i.recebido).length;
+  return html`<div class="stack">
+    <div class="card stack"><div class="row" style=${{ justifyContent: 'space-between' }}><b>📈 Conclusão da obra</b><small class="dim">${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t}</small></div><${BarraPct} p=${p} grande=${true} />
+      <div class="fo-kpis">
+        <div><small>🛒 Compras recebidas</small><b>${rec}/${compras.length}</b></div>
+        <div><small>🤝 Parceiros recebidos</small><b>${parc.filter(x => x.st === 'recebido').length}/${parc.length}</b></div>
+        <div><small>⚠ Pendências do diário</small><b style=${{ color: pend.length ? 'var(--danger)' : '' }}>${pend.length}</b></div>
+        <div><small>🪵 Peças extras abertas</small><b>${peds.filter(pedAberto).length}</b></div>
+        <div><small>🚚 Entrega</small><b>${o.prazoEntrega || '—'}</b></div>
+      </div>
+      ${parc.length > 0 && html`<div class="qg-parc">${parc.map(x => { const st = infoSt(x.st); return html`<span key=${x.k} class="qg-chip" style=${{ borderColor: st[3], background: st[3] + '1f' }}><span>${x.ic}</span>${x.t.split(/[ /]/)[0]}<b style=${{ color: st[3] }}>· ${st[2]}</b>${x.previsao ? html`<small>${String(x.previsao).slice(0, 5)}</small>` : ''}</span>`; })}</div>`}
+    </div>
+    <${ExecucaoOS} os=${o} alterar=${alterar} sessao=${sessao} toast=${toast} />
+  </div>`;
+}
 function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const [o, setO] = useState(undefined);
   const [compras, setCompras] = useState([]);
@@ -4065,7 +4090,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
-  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'temas'; });
+  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha', temas: 'temas' })[m] || 'andamento'; });
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
   const [todas, setTodas] = useState([]);
@@ -4114,8 +4139,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'temas' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['temas', '🎨 Por temas'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
+      ${modoV === 'andamento' && html`<${AndamentoFicha} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
@@ -6300,7 +6326,9 @@ function Principal({ sessao, toast }) {
   window.__editarOS = (id) => abrirDireto(id);
   const [cronoK, setCronoK] = useState(0);
   window.__irCronograma = (d, foco) => { window.__semanaIr = d || null; window.__focoAgenda = foco || null; setFicha(null); setOsAberta(null); setAba('cronograma'); setCronoK(k => k + 1); window.scrollTo(0, 0); };
-  const irPara = (v) => { setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
+  const histNav = useRef([]);
+  const irPara = (v, semHist) => { if (!semHist && v !== aba) histNav.current = [...histNav.current, aba].slice(-30); setAba(v); if (v !== 'os') setOsAberta(null); window.scrollTo(0, 0); };
+  const voltarPag = () => { if (ficha) return setFicha(null); if (osAberta) return setOsAberta(null); const h = histNav.current; const v = h.pop() || 'inicio'; histNav.current = [...h]; irPara(v, true); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
     { v: 'quadro', t: 'Quadro geral', i: '📊' },
@@ -6355,6 +6383,7 @@ function Principal({ sessao, toast }) {
       ${ajuda && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAjuda(false)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">❓ Como funciona</div><button class="x-btn" onClick=${() => setAjuda(false)}>✕</button></div>
         <${ManualAba} aba=${aba} /><${LembreteAssistente} /><button class="btn btn-sm" onClick=${() => { setAjuda(false); irPara('manual'); }}>📖 Ver o manual completo</button></div></div>`, document.body)}
+      ${(histNav.current.length > 0 || osAberta || ficha) && html`<button class="btn-voltar" title="Voltar para a página anterior" onClick=${voltarPag}>← Voltar</button>`}
       ${aba !== 'manual' && MANUAL[aba] && html`<button class="btn-ajuda" title="Como funciona esta tela" onClick=${() => setAjuda(true)}>❓</button>`}
       ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
