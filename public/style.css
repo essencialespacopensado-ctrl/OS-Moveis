@@ -1443,3 +1443,8 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .btn-apl.on i::after{color:var(--k,#16a34a)}
 .btn-apl i{transition:transform .3s}.btn-apl.on i{transform:rotate(360deg)}
 .mat-l{--k:#d97706}
+.mat-linhas{flex-direction:row!important;flex-wrap:wrap;gap:6px!important}
+.mat-l{border:0!important;padding:0!important;background:none!important}
+.mat-chip{border:1.5px solid color-mix(in srgb,#d97706 40%,transparent);background:var(--surface-solid);color:var(--text);border-radius:999px;padding:5px 12px;font-weight:700;font-size:12.5px;cursor:pointer;transition:all .2s}
+.mat-chip:hover{transform:translateY(-1px)}.mat-chip.on{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border-color:transparent;box-shadow:0 4px 12px #d9770644}
+.acab-box{padding:10px!important;gap:6px!important}
