@@ -46,6 +46,8 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['134', ['🏭 Na OS (aba Andamento) a esteira agora é a das etapas da OS, igual à lista: trilho colorido + ▶ Avançar e ◀ Voltar (com motivo), e o seletor interna/terceirizada.']],
+  ['133', ['🔤 Correção automática: ao terminar de digitar um nome (cliente, ambiente, móvel, arquiteto, obra), ele já vira o padrão e com acento certo (suite → Suíte, area de servico → Área de Serviço, Fabricio → Fabrício).', '🔤 Os textos do cronograma semanal também foram padronizados.']],
   ['132', ['🔤 Todos os nomes já cadastrados (clientes, ambientes, arquitetos, cronograma, pedidos, amostras) foram corrigidos para o mesmo padrão. OS novas já entram padronizadas.']],
   ['131', ['🔤 Nomes de clientes e ambientes sempre escritos do mesmo jeito (ex.: "SUÍTE MASTER" e "suite master" → "Suíte Master"; siglas como BWC e LED ficam em maiúsculas).', '🔴 Na folha da OS, palavras-chave como VIDROS, SERRALHERIA, PINTURA, LACA, PEDRA, ESPELHO, TAPEÇARIA, ESQUADRIA, LED aparecem em CAIXA ALTA e em vermelho.']],
   ['130', ['🎨 A aba "Por temas" saiu de dentro da OS.']],
@@ -1920,7 +1922,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${painelCA === 'contrato' ? '📑 Contrato' : painelCA === 'cliente' ? '👤 Dados do cliente' : '🎤 Reunião / ata'}</div><button class="x-btn" onClick=${() => setPainelCA(null)}>✕</button></div>
         ${painelCA === 'cliente' ? html`<div class="stack"><small class="dim">Para mudar em todas as OS do cliente, use Geral → 👤 Clientes.</small>          <div class="card page-card stack">
             <div class="sec-title">👤 Dados do cliente</div>
-            <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
+            <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} onBlur=${e => alterar(o => { o.cliente = { ...(o.cliente || {}), nome: nomePadrao(e.target.value) }; })} /></div>
             <div class="grid2">
               <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
               <div class="field"><label class="lbl" for="os-obra">Obra / local</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
@@ -1928,9 +1930,9 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
             <div class="grid2">
               <div class="field"><label class="lbl" for="os-resp">Responsável</label><input id="os-resp" class="inp" value=${os.responsavel || ''} placeholder=${sessao.nome} onInput=${e => alterar(o => { o.responsavel = e.target.value; })} /></div>
-              <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} /></div>
+              <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} onBlur=${e => alterar(o => { o.arquiteto = nomePadrao(e.target.value); })} /></div>
             </div>
-            <div class="field"><label class="lbl" for="os-amb">Ambiente(s) planejado(s)</label><input id="os-amb" class="inp" placeholder="Ex: Cozinha gourmet, suíte master, closet" value=${os.ambienteResumo || (os.ambientes || []).map(a => a.nome).join(', ')} onInput=${e => alterar(o => { o.ambienteResumo = e.target.value; })} /></div>
+            <div class="field"><label class="lbl" for="os-amb">Ambiente(s) planejado(s)</label><input id="os-amb" class="inp" placeholder="Ex: Cozinha gourmet, suíte master, closet" value=${os.ambienteResumo || (os.ambientes || []).map(a => a.nome).join(', ')} onInput=${e => alterar(o => { o.ambienteResumo = e.target.value; })} onBlur=${e => alterar(o => { o.ambienteResumo = nomePadrao(e.target.value); })} /></div>
             <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
           </div>
 </div>` : painelCA === 'contrato' ? html`<${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />` : html`<${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />`}
@@ -4101,7 +4103,18 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
       </div>
       ${parc.length > 0 && html`<div class="qg-parc">${parc.map(x => { const st = infoSt(x.st); return html`<span key=${x.k} class="qg-chip" style=${{ borderColor: st[3], background: st[3] + '1f' }}><span>${x.ic}</span>${x.t.split(/[ /]/)[0]}<b style=${{ color: st[3] }}>· ${st[2]}</b>${x.previsao ? html`<small>${String(x.previsao).slice(0, 5)}</small>` : ''}</span>`; })}</div>`}
     </div>
-    <${ExecucaoOS} os=${o} alterar=${alterar} sessao=${sessao} toast=${toast} />
+    ${(() => { const st = STATUS_OS.find(x => x.v === o.status) ? o.status : (STATUS_OS[0]?.v || ''), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], ant = STATUS_OS[i - 1];
+      const modo = o.modoExecucao === 'terceirizada' ? 'terc_ext' : (o.modoExecucao || 'interna');
+      const mudar = async (alvo, motivo) => { const patch = { status: alvo.v, statusHist: [...(o.statusHist || []), { st: alvo.v, em: nowIso(), quem: sessao.nome }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }; if (motivo) patch.reaberturas = [...(o.reaberturas || []), { oque: 'Status: ' + (STATUS_OS[i] || {}).t + ' → ' + alvo.t, motivo, quem: sessao.nome, quando: nowIso() }];
+        try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), patch); registrar(sessao, o.id, motivo ? '↺' : '➡️', 'Etapa: ' + alvo.t.replace(/^\d+\. /, ''), motivo || ''); } catch (e) { toast(e.message, 'erro'); } };
+      return html`<div class="card stack">
+        <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🏭 Esteira da OS</b>
+          <div class="seg-mini">${[['interna', '🏭 Produção interna'], ['terc_int', '🤝 Terceirizada interna'], ['terc_ext', '🚚 Terceirizada externa']].map(([v, t]) => html`<button key=${v} class=${modo === v ? 'on' : ''} onClick=${() => alterar(x => { x.modoExecucao = v; })}>${t}</button>`)}</div></div>
+        <div class="est-os">${STATUS_OS.map((s2, j) => html`<div key=${s2.v} class=${'est-os-p' + (j < i ? ' f' : j === i ? ' a' : '')}><i>${j < i ? '✓' : j + 1}</i><small>${s2.t.replace(/^\d+\. /, '')}</small></div>`)}</div>
+        <div class="row" style=${{ gap: '8px' }}>
+          ${ant && html`<button class="btn btn-anim" onClick=${async () => { const m = await pedirMotivo('Voltar para ' + ant.t.replace(/^\d+\. /, '')); if (m) mudar(ant, m); }}>◀ Voltar etapa</button>`}
+          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => mudar(prox)}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
+        </div></div>`; })()}
     ${['terceirizada', 'terc_int', 'terc_ext'].includes(o.modoExecucao) && html`<div class="card stack"><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>`}
   </div>`;
 }
@@ -4157,7 +4170,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
       <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
         <b>${nomePadrao(o.cliente?.nome)} <button class="edit-cli" title="Editar nome do cliente" onClick=${async () => {
-          const antigo = o.cliente?.nome || ''; const novo = (await pedirTexto('✏️ Nome do cliente', 'Nome do cliente', antigo) || '').trim(); if (!novo || novo === antigo) return;
+          const antigo = o.cliente?.nome || ''; const novo = nomePadrao(await pedirTexto('✏️ Nome do cliente', 'Nome do cliente', antigo) || ''); if (!novo || novo === antigo) return;
           const outras = baseCli(antigo) && baseCli(antigo) !== baseCli(novo) ? (await F().fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.id !== o.id && baseCli(x.cliente?.nome) === baseCli(antigo)) : [];
           let todas = false; if (outras.length) { const r = await escolher('Trocar em todas?', '"' + baseCli(antigo) + '" tem mais ' + outras.length + ' OS.', [{ v: 't', t: 'Trocar em todas as ' + (outras.length + 1) + ' OS', cls: 'btn-primary' }, { v: 'u', t: 'Só nesta OS' }]); if (!r) return; todas = r === 't'; }
           try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { cliente: { ...(o.cliente || {}), nome: novo }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); registrar(sessao, o.id, '👤', 'Nome do cliente', antigo + ' → ' + novo);
@@ -4729,7 +4742,7 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao }) {
     <div class="amb">
       <div class="amb-head">
         <button class="x-btn" style=${{ fontSize: '16px' }} onClick=${() => setFechado(v => !v)} title=${fechado ? 'Abrir' : 'Recolher'}>${fechado ? '▸' : '▾'}</button>
-        <input class="inp" style=${{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '17px', background: 'transparent', border: 'none', padding: '4px' }} value=${amb.nome} placeholder="Nome do ambiente" onInput=${e => up(a => { a.nome = e.target.value; })} />
+        <input class="inp" style=${{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '17px', background: 'transparent', border: 'none', padding: '4px' }} value=${amb.nome} placeholder="Nome do ambiente" onInput=${e => up(a => { a.nome = e.target.value; })} onBlur=${e => up(a => { a.nome = nomePadrao(e.target.value); })} />
         <span class="chip">${(amb.moveis || []).length} móveis</span>
         ${confirmar
           ? html`<button class="btn btn-sm btn-danger" onClick=${() => alterar(o => { o.ambientes.splice(ai, 1); })}>Apagar</button><button class="btn btn-sm" onClick=${() => setConfirmar(false)}>Não</button>`
@@ -4774,7 +4787,7 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
   return html`
     <div class=${'movel-card' + ((m.revisar || []).length ? ' revisar' : '')}>
       <div class="movel-top">
-        <input class="inp" value=${m.nome} placeholder="Nome do móvel" onInput=${campo('nome')} />
+        <input class="inp" value=${m.nome} placeholder="Nome do móvel" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
         <input class="inp inp-sm" style=${{ width: '64px' }} type="number" min="1" value=${m.quantidade} title="Quantidade" onInput=${e => upMovel(x => { x.quantidade = Number(e.target.value) || 1; })} />
         <button class="btn btn-sm btn-ghost" onClick=${duplicar} title="Duplicar">⧉</button>
         ${confirmar
@@ -4806,8 +4819,10 @@ function FerragemLinha({ f, catalogo, sessao, up, remover }) {
 /* ---------- Escrita padronizada de nomes e destaque de palavras-chave ---------- */
 const SIGLAS = /^(bwc|wc|pt|led|mdf|tv|os|cnpj|cpf|rt|ii|iii|iv|xl)$/i;
 const MINUSC = /^(de|da|do|das|dos|e|em|com|para|p\/|a|o)$/i;
+const ACENTOS = { suite: 'suíte', suites: 'suítes', area: 'área', areas: 'áreas', servico: 'serviço', servicos: 'serviços', comodo: 'cômodo', escritorio: 'escritório', dormitorio: 'dormitório', dormitorios: 'dormitórios', armario: 'armário', armarios: 'armários', balcao: 'balcão', balcoes: 'balcões', painel: 'painel', paineis: 'painéis', aereo: 'aéreo', aereos: 'aéreos', gabinete: 'gabinete', espelho: 'espelho', lavabo: 'lavabo', sotao: 'sótão', terraco: 'terraço', salao: 'salão', jardim: 'jardim', varanda: 'varanda', hospede: 'hóspede', hospedes: 'hóspedes', crianca: 'criança', criancas: 'crianças', bebe: 'bebê', cozinha: 'cozinha', copa: 'copa', closet: 'closet', escada: 'escada', porao: 'porão', estudio: 'estúdio', biblioteca: 'biblioteca', recepcao: 'recepção', reuniao: 'reunião', deposito: 'depósito', mesa: 'mesa', cabeceira: 'cabeceira', criado: 'criado', rack: 'rack', homeoffice: 'home office', banheiro: 'banheiro', lavanderia: 'lavanderia', fabricio: 'fabrício', fabio: 'fábio', antonio: 'antônio', marcia: 'márcia', patricia: 'patrícia', lucia: 'lúcia', claudia: 'cláudia', vitoria: 'vitória', julia: 'júlia', cecilia: 'cecília', emilia: 'emília', flavia: 'flávia', sergio: 'sérgio', rogerio: 'rogério', vinicius: 'vinícius', mauricio: 'maurício', otavio: 'otávio', cassio: 'cássio', marcio: 'márcio', jose: 'josé', joao: 'joão', conceicao: 'conceição', simoes: 'simões', goncalves: 'gonçalves', araujo: 'araújo', tome: 'tomé', andre: 'andré', angela: 'ângela', monica: 'mônica', veronica: 'verônica', jessica: 'jéssica', barbara: 'bárbara', helio: 'hélio', inacio: 'inácio', tania: 'tânia', vania: 'vânia', sonia: 'sônia', debora: 'débora', priscila: 'priscila', nubia: 'núbia', lucio: 'lúcio', caio: 'caio', taua: 'tauá', gourmet: 'gourmet', living: 'living', externa: 'externa', externo: 'externo', superior: 'superior', inferior: 'inferior', circulacao: 'circulação', iluminacao: 'iluminação', decoracao: 'decoração', porta: 'porta', portas: 'portas', ilha: 'ilha', teto: 'teto', penteadeira: 'penteadeira', escorregador: 'escorregador', espelheiro: 'espelheiro', apto: 'apto', apartamento: 'apartamento', predio: 'prédio', edificio: 'edifício', condominio: 'condomínio', residencia: 'residência', comercio: 'comércio', clinica: 'clínica', consultorio: 'consultório', loja: 'loja' };
+const corrigeAcento = (w) => { const k = w.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return ACENTOS[k] && ACENTOS[k].normalize('NFD').replace(/[\u0300-\u036f]/g, '') === k ? ACENTOS[k] : w; };
 function nomePadrao(t) {
-  return String(t || '').trim().replace(/\s+/g, ' ').toLowerCase().split(' ').map((w, i) => SIGLAS.test(w) ? w.toUpperCase() : (i > 0 && MINUSC.test(w)) ? w : w.replace(/^(\p{L})/u, c => c.toUpperCase()).replace(/-(\p{L})/gu, (m, c) => '-' + c.toUpperCase())).join(' ');
+  return String(t || '').trim().replace(/\s+/g, ' ').replace(/\s*([,;])\s*/g, '$1 ').replace(/\s+-\s*|\s*-\s+/g, ' - ').toLowerCase().split(' ').map(w => w.replace(/^([^\p{L}]*)(\p{L}+)/u, (m, a, b) => a + corrigeAcento(b))).map((w, i) => SIGLAS.test(w) ? w.toUpperCase() : (i > 0 && MINUSC.test(w)) ? w : w.replace(/^(\p{L})/u, c => c.toUpperCase()).replace(/-(\p{L})/gu, (m, c) => '-' + c.toUpperCase())).join(' ');
 }
 const PALAVRAS_CHAVE = ['vidros?', 'espelhos?', 'serralheria', 'serralheiro', 'pintura', 'laca', 'laqueado', 'pedras?', 'm[aá]rmore', 'granito', 'quartzo', 'tape[cç]aria', 'estofado', 'esquadrias?', 'metal(ica|ico)?', 'alum[ií]nio', 'perfil gola', 'led', 'fechadura', 'terceirizad[oa]'];
 const RE_CHAVE = new RegExp('\\b(' + PALAVRAS_CHAVE.join('|') + ')\\b', 'gi');
@@ -4831,8 +4846,11 @@ async function padronizarNomesTudo(sessao, toast) {
     if (c === 'amostras' && x.quem && nomePadrao(x.quem) !== x.quem) patch.quem = nomePadrao(x.quem);
     if (Object.keys(patch).length) add(d.ref, patch); }); } catch {} }
   try { (await getDocs(col('empresas', E, 'clientes'))).docs.forEach(d => { const x = d.data(); const patch = {}; ['nome', 'arquiteto'].forEach(f => { if (x[f] && nomePadrao(x[f]) !== x[f]) patch[f] = nomePadrao(x[f]); }); if (Object.keys(patch).length) add(d.ref, patch); }); } catch {}
+  try { (await getDocs(col('empresas', E, 'agenda'))).docs.forEach(d => { const g = d.data()?.grades; if (!g) return; let mud = false; const ng = {};
+    Object.entries(g).forEach(([k, rows]) => { ng[k] = (rows || []).map(r => { const dias = (r.dias || []).map(t => { if (!t || !/\p{L}/u.test(t)) return t; const nt = String(t).split('\n').map(l => l.replace(/^(\s*(?:OS:)?\d{2}\.\d{3}\s*)?(.*)$/, (m, a, rest) => (a || '') + nomePadrao(rest))).join('\n'); if (nt !== t) mud = true; return nt; }); return { ...r, dias }; }); });
+    if (mud) add(d.ref, { grades: ng }); }); } catch {}
   lotes.push(b); for (const l of lotes) await l.commit();
-  await updateDoc(docRef('empresas', E), { nomesPadronizados: 1 }).catch(() => {});
+  await updateDoc(docRef('empresas', E), { nomesPadronizados: 2 }).catch(() => {});
   toast && toast('🔤 ' + n + ' registro(s) com nomes padronizados.', 'ok'); return n;
 }
 function ImpressaoOS({ os, empresa }) {
@@ -5595,7 +5613,7 @@ function TelaClientes({ sessao, toast, catalogo }) {
   const osDe = (nome) => oss.filter(o => norm(baseCli(o.cliente?.nome)) === norm(nome));
   const semCad = [...new Set(oss.map(o => baseCli(o.cliente?.nome)).filter(Boolean))].filter(n => !(lista || []).some(c => norm(c.nome) === norm(n)));
   const salvar = async () => {
-    const c = { ...ed }; if (!c.nome?.trim()) return toast('Digite o nome do cliente.'); c.nome = c.nome.trim();
+    const c = { ...ed }; if (!c.nome?.trim()) return toast('Digite o nome do cliente.'); c.nome = nomePadrao(c.nome); if (c.arquiteto) c.arquiteto = nomePadrao(c.arquiteto);
     try { const { id, _antigo, ...dados } = c; const ref = id ? docRef('empresas', E, 'clientes', id) : F().fsMod.doc(col('empresas', E, 'clientes'));
       await F().fsMod.setDoc(ref, { ...dados, atualizadoEm: nowIso(), por: sessao.nome }, { merge: true });
       const n = await aplicarClienteNasOS(sessao, { ...c, id: ref.id }, _antigo); toast('Cliente salvo' + (n ? ' e atualizado em ' + n + ' OS.' : '.'), 'ok'); setEd(null); }
@@ -5625,7 +5643,7 @@ function TelaClientes({ sessao, toast, catalogo }) {
       <b>${c.nome}</b><small>${[c.telefone, c.obra || c.endereco, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ') || 'sem dados'}</small><span class="chip">${os.length} OS</span></div>`; })}</div>`}
     ${ed && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEd(null)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">👤 ${ed.id ? 'Editar cliente' : 'Novo cliente'}</div><button class="x-btn" onClick=${() => setEd(null)}>✕</button></div>
-      <div class="grid2">${CAMPOS_CLI.map(([k, t]) => html`<div key=${k} class="field" style=${k === 'obs' || k === 'endereco' ? { gridColumn: '1/-1' } : null}><span class="lbl">${t}</span><input class="inp" value=${ed[k] || ''} onInput=${e => setEd({ ...ed, [k]: e.target.value })} /></div>`)}</div>
+      <div class="grid2">${CAMPOS_CLI.map(([k, t]) => html`<div key=${k} class="field" style=${k === 'obs' || k === 'endereco' ? { gridColumn: '1/-1' } : null}><span class="lbl">${t}</span><input class="inp" value=${ed[k] || ''} onInput=${e => setEd({ ...ed, [k]: e.target.value })} onBlur=${e => ['nome', 'arquiteto', 'obra'].includes(k) && setEd(x => ({ ...x, [k]: nomePadrao(e.target.value) }))} /></div>`)}</div>
       <small class="dim">Ao salvar, nome, telefone, endereço, obra e arquiteto são atualizados em ${osDe(ed._antigo || ed.nome).length} OS deste cliente.</small>
       <button class="btn btn-primary btn-block btn-anim" onClick=${salvar}>💾 Salvar e atualizar as OS</button></div></div>`, document.body)}
   </div>`;
@@ -6410,7 +6428,7 @@ function Principal({ sessao, toast }) {
   const [statusIA, setStatusIA] = useState(null);
   const catalogo = useCatalogo(sessao.empresaId);
   window.__CATALOGO = catalogo;
-  useEffect(() => { if (sessao.papel !== 'admin') return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId)).then(d => { if (!d.data()?.nomesPadronizados) padronizarNomesTudo(sessao, toast).catch(e => toast('Não padronizou: ' + e.message, 'erro')); }).catch(() => {}); }, []);
+  useEffect(() => { if (sessao.papel !== 'admin') return; F().fsMod.getDoc(docRef('empresas', sessao.empresaId)).then(d => { if ((d.data()?.nomesPadronizados || 0) < 2) padronizarNomesTudo(sessao, toast).catch(e => toast('Não padronizou: ' + e.message, 'erro')); }).catch(() => {}); }, []);
 
   useEffect(() => { try { localStorage.setItem('osm_aba', aba); } catch {} }, [aba]);
   useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => setStatusIA({ ia: false })); }, []);
