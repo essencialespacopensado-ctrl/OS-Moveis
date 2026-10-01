@@ -1395,3 +1395,9 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .tog-apl button.on{background:#16a34a;color:#fff}.tog-apl button.on.nao{background:#9ca3af}
 .sec-apl>:nth-child(2){padding-right:170px}
 .nao-aplica{opacity:.65}.nao-aplica>*:not(.tog-apl):not(:nth-child(2)){display:none!important}
+/* v142 */
+.os-cab{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;background:var(--surface-solid);border:1px solid var(--line);border-left:6px solid var(--cc);flex-wrap:wrap}
+.os-cab b{font-size:16px}.os-cab small{display:block;opacity:.7;font-size:12.5px}
+.amb-rapido{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.amb-mat{background:var(--surface2);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:5px}
+.amb-mat .pill{padding:3px 9px;font-size:12px}

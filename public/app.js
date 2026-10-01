@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['142', ['📋 Edição da OS mais enxuta: cabeçalho numa linha só (nº, cliente, ambiente, prazo, etapa, revisar, PDF).', '🎨 Cada conjunto já mostra na frente a cor do MDF da caixa e das frentes com a espessura em um toque; o resto fica em "Mais detalhes".']],
   ['141', ['🙈 Catálogos começam escondidos; só abrem quando você toca em ✓ Aplica.']],
   ['140', ['✓/✕ Cada catálogo (acabamentos, portas, LED, ferragens, fechaduras, vidros, tecidos) tem botão Aplica / Não aplica; ao marcar Não aplica ele fecha.']],
   ['139', ['🎨 Acabamentos e materiais agora ficam dentro de cada conjunto de móveis (botão "Acabamentos & materiais deste conjunto"), e não mais soltos na OS.']],
@@ -1870,24 +1871,14 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
 
       ${dup && html`<div class="error-box">Esta OS ficou igual à <b>OS nº ${numOS(dup)}</b> (mesmo cliente, móveis, medidas e cores). A alteração não foi salva, pra não duplicar. Mude algo que diferencie as duas.</div>`}
 
-      <div class="card page-card row" style=${{ justifyContent: 'space-between' }}>
-        <div>
-          ${(() => { const rev = os.revisao; const ok = rev?.em && (!os.atualizadoEm || rev.em >= os.atualizadoEm); return html`<div class="rev-linha">
-            <span>✏️ Última alteração: <b>${os.atualizadoPor || os.criadoPor || '—'}</b> · ${os.atualizadoEm ? new Date(os.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-            ${ok ? html`<span class="rev-ok">✅ Revisada por <b>${rev.por}</b> · ${new Date(rev.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>`
-              : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Marcar como revisada</button>`}
-            ${!ok && rev?.em && html`<small class="dim">(alterada depois da última revisão de ${rev.por})</small>`}
-          </div>`; })()}
-          <${BarraTempos} o=${os} />
-          <div class="row" style=${{ gap: '8px' }}><span class="os-num num-badge">${numOS(os)}</span><span class=${(STATUS_OS[idxSt] || STATUS_OS[0]).c}>${(STATUS_OS[idxSt] || STATUS_OS[0]).t}</span>${os.numeroAntigo && html`<span class="chip">antiga: ${os.numeroAntigo}</span>`}</div>
-          <h2 style=${{ fontSize: '24px', marginTop: '6px' }}>${os.cliente?.nome || 'Cliente não informado'}</h2>
-          <div class="dim">Ambiente: <b>${(os.ambientes || []).map(x => x.nome).join(', ') || '—'}</b> • Obra: <b>${os.cliente?.obra || '—'}</b></div>
-        </div>
-        <div class="row">
-          <button class="btn" onClick=${pdf}>📄 Exportar PDF</button>
-          ${etapa < 3 && html`<button class="btn btn-marrom" onClick=${() => ir(etapa + 1)}>Ir para ${etapa === 1 ? 'Conjuntos de móveis' : 'Execução'} →</button>`}
-        </div>
-      </div>
+      ${(() => { const rev = os.revisao; const ok = rev?.em && (!os.atualizadoEm || rev.em >= os.atualizadoEm); const stx = STATUS_OS[idxSt] || STATUS_OS[0];
+        return html`<div class="os-cab" style=${{ '--cc': corOS(os) }}>
+          <span class="os-num num-badge">${numOS(os)}</span>
+          <div class="grow"><b>${nomePadrao(os.cliente?.nome) || 'Cliente não informado'}</b><small>${nomePadrao((os.ambientes || []).map(x => x.nome).join(', ') || os.ambienteResumo) || '—'}${os.prazoEntrega ? ' · 🚚 ' + os.prazoEntrega : ''}</small></div>
+          <span class=${stx.c}>${stx.t.replace(/^\d+\. /, '')}</span>
+          ${ok ? html`<span class="rev-ok" title=${'Revisada por ' + rev.por}>✅ Revisada</span>` : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Revisar</button>`}
+          <button class="btn btn-sm" title="Exportar PDF" onClick=${pdf}>📄</button>
+        </div>`; })()}
 
       ${bloqueada && html`<div class="card page-card trava-aviso row" style=${{ justifyContent: 'space-between' }}>
         <div><b>🔒 OS pronta — bloqueada para edição.</b><div class="dim">Para editar é preciso a sua senha e o motivo da alteração (fica no histórico).</div></div>
@@ -4780,7 +4771,14 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
         <div class="amb-body">
           ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
           <button class="btn btn-sm" onClick=${() => up(a => { a.moveis = a.moveis || []; a.moveis.push(novoMovel('Novo móvel')); })}>+ Adicionar móvel</button>
-          <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>🎨 Acabamentos & materiais deste conjunto ${esp ? '▴' : '▾'}</button>
+          ${(() => { const PP = amb.padrao || padraoGeral || {}; const ac = (l) => PP.acab?.[l] || {};
+            const setA = (l, k, v) => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); a.padrao.acab = a.padrao.acab || {}; a.padrao.acab[l] = { ...(a.padrao.acab[l] || {}), [k]: v }; });
+            return html`<div class="amb-rapido">${[['interno', '📦 Caixa (interno)'], ['externo', '🚪 Frentes (externo)']].map(([l, t]) => html`<div key=${l} class="amb-mat">
+              <span class="lbl">${t}</span>
+              <${CatalogoInput} value=${ac(l).desc || ''} placeholder="Cor / padrão do MDF" catalogo=${catalogo} filtro=${{ tipos: ['MDF'] }} sessao=${sessao} onChange=${v => setA(l, 'desc', v)} />
+              <div class="row" style=${{ gap: '4px' }}>${['6', '15', '18', '25'].map(e => html`<button key=${e} class=${'pill' + (String(ac(l).esp || '') === e ? ' on' : '')} onClick=${() => setA(l, 'esp', e)}>${e}mm</button>`)}</div>
+            </div>`)}</div>`; })()}
+          <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>⚙️ Mais detalhes (portas, LED, ferragens, vidros…) ${esp ? '▴' : '▾'}</button>
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
               <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
         </div>`}
