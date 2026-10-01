@@ -1364,3 +1364,9 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cli-acao:hover{transform:translateY(-3px);box-shadow:0 10px 24px #db277733}.cli-acao span{font-size:28px}.cli-acao small{opacity:.7}
 .btn-voltar-pag{position:fixed;left:14px;bottom:70px;z-index:900;border:0;border-radius:999px;padding:10px 16px;background:#1f2937;color:#fff;font-weight:700;box-shadow:0 6px 18px #0004;cursor:pointer;transition:transform .15s}
 .btn-voltar-pag:hover{transform:translateX(-3px)}
+/* v129 */
+.assist-fab.pisca{animation:fabPisca 1.6s ease-in-out infinite}
+.assist-fab.pisca em{font-style:normal;font-weight:700;margin-left:4px}
+@keyframes fabPisca{0%,100%{box-shadow:0 0 0 0 #7c3aed88}50%{box-shadow:0 0 0 12px #7c3aed00;filter:brightness(1.15)}}
+.btn-novid{position:fixed;left:14px;bottom:126px;z-index:900;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface-solid);font-size:15px;cursor:pointer;opacity:.75;transition:opacity .15s,transform .15s}
+.btn-novid:hover{opacity:1;transform:scale(1.1)}

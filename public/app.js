@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['129', ['⏱ Tempo ganho/perdido virou botão (no Início e no Cronograma).', '✦ O botão do assistente pisca com "Peça qualquer coisa" (a barra de lembrete saiu).', '🆕 Botão discreto de atualizações no canto; o cartão de novidades no Início tem "Entendi" para fechar.']],
   ['128', ['👥 Ao tocar num cliente no Quadro geral, abre a lista de OS do cliente (com avançar/voltar etapa e projeto).', '🤝 Obra terceirizada: botão "Pedido do parceiro" para o parceiro pedir à fábrica molduras, usinagem, corte, fita, furação, pintura… (na OS → Andamento e em Peças extras).']],
   ['127', ['🆕 Novidades em ordem: da versão mais nova para a mais antiga.']],
   ['126', ['👤 Nova seção Clientes (ao lado de Geral) reunindo Cadastro de clientes, Reuniões & Projetos e Contratos, com 3 botões grandes para começar.']],
@@ -78,7 +79,10 @@ const NOVIDADES = [
 NOVIDADES.sort((a, b) => Number(b[0]) - Number(a[0]));
 function CartaoNovidades({ irPara }) {
   const [v, it] = NOVIDADES[0];
-  return html`<div class="card novid-card"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🆕 O que mudou — versão ${v}</b><button class="btn btn-sm btn-ghost" onClick=${() => irPara('novidades')}>Ver todas →</button></div><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`;
+  const [fechado, setFechado] = useState(() => { try { return localStorage.getItem('gp-card-novid') === v; } catch { return false; } });
+  if (fechado) return null;
+  return html`<div class="card novid-card"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🆕 O que mudou — versão ${v}</b><button class="btn btn-sm btn-ghost" onClick=${() => irPara('novidades')}>Ver todas →</button></div><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul>
+    <button class="btn btn-primary btn-sm" style=${{ alignSelf: 'flex-end' }} onClick=${() => { try { localStorage.setItem('gp-card-novid', v); } catch {} setFechado(true); }}>Entendi</button></div>`;
 }
 function TelaNovidades() {
   return html`<div class="fade-up stack"><div class="page-head"><div><h2>🆕 Novidades</h2><div class="dim">Tudo o que mudou no app, da versão mais nova para a mais antiga.</div></div></div>
@@ -3769,7 +3773,7 @@ function AgendaSemana({ sessao, lista, semana, setSemana, toast }) {
             <textarea class="inp" rows="2" placeholder="Uma por linha" value=${doc.prioridades || ''} onInput=${e => mudar(d => { d.prioridades = e.target.value; })}></textarea>
           </div>
           <div class="grupos-crono">${[['todos', '📋 Todos'], ...GRADES.map(([k, t]) => [k, t])].map(([k, t]) => html`<button key=${k} class=${'grupo-b' + (grupoSel === k ? ' on' : '')} style=${k !== 'todos' ? { '--gc': corGrade(k) } : null} onClick=${() => setGrupoSel(k)}>${t}${k !== 'todos' ? html`<small>${(doc.grades?.[k] || []).reduce((n, r) => n + (r.dias || []).filter(v => String(v || '').trim()).length, 0)}</small>` : ''}</button>`)}
-            ${sessao.papel === 'admin' && html`<button class="grupo-b grupo-edit" onClick=${() => setEditCat(true)}>✏️ Categorias</button>`}</div>
+            ${sessao.papel === 'admin' && html`<button class="grupo-b grupo-edit" onClick=${() => setEditCat(true)}>✏️ Categorias</button>`}<${BotaoMetricas} sessao=${sessao} /></div>
           ${editCat && html`<${EditorCategorias} sessao=${sessao} toast=${toast} fechar=${() => setEditCat(false)} />`}
           ${GRADES.filter(([k]) => grupoSel === 'todos' || grupoSel === k).map(([k, t, rot]) => html`
             <div key=${k} class="card page-card stack">
@@ -5513,7 +5517,6 @@ function TelaManual({ abas, irPara }) {
   const ir = (a, f = null) => { const s = secs.find(x => x[3].includes(a)); if (s) setSec(s[0]); setAba(a); setFn(f); };
   const S = secs.find(s => s[0] === sec), F_ = aba && fn !== null ? MAPA[aba][fn] : null;
   return html`<div class="fade-up stack"><div class="page-head"><div><h2>🧠 Mapa do Gestão Pró</h2><div class="dim">Toque nos balões: seção → tela → função. Veja como fazer, o que muda e onde impacta.</div></div></div>
-    <${LembreteAssistente} />
     <div class="mm">
       <div class="mm-nivel"><button class=${'mm-no mm-raiz' + (!sec ? ' ativo' : '')} onClick=${() => { setSec(null); setAba(null); setFn(null); }}>🏢 Gestão Pró</button></div>
       <div class="mm-nivel">${secs.map(([k, t, cor], i) => html`<button key=${k} class=${'mm-no' + (sec === k ? ' ativo' : '') + (sec && sec !== k ? ' apagado' : '')} style=${{ '--c': cor, animationDelay: i * 60 + 'ms' }} onClick=${() => { setSec(k); setAba(null); setFn(null); }}>${t}</button>`)}</div>
@@ -5992,8 +5995,8 @@ function Assistente({ sessao, osAberta }) {
     ${chamada && !aberto && html`<button class=${'ch-mini ' + fase} onClick=${() => setAberto(true)} title="Chamada ativa — toque para ver">
       <i></i><span>${fase === 'pensando' ? '⏳' : fase === 'falando' ? '🔊' : '🎙'}</span>${ouvido && html`<em>${ouvido.slice(-40)}</em>`}
       <b onClick=${e => { e.stopPropagation(); desligar(); }} title="Encerrar">✕</b></button>`}
-    <button class=${'assist-fab' + (aberto ? ' on' : '')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
-      ${aberto ? '✕' : html`<span>✦</span><em class="txt-desk"> Assistente</em>`}
+    <button class=${'assist-fab' + (aberto ? ' on' : ' pisca')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
+      ${aberto ? '✕' : html`<span>✦</span><em> Peça qualquer coisa</em>`}
     </button>
     ${aberto && html`
       <div class="assist-panel glass" role="dialog" aria-label="Assistente de IA">
@@ -6062,6 +6065,13 @@ const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a =
 
 /* Métricas: dias/horas ganhos ou perdidos no cronograma */
 const HORAS_DIA = 8;
+function BotaoMetricas({ sessao }) {
+  const [ab, setAb] = useState(false);
+  return html`<button class="btn btn-sm btn-anim" onClick=${() => setAb(true)}>⏱ Tempo ganho / perdido</button>
+    ${ab && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAb(false)}><div class="card modal-caixa stack" style=${{ width: 'min(760px,100%)' }}>
+      <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">⏱ Tempo ganho e perdido no cronograma</div><button class="x-btn" onClick=${() => setAb(false)}>✕</button></div>
+      <${MetricasPrazo} sessao=${sessao} /></div></div>`, document.body)}`;
+}
 function MetricasPrazo({ sessao }) {
   const [tar0, setTar] = useState([]);
   const [per, setPer] = useState('mes');
@@ -6141,7 +6151,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
         <button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button>
       </div>
       ${togg}
-      <${MetricasPrazo} sessao=${sessao} />
+      <div><${BotaoMetricas} sessao=${sessao} /></div>
       <div class="ini-fluxo">
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
@@ -6427,7 +6437,6 @@ function Principal({ sessao, toast }) {
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
-            <button class="btn btn-ghost btn-sm" title="O que mudou" onClick=${() => irPara('novidades')}>🆕<span class="txt-desk"> Novidades</span></button>
             <button class="btn btn-ghost btn-sm" title="Compartilhar o app" onClick=${async () => { const url = location.origin + '/'; const txt = 'Gestão Pró — gestão de ordens de serviço, produção, compras e financeiro para marcenarias. Acesse: ' + url; try { if (navigator.share) await navigator.share({ title: 'Gestão Pró', text: txt, url }); else { await navigator.clipboard.writeText(txt); toast('Link copiado: ' + url, 'ok'); } } catch {} }}>🔗<span class="txt-desk"> Compartilhar</span></button>
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
@@ -6435,8 +6444,9 @@ function Principal({ sessao, toast }) {
       </header>
       ${ajuda && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAjuda(false)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">❓ Como funciona</div><button class="x-btn" onClick=${() => setAjuda(false)}>✕</button></div>
-        <${ManualAba} aba=${aba} /><${LembreteAssistente} /><button class="btn btn-sm" onClick=${() => { setAjuda(false); irPara('manual'); }}>📖 Ver o manual completo</button></div></div>`, document.body)}
+        <${ManualAba} aba=${aba} /><button class="btn btn-sm" onClick=${() => { setAjuda(false); irPara('manual'); }}>📖 Ver o manual completo</button></div></div>`, document.body)}
       ${(histNav.current.length > 0 || osAberta || ficha) && html`<button class="btn-voltar-pag" title="Voltar para a página anterior" onClick=${voltarPag}>← Voltar</button>`}
+      <button class="btn-novid" title="Ver as atualizações" onClick=${() => irPara('novidades')}>🆕</button>
       ${aba !== 'manual' && MANUAL[aba] && html`<button class="btn-ajuda" title="Como funciona esta tela" onClick=${() => setAjuda(true)}>❓</button>`}
       ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
@@ -6444,7 +6454,6 @@ function Principal({ sessao, toast }) {
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
         ${aba === 'inicio' && html`<${CartaoNovidades} irPara=${irPara} />`}
         ${aba === 'novidades' && html`<${TelaNovidades} />`}
-        ${aba === 'inicio' && html`<${LembreteAssistente} />`}
         ${aba === 'inicio' && vis('inicio') && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
