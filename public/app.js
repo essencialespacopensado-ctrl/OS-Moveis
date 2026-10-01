@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['120', ['📑 Contrato e 🎤 Iniciar reunião viraram botões no topo da edição da OS (abrem em janela).', '🏭 A execução (etapa 3) já aparece ao abrir a edição, abaixo dos dados do cliente.', '🪑 Conjuntos de móveis simplificados: só nome, quantidade e observações — medidas e materiais ficam nas Especificações.']],
   ['119', ['✏️ Edição da OS: a etapa 1 tem só os dados do cliente; a etapa 2 começa pelos conjuntos de móveis (+ Adicionar conjunto), depois especificações. Contrato, ata e andamento ficam no fim, recolhidos.']],
   ['118', ['🛠 Acesso do desenvolvedor com login + senha e "Esqueci a senha" (link no seu e-mail).']],
   ['117', ['📐 Listas de OS por cliente em mosaico: cada cartão tem só a altura das suas OS, sem espaço em branco.']],
@@ -1727,6 +1728,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const [motivoLib, setMotivoLib] = useState('');
   const [imprimirPedido, setImprimirPedido] = useState(null);
   const [pedirVoltar, setPedirVoltar] = useState(null);
+  const [painelCA, setPainelCA] = useState(null);
   const [pedirLib, setPedirLib] = useState(false);
   const fabricantesMDF = useMemo(() => [...new Set(catalogo.filter(c => c.tipo === 'MDF').map(c => c.fabricante).filter(Boolean))].sort(), [catalogo]);
 
@@ -1878,6 +1880,14 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <button class="btn btn-sm" onClick=${() => { setImprimirPedido(p); setTimeout(() => { window.print(); setImprimirPedido(null); }, 250); }}>🖨 Imprimir</button></div>`)}</details>`}
       ${imprimirPedido && ReactDOM.createPortal(html`<${ImpressaoPedido} os=${os} pedido=${imprimirPedido} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <fieldset class="trava" disabled=${bloqueada}>
+      <div class="row os-ferr" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+        <button class="btn btn-anim" onClick=${() => setPainelCA('contrato')}>📑 Contrato</button>
+        <button class="btn btn-anim btn-teal" onClick=${() => setPainelCA('ata')}>🎤 Iniciar reunião</button>
+      </div>
+      ${painelCA && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setPainelCA(null)}><div class="card modal-caixa stack" style=${{ width: 'min(760px,100%)' }}>
+        <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${painelCA === 'contrato' ? '📑 Contrato' : '🎤 Reunião / ata'}</div><button class="x-btn" onClick=${() => setPainelCA(null)}>✕</button></div>
+        ${painelCA === 'contrato' ? html`<${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />` : html`<${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />`}
+      </div></div>`, document.body)}
       ${etapa === 1 && html`
         <div style=${{ maxWidth: '760px', width: '100%', margin: '0 auto' }} class="stack">
           <div class="card page-card stack">
@@ -1896,7 +1906,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
             <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
           </div>
           <button class="btn btn-marrom btn-block" onClick=${() => ir(2)}>Salvar e ir para os conjuntos de móveis →</button>
-        </div>`}
+        </div>
+        <${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
 
       ${etapa === 2 && html`
         ${cartaoVoz}
@@ -1943,11 +1954,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
               <input class="inp" placeholder="Método de fixação" value=${P.parede?.fixacao || ''} onInput=${e => setP(p => { p.parede.fixacao = e.target.value; })} />
             </div>`}
         </div>
-        <details class="card page-card"><summary class="sec-title" style=${{ cursor: 'pointer' }}>📑 Contrato, ata, andamento e checklist</summary><div class="stack" style=${{ marginTop: '10px' }}>
-        <div class="grid2" style=${{ alignItems: 'start' }}>
-          <${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
-          <${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
-        </div>
+        <details class="card page-card"><summary class="sec-title" style=${{ cursor: 'pointer' }}>📊 Andamento e checklist</summary><div class="stack" style=${{ marginTop: '10px' }}>
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between' }}>
             <div class="sec-title">Fluxo de andamento da marcenaria</div>
@@ -4751,39 +4758,6 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
           : html`<button class="x-btn" onClick=${() => setConfirmar(true)} title="Apagar móvel">🗑</button>`}
       </div>
       ${(m.revisar || []).length > 0 && html`<div class="warn-box" style=${{ padding: '6px 10px', fontSize: '13px' }}>Revisar: ${m.revisar.join(', ')}</div>`}
-      <div class="grid3">
-        ${['largura', 'altura', 'profundidade'].map(k => html`
-          <div class="field" key=${k}><span class="lbl">${k} (mm)</span><input class=${'inp inp-sm mono' + (r(k) ? ' need-review' : '')} inputmode="numeric" value=${m[k]} onInput=${campo(k)} /></div>`)}
-      </div>
-      <div class="grid2">
-        <${MDFCampos} label="MDF da caixa" valor=${m.mdfCaixa} catalogo=${catalogo} sessao=${sessao} rev=${r('mdfCaixa') || r('caixa')} onChange=${v => upMovel(x => { x.mdfCaixa = v; })} />
-        <${MDFCampos} label="MDF da frente" valor=${m.mdfFrente} catalogo=${catalogo} sessao=${sessao} rev=${r('mdfFrente') || r('frente')} onChange=${v => upMovel(x => { x.mdfFrente = v; })} />
-      </div>
-      <div class="grid3">
-        <div class="field"><span class="lbl">Fita de borda</span>
-          <${CatalogoInput} value=${m.fitaBorda} placeholder="Ex: Branco Diamante 22x1mm" catalogo=${catalogo} filtro=${fFita} review=${r('fita')} onChange=${v => upMovel(x => { x.fitaBorda = v; })} />
-        </div>
-        <div class="field"><span class="lbl">Portas</span><input class="inp inp-sm" value=${m.portas} placeholder="Ex: 2 de giro, caneco 35" onInput=${campo('portas')} /></div>
-        <div class="field"><span class="lbl">Gavetas</span><input class="inp inp-sm" value=${m.gavetas} placeholder="Ex: 3 gavetas, MDF 15" onInput=${campo('gavetas')} /></div>
-      </div>
-      <div class="field">
-        <span class="lbl">Ferragens</span>
-        <div class="stack" style=${{ gap: '6px' }}>
-          ${(m.ferragens || []).map((f, fi) => html`<${FerragemLinha} key=${f.id || fi} f=${f} catalogo=${catalogo} sessao=${sessao}
-              up=${(fn) => upMovel(x => fn(x.ferragens[fi]))} remover=${() => upMovel(x => { x.ferragens.splice(fi, 1); })} />`)}
-          <div><button class="btn btn-sm" onClick=${() => upMovel(x => { x.ferragens = x.ferragens || []; x.ferragens.push({ id: rand(6), tipo: '', fabricante: '', modelo: '', quantidade: '' }); })}>+ Ferragem</button></div>
-        </div>
-      </div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Puxador</span>
-          <${CatalogoInput} value=${m.puxador} placeholder="Buscar puxador…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} review=${r('puxador')}
-            salvarComo=${() => ({ tipo: 'Puxador', fabricante: '', linha: '' })} onChange=${v => upMovel(x => { x.puxador = v; })} />
-        </div>
-        <div class="field"><span class="lbl">Iluminação / vidros</span>
-          <${CatalogoInput} value=${m.iluminacao} placeholder="LED, vidro, espelho…" catalogo=${catalogo} filtro=${fLed} sessao=${sessao}
-            salvarComo=${() => ({ tipo: 'Iluminação', fabricante: '', linha: '' })} onChange=${v => upMovel(x => { x.iluminacao = v; })} />
-        </div>
-      </div>
       <div class="field"><span class="lbl">Observações</span><textarea class="inp inp-sm" rows="2" style=${{ minHeight: '52px' }} value=${m.observacoes} onInput=${campo('observacoes')}></textarea></div>
     </div>`;
 }
