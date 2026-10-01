@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['127', ['🆕 Novidades em ordem: da versão mais nova para a mais antiga.']],
   ['126', ['👤 Nova seção Clientes (ao lado de Geral) reunindo Cadastro de clientes, Reuniões & Projetos e Contratos, com 3 botões grandes para começar.']],
   ['125', ['🆕 "O que mudou" agora fica no próprio app: cartão no Início com a versão atual e a aba Geral → Novidades com o histórico completo.']],
   ['124', ['🏭 A esteira de produção aparece num lugar só: na OS, aba Andamento. Um botão escolhe Produção interna, Terceirizada interna ou Terceirizada externa. Os parceiros (vidros, esquadrias, pintura…) continuam.']],
@@ -73,6 +74,7 @@ const NOVIDADES = [
   ['100', ['🔐 Grupos e permissões: escolha quem vê cada tela (Equipe → Grupos e permissões).']],
   ['99', ['⏸ Pausar / ✖ Cancelar envios e 🔁 tentar de novo quando a IA falha.']],
 ];
+NOVIDADES.sort((a, b) => Number(b[0]) - Number(a[0]));
 function CartaoNovidades({ irPara }) {
   const [v, it] = NOVIDADES[0];
   return html`<div class="card novid-card"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🆕 O que mudou — versão ${v}</b><button class="btn btn-sm btn-ghost" onClick=${() => irPara('novidades')}>Ver todas →</button></div><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`;
