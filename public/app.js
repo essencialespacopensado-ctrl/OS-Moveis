@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['125', ['🆕 "O que mudou" agora fica no próprio app: cartão no Início com a versão atual e a aba Geral → Novidades com o histórico completo.']],
   ['124', ['🏭 A esteira de produção aparece num lugar só: na OS, aba Andamento. Um botão escolhe Produção interna, Terceirizada interna ou Terceirizada externa. Os parceiros (vidros, esquadrias, pintura…) continuam.']],
   ['123', ['🆕 A janela "O que mudou" agora aparece sempre depois de cada atualização (também no celular) e tem o botão 🆕 Novidades no topo para rever.']],
   ['122', ['👤 Nova aba Clientes (Geral): cadastro manual ou pelo contrato; ao salvar, os dados vão para todas as OS do cliente e saem na folha de impressão.', '✏️ Na edição da OS, os dados do cliente ficam num botão discreto (👤 Dados do cliente).']],
@@ -71,6 +72,14 @@ const NOVIDADES = [
   ['100', ['🔐 Grupos e permissões: escolha quem vê cada tela (Equipe → Grupos e permissões).']],
   ['99', ['⏸ Pausar / ✖ Cancelar envios e 🔁 tentar de novo quando a IA falha.']],
 ];
+function CartaoNovidades({ irPara }) {
+  const [v, it] = NOVIDADES[0];
+  return html`<div class="card novid-card"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🆕 O que mudou — versão ${v}</b><button class="btn btn-sm btn-ghost" onClick=${() => irPara('novidades')}>Ver todas →</button></div><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`;
+}
+function TelaNovidades() {
+  return html`<div class="fade-up stack"><div class="page-head"><div><h2>🆕 Novidades</h2><div class="dim">Tudo o que mudou no app, da versão mais nova para a mais antiga.</div></div></div>
+    ${NOVIDADES.map(([v, it], k) => html`<div key=${v} class=${'card novid-card' + (k === 0 ? ' nova' : '')}><b>Versão ${v}${k === 0 ? ' · atual' : ''}</b><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`)}</div>`;
+}
 function Novidades({ sessao }) {
   const atual = NOVIDADES[0][0];
   const lsGet = () => { try { return localStorage.getItem('gp-versao-vista') || ''; } catch { return ''; } };
@@ -5736,7 +5745,7 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'quadro', 'clientes', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'quadro', 'clientes', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
@@ -6370,7 +6379,7 @@ function Principal({ sessao, toast }) {
     { v: 'compras', t: 'Compras', i: '🛒' },
     { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
     { v: 'config', t: 'Configurações', i: '⚙' },
-  ].filter(a => pode(sessao, a.v)).concat([{ v: 'manual', t: 'Mapa / Manual', i: '🧠' }]);
+  ].filter(a => pode(sessao, a.v)).concat([{ v: 'manual', t: 'Mapa / Manual', i: '🧠' }, { v: 'novidades', t: 'Novidades', i: '🆕' }]);
   const vis = (v) => abas.some(a => a.v === v);
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
@@ -6400,7 +6409,7 @@ function Principal({ sessao, toast }) {
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
-            <button class="btn btn-ghost btn-sm" title="O que mudou" onClick=${() => window.__abrirNovidades && window.__abrirNovidades()}>🆕<span class="txt-desk"> Novidades</span></button>
+            <button class="btn btn-ghost btn-sm" title="O que mudou" onClick=${() => irPara('novidades')}>🆕<span class="txt-desk"> Novidades</span></button>
             <button class="btn btn-ghost btn-sm" title="Compartilhar o app" onClick=${async () => { const url = location.origin + '/'; const txt = 'Gestão Pró — gestão de ordens de serviço, produção, compras e financeiro para marcenarias. Acesse: ' + url; try { if (navigator.share) await navigator.share({ title: 'Gestão Pró', text: txt, url }); else { await navigator.clipboard.writeText(txt); toast('Link copiado: ' + url, 'ok'); } } catch {} }}>🔗<span class="txt-desk"> Compartilhar</span></button>
             <button class="btn btn-ghost btn-sm" title="Sair" onClick=${() => F().authMod.signOut(F().auth)}>⇥<span class="txt-desk"> Sair</span></button>
           </div>
@@ -6415,6 +6424,8 @@ function Principal({ sessao, toast }) {
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
+        ${aba === 'inicio' && html`<${CartaoNovidades} irPara=${irPara} />`}
+        ${aba === 'novidades' && html`<${TelaNovidades} />`}
         ${aba === 'inicio' && html`<${LembreteAssistente} />`}
         ${aba === 'inicio' && vis('inicio') && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}

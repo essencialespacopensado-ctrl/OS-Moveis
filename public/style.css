@@ -1360,3 +1360,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cli-card{cursor:pointer;display:flex;flex-direction:column;gap:4px;border-left:5px solid var(--cc);transition:transform .15s,box-shadow .15s}
 .cli-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px #0002}.cli-card small{opacity:.7}.cli-card .chip{align-self:flex-start}
 .novid-fundo{z-index:3500!important}.novid-caixa{max-height:85vh;overflow:auto;animation:mmPop .4s both}
+.novid-card{border-left:5px solid #7c3aed;display:flex;flex-direction:column;gap:6px;animation:mmPop .4s both}.novid-card.nova{box-shadow:0 0 0 3px #7c3aed33}
