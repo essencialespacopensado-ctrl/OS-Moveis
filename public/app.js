@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['136', ['▶ Botão para iniciar cada esteira (escritório e produção).', '⏱ Tempo de cada etapa aparece embaixo dela (e o tempo da etapa atual correndo), mais o total do escritório e da produção.']],
   ['135', ['🗂🏭 Duas esteiras na OS (aba Andamento): uma com as etapas do escritório e outra com as etapas da produção, cada uma com avançar/voltar.']],
   ['134', ['🏭 Na OS (aba Andamento) a esteira agora é a das etapas da OS, igual à lista: trilho colorido + ▶ Avançar e ◀ Voltar (com motivo), e o seletor interna/terceirizada.']],
   ['133', ['🔤 Correção automática: ao terminar de digitar um nome (cliente, ambiente, móvel, arquiteto, obra), ele já vira o padrão e com acento certo (suite → Suíte, area de servico → Área de Serviço, Fabricio → Fabrício).', '🔤 Os textos do cronograma semanal também foram padronizados.']],
@@ -4083,6 +4084,7 @@ function CalendarioOS({ sessao, os }) {
 }
 
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
+const durTxt = (ms) => { if (!(ms > 0)) return ''; const h = ms / 36e5; if (h < 1) return Math.max(1, Math.round(ms / 6e4)) + ' min'; if (h < 24) return Math.round(h) + ' h'; const d = Math.floor(h / 24), r = Math.round(h % 24); return d + 'd' + (r ? ' ' + r + 'h' : ''); };
 /* Andamento da OS dentro da ficha: % + parceiros + execução (etapa 3) editável */
 function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
   const alterar = async (fn) => {
@@ -4111,18 +4113,23 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
       return html`<div class="card stack">
         <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🗂 Esteira do escritório</b>
           <div class="seg-mini">${[['interna', '🏭 Produção interna'], ['terc_int', '🤝 Terceirizada interna'], ['terc_ext', '🚚 Terceirizada externa']].map(([v, t]) => html`<button key=${v} class=${modo === v ? 'on' : ''} onClick=${() => alterar(x => { x.modoExecucao = v; })}>${t}</button>`)}</div></div>
-        <div class="est-os">${STATUS_OS.map((s2, j) => html`<div key=${s2.v} class=${'est-os-p' + (j < i ? ' f' : j === i ? ' a' : '')}><i>${j < i ? '✓' : j + 1}</i><small>${s2.t.replace(/^\d+\. /, '')}</small></div>`)}</div>
-        <div class="row" style=${{ gap: '8px' }}>
+        ${(() => { const H = (o.statusHist || []).filter(h => h.em); const t0 = o.inicioEscritorio || H[0]?.em; const dur = {}; H.forEach((h, k) => { const fim = H[k + 1]?.em || (h.st === st ? nowIso() : null); if (fim) dur[h.st] = (dur[h.st] || 0) + (new Date(fim) - new Date(h.em)); });
+          return html`<div class="est-os">${STATUS_OS.map((s2, j) => html`<div key=${s2.v} class=${'est-os-p' + (j < i ? ' f' : j === i && t0 ? ' a' : '')}><i>${j < i ? '✓' : j + 1}</i><small>${s2.t.replace(/^\d+\. /, '')}</small>${dur[s2.v] ? html`<em class="est-t">${j === i ? '⏱ ' : ''}${durTxt(dur[s2.v])}</em>` : ''}</div>`)}</div>
+          ${t0 ? html`<small class="dim">⏱ Total no escritório: <b>${durTxt(Date.now() - new Date(t0))}</b> · iniciado ${fmtData(t0)}</small>` : ''}`; })()}
+        ${!(o.inicioEscritorio || (o.statusHist || []).length) ? html`<button class="btn btn-primary btn-anim" onClick=${() => alterar(x => { x.inicioEscritorio = nowIso(); x.statusHist = [{ st: x.status || STATUS_OS[0].v, em: nowIso(), quem: sessao.nome }]; })}>▶ Iniciar esteira do escritório</button>` : html`<div class="row" style=${{ gap: '8px' }}>
           ${ant && html`<button class="btn btn-anim" onClick=${async () => { const m = await pedirMotivo('Voltar para ' + ant.t.replace(/^\d+\. /, '')); if (m) mudar(ant, m); }}>◀ Voltar etapa</button>`}
           ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => mudar(prox)}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
-        </div></div>`; })()}
+        </div>`}</div>`; })()}
     ${(() => { const et = o.execucao?.etapas || {}; const i = ETAPAS_FAB.findIndex(([k]) => et[k]?.status !== 'pronto'); const atual = i < 0 ? ETAPAS_FAB.length : i;
       const prox = ETAPAS_FAB[atual], ant = ETAPAS_FAB[atual - 1];
       const salvarEt = (fn, log, mot) => alterar(x => { x.execucao = x.execucao || {}; x.execucao.etapas = x.execucao.etapas || {}; fn(x.execucao.etapas, x); if (mot) x.reaberturas = [...(x.reaberturas || []), { oque: log, motivo: mot, quem: sessao.nome, quando: nowIso() }]; registrar(sessao, o.id, mot ? '↺' : '🏭', log, mot || ''); });
       const concluir = () => salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
       const voltar = async () => { const m = await pedirMotivo('Reabrir ' + ant[1]); if (!m) return; salvarEt(E => { E[ant[0]] = { ...(E[ant[0]] || {}), status: 'andamento' }; if (prox) E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pendente' }; }, 'Produção: ' + ant[1] + ' reaberta', m); };
       return html`<div class="card stack"><b>🏭 Esteira da produção</b>
-        <div class="est-os">${ETAPAS_FAB.map(([k, t], j) => html`<div key=${k} class=${'est-os-p' + (j < atual ? ' f' : j === atual ? ' a' : '')}><i>${j < atual ? '✓' : j + 1}</i><small>${t}</small></div>`)}</div>
+        ${(() => { const iniP = ETAPAS_FAB.map(([k]) => et[k]?.iniciadaEm).filter(Boolean).sort()[0];
+          return html`<div class="est-os">${ETAPAS_FAB.map(([k, t], j) => { const e = et[k] || {}; const ms = e.iniciadaEm ? (new Date(e.concluidaEm || Date.now()) - new Date(e.iniciadaEm)) : 0; return html`<div key=${k} class=${'est-os-p' + (j < atual ? ' f' : j === atual && e.status === 'andamento' ? ' a' : '')}><i>${j < atual ? '✓' : j + 1}</i><small>${t}</small>${ms ? html`<em class="est-t">${e.status === 'pronto' ? '' : '⏱ '}${durTxt(ms)}</em>` : ''}</div>`; })}</div>
+          ${iniP ? html`<small class="dim">⏱ Total na produção: <b>${durTxt((ETAPAS_FAB.every(([k]) => et[k]?.status === 'pronto') ? new Date(ETAPAS_FAB.map(([k]) => et[k]?.concluidaEm).filter(Boolean).sort().pop()) : Date.now()) - new Date(iniP))}</b> · iniciada ${fmtData(iniP)}</small>` : ''}`; })()}
+        ${ETAPAS_FAB.every(([k]) => !et[k]?.status || et[k]?.status === 'pendente') ? html`<button class="btn btn-primary btn-anim" onClick=${() => salvarEt(E => { E[ETAPAS_FAB[0][0]] = { ...(E[ETAPAS_FAB[0][0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção iniciada')}>▶ Iniciar esteira da produção</button>` : ''}
         <div class="row" style=${{ gap: '8px' }}>
           ${ant && html`<button class="btn btn-anim" onClick=${voltar}>◀ Reabrir etapa</button>`}
           ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${concluir}>✓ Concluir ${prox[1]}${ETAPAS_FAB[atual + 1] ? ' → ' + ETAPAS_FAB[atual + 1][1] : ''}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ Produção concluída</div>`}
