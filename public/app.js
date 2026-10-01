@@ -46,6 +46,9 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['157', ['🪑 Sem nome de ambiente no bloco (o ambiente já está no nº/nome da OS): cada "+ Adicionar móvel" abre direto o móvel para preencher.']],
+  ['156', ['🪑 Móvel novo começa sem nome (você escolhe: balcão, guarda-roupa…).', '🎨 Acabamentos começam em MDF; saiu "chapa rápida" (fabricantes) — use a busca.', '📐 Acabamento interno e externo um embaixo do outro, sem espaços em branco.']],
   ['155', ['📈 Toda OS começa em 0%: sem parceiros, o % é metade etapa da OS e metade produção.']],
   ['154', ['🧾 Cabeçalho da edição sem o nome do cliente repetido; 🎨 Cores num botão (abre as bolinhas só quando quiser).', '🔧 Corrigido: tocar na linha da categoria (Acabamentos, Portas, Lâminas, LED…) agora abre e fecha.']],
   ['153', ['🪑 "+ Adicionar móvel" cria um bloco novo (como um ambiente) com todas as categorias.', '👆 A própria linha da categoria abre/fecha (sem botão Aplica).', '🧱 Tamponamento foi para dentro de Acabamentos & materiais.']],
@@ -1956,8 +1959,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         ${cartaoVoz}
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div><div class="sec-title"><span class="num-sec">🪑</span> Móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
-            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo móvel')); })}>+ Adicionar móvel</button>
+            <div><div class="sec-title"><span class="num-sec">🪑</span> Móveis</div><div class="dim">Cada móvel com seus acabamentos e detalhes</div></div>
+            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; const na = novoAmbiente(''); na.moveis = [novoMovel('')]; o.ambientes.push(na); })}>+ Adicionar móvel</button>
           </div>
           <div class="stack">
             ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} padraoGeral=${P} />`)}
@@ -4425,7 +4428,7 @@ function textoVidro(v) { return v?.ativo ? [v.tipo, v.esp, (v.proc || []).join('
 function AcabBox({ lado, a, set, catalogo, sessao }) {
   const fMDF = useMemo(() => ({ tipos: ['MDF'] }), []);
   const [fMarca, setFMarca] = useState(''); const [fTom, setFTom] = useState('');
-  const tipo = a.tipo || '';
+  const tipo = a.tipo || 'mdf';
   const off = a.aplica === false;
   const op = O();
   const titulo = lado === 'interno' ? ['Acabamento interno', 'Caixaria, prateleiras, divisões e estrutura'] : ['Acabamento externo', 'Frentes, portas, vistas, painéis e tamponamentos'];
@@ -4439,15 +4442,13 @@ function AcabBox({ lado, a, set, catalogo, sessao }) {
         <label class="row dim" style=${{ gap: '5px' }}><input type="checkbox" checked=${!off} onChange=${e => set('aplica', e.target.checked)} /> Aplicável</label>
       </div>
       ${off ? html`<div class="dica">Este acabamento está marcado como <b>não aplicável</b> nesta OS. <button class="btn btn-ghost btn-sm" onClick=${() => set('aplica', true)}>Habilitar agora →</button></div>` : html`
-      <div class="mat-linhas">${MATERIAIS.map(([v, n, d], i) => html`<div key=${v} class=${'mat-l' + (a.tipo === v ? ' on' : '')} title=${d}>
-        <button class=${'mat-chip' + (a.tipo === v ? ' on' : '')} onClick=${() => set('tipo', a.tipo === v ? '' : v)}>${a.tipo === v ? '✓ ' : ''}${n}</button></div>`)}</div>
+      <div class="mat-linhas">${MATERIAIS.map(([v, n, d], i) => html`<div key=${v} class=${'mat-l' + (tipo === v ? ' on' : '')} title=${d}>
+        <button class=${'mat-chip' + (tipo === v ? ' on' : '')} onClick=${() => set('tipo', v)}>${tipo === v ? '✓ ' : ''}${n}</button></div>`)}</div>
 
       ${tipo === 'mdf' && html`
         <span class="lbl">Descrição da chapa de MDF (busca no catálogo)</span>
         <${CatalogoInput} value=${a.desc || ''} placeholder="Buscar: branco diamante, freijó, cinza sagrado…" catalogo=${catalogo} filtro=${fMDF} sessao=${sessao}
           onChange=${v => set('desc', v)} onPick=${it => { set('desc', it.nome); set('fabricante', it.fabricante); }} salvarComo=${() => ({ tipo: 'MDF', fabricante: a.fabricante || '' })} className="inp" />
-        ${a.fabricante && html`<div class="detectado">🏭 Fabricante detectado: <b>${a.fabricante}</b></div>`}
-        <div class="row" style=${{ gap: '5px' }}><span class="dim">Chapa rápida:</span>${['Duratex', 'Arauco', 'Guararapes', 'Berneck', 'Eucatex'].map(x => html`<button key=${x} class=${'pill' + (a.fabricante === x ? ' on' : '')} onClick=${() => set('fabricante', x)}>${x}</button>`)}</div>
         <div class="row" style=${{ gap: '5px' }}><span class="dim">Espessura:</span>${(window.__ESP?.[lado] || ['6', '15', '18', '25']).map(x => html`<button key=${x} class=${'pill' + (a.esp === x ? ' on' : '')} onClick=${() => set('esp', x)}>${x}mm</button>`)}</div>`}
 
       ${tipo === 'formica' && html`
@@ -4527,7 +4528,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
     <div class=${'card page-card stack sec-apl' + (naoApl('acab') ? ' nao-aplica' : '')}>${togApl('acab')}
       <div class="sec-title"><span class="num-sec">1</span> Acabamentos & materiais</div>
       <div class="dim" style=${{ marginTop: '-6px' }}>Padrão geral da OS. Cada móvel pode seguir este padrão ou ter o seu próprio (item 11).</div>
-      <div class="grid2" style=${{ alignItems: 'start' }}>
+      <div class="stack" style=${{ gap: '8px' }}>
         <${AcabBox} lado="interno" a=${acab('interno')} set=${setAcab('interno')} catalogo=${catalogo} sessao=${sessao} />
         <${AcabBox} lado="externo" a=${acab('externo')} set=${setAcab('externo')} catalogo=${catalogo} sessao=${sessao} />
       </div>
@@ -4722,8 +4723,7 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
   return html`
     <div class="amb">
       <div class="amb-head">
-        <input class="inp" style=${{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '17px', background: 'transparent', border: 'none', padding: '4px' }} value=${amb.nome} placeholder="Nome do ambiente" onInput=${e => up(a => { a.nome = e.target.value; })} onBlur=${e => up(a => { a.nome = nomePadrao(e.target.value); })} />
-        <span class="chip">${(amb.moveis || []).length} móveis</span>
+        <input class="inp" style=${{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '17px', background: 'transparent', border: 'none', padding: '4px' }} value=${amb.nome} placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onInput=${e => up(a => { a.nome = e.target.value; })} onBlur=${e => up(a => { a.nome = nomePadrao(e.target.value); })} />
         ${confirmar
           ? html`<button class="btn btn-sm btn-danger" onClick=${() => alterar(o => { o.ambientes.splice(ai, 1); })}>Apagar</button><button class="btn btn-sm" onClick=${() => setConfirmar(false)}>Não</button>`
           : html`<button class="x-btn" title="Apagar ambiente" onClick=${() => setConfirmar(true)}>🗑</button>`}
@@ -4769,7 +4769,7 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
   return html`
     <div class="movel-card">
       <div class="movel-top">
-        <input class="inp" value=${m.nome} placeholder="Nome do móvel" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
+        <input class="inp" value=${m.nome} placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
         <input class="inp inp-sm" style=${{ width: '64px' }} type="number" min="1" value=${m.quantidade} title="Quantidade" onInput=${e => upMovel(x => { x.quantidade = Number(e.target.value) || 1; })} />
         <button class="btn btn-sm btn-ghost" onClick=${duplicar} title="Duplicar">⧉</button>
         ${confirmar
@@ -6173,6 +6173,7 @@ function MetricasPrazo({ sessao }) {
   </details>`;
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
+  const falaB = useFala({ onFinal: (t) => setBusca(String(t).replace(/[.?!]$/, '').trim()) });
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_ini_vista') || 'compacto'; } catch { return 'compacto'; } });
   useEffect(() => { try { localStorage.setItem('osm_ini_vista', vista); } catch {} }, [vista]);
@@ -6209,7 +6210,8 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
       <div class="ini-fluxo">
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
-      <input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente…" value=${busca} onInput=${e => setBusca(e.target.value)} />`;
+      <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente… ou fale" value=${busca} onInput=${e => setBusca(e.target.value)} />
+        <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button></div>`;
   if (vista === 'cliente') {
     const grupos = {};
     filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
