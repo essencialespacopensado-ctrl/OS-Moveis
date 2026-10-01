@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['137', ['🧪 Botão de testes ao lado do 🛠 Desenvolvedor: escolha OS e zere as esteiras (escritório e produção) e os tempos.']],
   ['136', ['▶ Botão para iniciar cada esteira (escritório e produção).', '⏱ Tempo de cada etapa aparece embaixo dela (e o tempo da etapa atual correndo), mais o total do escritório e da produção.']],
   ['135', ['🗂🏭 Duas esteiras na OS (aba Andamento): uma com as etapas do escritório e outra com as etapas da produção, cada uma com avançar/voltar.']],
   ['134', ['🏭 Na OS (aba Andamento) a esteira agora é a das etapas da OS, igual à lista: trilho colorido + ▶ Avançar e ◀ Voltar (com motivo), e o seletor interna/terceirizada.']],
@@ -6138,6 +6139,24 @@ const categoriasDaOS = (o) => CATEG_AMB.filter(c => (o.ambientes || []).some(a =
 
 /* Métricas: dias/horas ganhos ou perdidos no cronograma */
 const HORAS_DIA = 8;
+function ZerarEsteiras({ sessao, toast, fechar }) {
+  const [oss, setOss] = useState([]), [q, setQ] = useState(''), [sel, setSel] = useState([]);
+  useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'os')).then(s => setOss(s.docs.map(d => ({ id: d.id, ...d.data() })))).catch(() => {}); }, []);
+  const vis = oss.filter(o => !q || norm(numOS(o) + ' ' + o.cliente?.nome + ' ' + (o.ambientes || []).map(a => a.nome).join(' ')).includes(norm(q))).sort((a, b) => numOS(b).localeCompare(numOS(a)));
+  const zerar = async (lista) => {
+    if (!lista.length) return toast('Escolha ao menos uma OS.');
+    const r = await escolher('Zerar esteiras', 'Volta ' + lista.length + ' OS para o início: etapa do escritório, esteira da produção e tempos.', [{ v: 'ok', t: 'Zerar ' + lista.length + ' OS', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }]); if (r !== 'ok') return;
+    const { writeBatch, deleteField } = F().fsMod; const b = writeBatch(F().db);
+    lista.forEach(o => b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { status: STATUS_OS[0]?.v || 'elaboracao', statusHist: [], inicioEscritorio: deleteField(), execucao: { ...(o.execucao || {}), etapas: {} }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }));
+    try { await b.commit(); lista.forEach(o => registrar(sessao, o.id, '🧪', 'Esteiras zeradas (teste)', '')); toast(lista.length + ' OS zerada(s).', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
+  };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧪 Testes · zerar esteiras e tempos</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    <input class="inp" placeholder="🔍 Buscar OS" value=${q} onInput=${e => setQ(e.target.value)} />
+    <div class="os-picker-lista" style=${{ maxHeight: '45vh' }}>${vis.map(o => html`<label key=${o.id} class="row" style=${{ gap: '8px', padding: '6px 4px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}><input type="checkbox" checked=${sel.includes(o.id)} onChange=${() => setSel(v => v.includes(o.id) ? v.filter(x => x !== o.id) : [...v, o.id])} /><b class="mono">${numOS(o)}</b> ${nomePadrao(o.cliente?.nome)} <small class="dim">${nomePadrao((o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo)}</small></label>`)}</div>
+    <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setSel(vis.map(o => o.id))}>Marcar todas</button><button class="btn btn-danger" style=${{ flex: 1 }} onClick=${() => zerar(oss.filter(o => sel.includes(o.id)))}>🧪 Zerar ${sel.length} OS</button></div>
+  </div></div>`, document.body);
+}
 function BotaoMetricas({ sessao }) {
   const [ab, setAb] = useState(false);
   return html`<button class="btn btn-sm btn-anim" onClick=${() => setAb(true)}>⏱ Tempo ganho / perdido</button>
@@ -6486,6 +6505,7 @@ function Principal({ sessao, toast }) {
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
   const [ajuda, setAjuda] = useState(false);
+  const [testeZ, setTesteZ] = useState(false);
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
@@ -6502,6 +6522,7 @@ function Principal({ sessao, toast }) {
           <nav class="secoes">
             ${SECOES.filter(([k, , , vs]) => abas.some(a => vs.includes(a.v))).map(([k, t, cor, vs]) => html`<button key=${k} class=${secaoDe(aba)[0] === k ? 'on' : ''} style=${{ '--sc': cor }} onClick=${() => irPara(vs.find(v => abas.some(a => a.v === v)))}>${t}</button>`)}
             <button class="sec-dev" title="Desenvolvedor" onClick=${() => setDevL(true)}>🛠</button>
+            ${sessao.papel === 'admin' && html`<button class="sec-dev" title="Testes: zerar esteiras e tempos" onClick=${() => setTesteZ(true)}>🧪</button>`}
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
@@ -6552,6 +6573,7 @@ function Principal({ sessao, toast }) {
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
       <${BarraTransferencia} />
       <${Novidades} sessao=${sessao} />
+      ${testeZ && html`<${ZerarEsteiras} sessao=${sessao} toast=${toast} fechar=${() => setTesteZ(false)} />`}
       ${devL && html`<${LoginDev} fechar=${() => setDevL(false)} />`}
     </div>`;
 }
