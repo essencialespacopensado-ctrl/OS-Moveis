@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['150', ['🧱 Saiu "parede revestida" dos conjuntos.', '⚙ Espessuras configuráveis (caixa, frentes e prateleiras) — botão ⚙ Espessuras no conjunto; e nova linha de espessura das prateleiras.', '📁 Conjuntos e catálogos abrem fechados (toque para abrir).', '🎨 Catálogos coloridos por categoria, com fundo tecnológico animado; lâminas, perfis e puxadores agora são uma categoria só, em lista.']],
   ['149', ['🔘 Corrigido: o botão Aplica agora aparece (pulsando) embaixo do nome de cada categoria fechada.']],
   ['148', ['🔘 Botão único "Aplica" animado, logo abaixo do nome de cada categoria e de cada material.']],
   ['147', ['🎨 Em Acabamentos & materiais, cada tipo (MDF, Fórmica, Lâmina, Madeira, Laca) é uma linha numerada com Aplica / Não aplica; só o que aplica abre.']],
@@ -4538,17 +4539,19 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
       <textarea class="inp" rows="2" placeholder="Usinagem / detalhes das portas (ex: cava J invertida com perfil preto oculto)" value=${P.portas?.obs || ''} onInput=${e => setP(p => { p.portas = { ...(p.portas || {}), obs: e.target.value }; })}></textarea>
     </div>
 
-    <div class="grid2" style=${{ alignItems: 'start' }}>
-      <${ListaItens} num="3" titulo="Lâminas utilizadas" itens=${P.laminas} onChange=${v => setP(p => { p.laminas = v; })} placeholder="Ex: Lâmina natural carvalho americano" catalogo=${catalogo} filtro=${fMDF} sessao=${sessao}
+    <div class=${'card page-card stack sec-apl' + (naoApl('lpp') ? ' nao-aplica' : '')}>${togApl('lpp')}
+      <div class="sec-title"><span class="num-sec">3</span> Lâminas, perfis & puxadores</div>
+      <div class="stack">
+      <${ListaItens} num="•" titulo="Lâminas utilizadas" itens=${P.laminas} onChange=${v => setP(p => { p.laminas = v; })} placeholder="Ex: Lâmina natural carvalho americano" catalogo=${catalogo} filtro=${fMDF} sessao=${sessao}
         grupos=${[{ grupo: 'Lâminas de mercado', itens: (op.LAMINAS || []).map(l => ({ n: l[0] + ' (' + l[1] + ')', b: l[5], d: (op.LAMINA_TONS || {})[l[2]] + ' · ' + l[3] })) }]} />
-      <${ListaItens} num="4" titulo="Perfis & cavas" itens=${P.perfis} onChange=${v => setP(p => { p.perfis = v; })} placeholder="Ex: Perfil gola alumínio champagne" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })}
+      <${ListaItens} num="•" titulo="Perfis & cavas" itens=${P.perfis} onChange=${v => setP(p => { p.perfis = v; })} placeholder="Ex: Perfil gola alumínio champagne" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })}
         grupos=${[op.PUXADOR?.[0]].filter(Boolean)} />
-    </div>
-    <${ListaItens} num="5" titulo="Puxadores" itens=${P.puxadores} onChange=${v => setP(p => { p.puxadores = v; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} grupos=${op.PUXADOR} />
+    <${ListaItens} num="•" titulo="Puxadores" itens=${P.puxadores} onChange=${v => setP(p => { p.puxadores = v; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} grupos=${op.PUXADOR} />
+      </div></div>
 
     <div class=${'card page-card stack sec-apl' + (naoApl('led') ? ' nao-aplica' : '')}>${togApl('led')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div class="sec-title"><span class="num-sec">3</span> Iluminação LED</div>
+        <div class="sec-title"><span class="num-sec">4</span> Iluminação LED</div>
         ${simNao(!!led.ativo, setLed, 'Sim, possui LED', 'Sem LED')}
       </div>
       ${led.ativo && html`
@@ -4563,7 +4566,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
     </div>
 
     <div class=${'card page-card stack sec-apl' + (naoApl('ferr') ? ' nao-aplica' : '')}>${togApl('ferr')}
-      <div class="sec-title"><span class="num-sec">4</span> Ferragens & sistemas de portas de correr</div>
+      <div class="sec-title"><span class="num-sec">5</span> Ferragens & sistemas de portas de correr</div>
       <div class="dim" style=${{ marginTop: '-6px' }}>Escreva livre em qualquer campo ou use ☰ Opções com marcas e modelos consagrados.</div>
       <div class="abas-linha">${FER_ABAS.map(x => html`<button key=${x.k} class=${aba === x.k ? 'on' : ''} onClick=${() => setAba(x.k)}>${x.t}${Object.values((P.ferragens || {})[x.k] || {}).some(Boolean) ? ' ✓' : ''}</button>`)}</div>
       <div class="dica">✨ <b>${abaInfo.t}:</b> ${abaInfo.dica}.</div>
@@ -4576,7 +4579,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
 
     <div class=${'card page-card stack sec-apl' + (naoApl('fech') ? ' nao-aplica' : '')}>${togApl('fech')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div class="sec-title"><span class="num-sec">5</span> Fechaduras & travamentos</div>
+        <div class="sec-title"><span class="num-sec">6</span> Fechaduras & travamentos</div>
         ${simNao(!!fech.ativo, setFech, 'Sim, possui trava', 'Sem fechadura')}
       </div>
       ${fech.ativo && html`
@@ -4596,7 +4599,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
 
     <div class=${'card page-card stack sec-apl' + (naoApl('vidros') ? ' nao-aplica' : '')}>${togApl('vidros')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div class="sec-title"><span class="num-sec">6</span> Vidros & espelhos</div>
+        <div class="sec-title"><span class="num-sec">7</span> Vidros & espelhos</div>
         ${simNao(!!vid.ativo, setVid, 'Sim, possui vidro', 'Sem vidro')}
       </div>
       ${vid.ativo && html`
@@ -4613,7 +4616,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
 
     <div class=${'card page-card stack sec-apl' + (naoApl('tec') ? ' nao-aplica' : '')}>${togApl('tec')}
       <div class="row" style=${{ justifyContent: 'space-between' }}>
-        <div class="sec-title"><span class="num-sec">7</span> Tecidos & tapeçaria / estofamento</div>
+        <div class="sec-title"><span class="num-sec">8</span> Tecidos & tapeçaria / estofamento</div>
         ${simNao(!!tec.ativo, setTec, 'Sim, possui estofado', 'Sem estofado')}
       </div>
       ${tec.ativo && html`
@@ -4700,7 +4703,7 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
 
 function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
   const [esp, setEsp] = useState(false);
-  const [fechado, setFechado] = useState(false);
+  const [fechado, setFechado] = useState(true);
   const [confirmar, setConfirmar] = useState(false);
   const up = (fn) => alterar(o => fn(o.ambientes[ai]));
   return html`
@@ -4722,16 +4725,16 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
             return html`<div class="amb-rapido">${[['interno', '📦 Caixa (interno)'], ['externo', '🚪 Frentes (externo)']].map(([l, t]) => html`<div key=${l} class="amb-mat">
               <span class="lbl">${t}</span>
               <${CatalogoInput} value=${ac(l).desc || ''} placeholder="Cor / padrão do MDF" catalogo=${catalogo} filtro=${{ tipos: ['MDF'] }} sessao=${sessao} onChange=${v => setA(l, 'desc', v)} />
-              <div class="row" style=${{ gap: '4px' }}>${['6', '15', '18', '25'].map(e => html`<button key=${e} class=${'pill' + (String(ac(l).esp || '') === e ? ' on' : '')} onClick=${() => setA(l, 'esp', e)}>${e}mm</button>`)}</div>
-            </div>`)}</div>`; })()}
+              <div class="row" style=${{ gap: '4px' }}>${(window.__ESP?.[l] || ['6', '15', '18', '25']).map(e => html`<button key=${e} class=${'pill' + (String(ac(l).esp || '') === e ? ' on' : '')} onClick=${() => setA(l, 'esp', e)}>${e}mm</button>`)}</div>
+            </div>`)}
+            <div class="amb-mat"><span class="lbl">📚 Prateleiras</span><div class="row" style=${{ gap: '4px' }}>${(window.__ESP?.prat || ['15', '18', '25']).map(e => html`<button key=${e} class=${'pill' + (String(PP.prateleira || '') === e ? ' on' : '')} onClick=${() => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); a.padrao.prateleira = e; })}>${e}mm</button>`)}</div></div>
+            <button class="btn btn-sm btn-ghost" style=${{ alignSelf: 'center' }} title="Configurar espessuras" onClick=${async () => { const cur = window.__ESP || {}; const t = await pedirTexto('⚙ Espessuras (mm, separadas por vírgula)\nCaixa ; Frentes ; Prateleiras', 'Ex: 15,18 ; 18,25 ; 15,18', [(cur.interno || ['6','15','18','25']).join(','), (cur.externo || ['6','15','18','25']).join(','), (cur.prat || ['15','18','25']).join(',')].join(' ; ')); if (!t) return; const [i1, e1, p1] = t.split(';').map(x => (x || '').split(',').map(y => y.replace(/\D/g, '')).filter(Boolean)); const v = { interno: i1?.length ? i1 : cur.interno, externo: e1?.length ? e1 : cur.externo, prat: p1?.length ? p1 : cur.prat }; window.__ESP = v; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { espessurasCfg: v }); } catch {} up(a => { a.__t = Date.now(); }); }}>⚙ Espessuras</button>
+            </div>`; })()}
           <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>⚙️ Mais detalhes (portas, LED, ferragens, vidros…) ${esp ? '▴' : '▾'}</button>
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
               <div class="card stack"><b>🧱 Tamponamento</b>
                 <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${[['sem', 'Sem'], ['aparente', 'Aparente'], ['nao_aparente', 'Não aparente']].map(([v, t]) => html`<button key=${v} class=${'pill' + ((amb.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), tipo: v }; })}>${t}</button>`)}
                   ${(amb.tamponamento?.tipo || 'sem') !== 'sem' && (window.OPCOES?.TAMP_ESP || ['15', '18', '25', '36']).map(x => html`<button key=${x} class=${'pill' + (amb.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), espessura: x }; })}>${x}${/mm/.test(x) ? '' : 'mm'}</button>`)}</div></div>
-              <div class="card stack"><label class="row" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!amb.parede?.ativo} onChange=${e => up(a => { a.parede = { ...(a.parede || {}), ativo: e.target.checked }; })} /><b>🧱 Parede inteira / painel revestido</b></label>
-                ${amb.parede?.ativo && html`<input class="inp" placeholder="Especificação, paginação, fixação" value=${amb.parede?.espec || ''} onInput=${e => up(a => { a.parede = { ...(a.parede || {}), espec: e.target.value }; })} />`}</div>
-              <div class="card stack"><b>📝 Observações deste conjunto</b><textarea class="inp" rows="2" value=${amb.obs || ''} onInput=${e => up(a => { a.obs = e.target.value; })}></textarea></div>
               <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
         </div>`}
     </div>`;
@@ -6415,7 +6418,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); aplicarGrupos(dd.gruposAcesso); setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
