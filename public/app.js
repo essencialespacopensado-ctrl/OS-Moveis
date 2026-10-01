@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['135', ['🗂🏭 Duas esteiras na OS (aba Andamento): uma com as etapas do escritório e outra com as etapas da produção, cada uma com avançar/voltar.']],
   ['134', ['🏭 Na OS (aba Andamento) a esteira agora é a das etapas da OS, igual à lista: trilho colorido + ▶ Avançar e ◀ Voltar (com motivo), e o seletor interna/terceirizada.']],
   ['133', ['🔤 Correção automática: ao terminar de digitar um nome (cliente, ambiente, móvel, arquiteto, obra), ele já vira o padrão e com acento certo (suite → Suíte, area de servico → Área de Serviço, Fabricio → Fabrício).', '🔤 Os textos do cronograma semanal também foram padronizados.']],
   ['132', ['🔤 Todos os nomes já cadastrados (clientes, ambientes, arquitetos, cronograma, pedidos, amostras) foram corrigidos para o mesmo padrão. OS novas já entram padronizadas.']],
@@ -4108,12 +4109,23 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
       const mudar = async (alvo, motivo) => { const patch = { status: alvo.v, statusHist: [...(o.statusHist || []), { st: alvo.v, em: nowIso(), quem: sessao.nome }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }; if (motivo) patch.reaberturas = [...(o.reaberturas || []), { oque: 'Status: ' + (STATUS_OS[i] || {}).t + ' → ' + alvo.t, motivo, quem: sessao.nome, quando: nowIso() }];
         try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), patch); registrar(sessao, o.id, motivo ? '↺' : '➡️', 'Etapa: ' + alvo.t.replace(/^\d+\. /, ''), motivo || ''); } catch (e) { toast(e.message, 'erro'); } };
       return html`<div class="card stack">
-        <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🏭 Esteira da OS</b>
+        <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🗂 Esteira do escritório</b>
           <div class="seg-mini">${[['interna', '🏭 Produção interna'], ['terc_int', '🤝 Terceirizada interna'], ['terc_ext', '🚚 Terceirizada externa']].map(([v, t]) => html`<button key=${v} class=${modo === v ? 'on' : ''} onClick=${() => alterar(x => { x.modoExecucao = v; })}>${t}</button>`)}</div></div>
         <div class="est-os">${STATUS_OS.map((s2, j) => html`<div key=${s2.v} class=${'est-os-p' + (j < i ? ' f' : j === i ? ' a' : '')}><i>${j < i ? '✓' : j + 1}</i><small>${s2.t.replace(/^\d+\. /, '')}</small></div>`)}</div>
         <div class="row" style=${{ gap: '8px' }}>
           ${ant && html`<button class="btn btn-anim" onClick=${async () => { const m = await pedirMotivo('Voltar para ' + ant.t.replace(/^\d+\. /, '')); if (m) mudar(ant, m); }}>◀ Voltar etapa</button>`}
           ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => mudar(prox)}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
+        </div></div>`; })()}
+    ${(() => { const et = o.execucao?.etapas || {}; const i = ETAPAS_FAB.findIndex(([k]) => et[k]?.status !== 'pronto'); const atual = i < 0 ? ETAPAS_FAB.length : i;
+      const prox = ETAPAS_FAB[atual], ant = ETAPAS_FAB[atual - 1];
+      const salvarEt = (fn, log, mot) => alterar(x => { x.execucao = x.execucao || {}; x.execucao.etapas = x.execucao.etapas || {}; fn(x.execucao.etapas, x); if (mot) x.reaberturas = [...(x.reaberturas || []), { oque: log, motivo: mot, quem: sessao.nome, quando: nowIso() }]; registrar(sessao, o.id, mot ? '↺' : '🏭', log, mot || ''); });
+      const concluir = () => salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
+      const voltar = async () => { const m = await pedirMotivo('Reabrir ' + ant[1]); if (!m) return; salvarEt(E => { E[ant[0]] = { ...(E[ant[0]] || {}), status: 'andamento' }; if (prox) E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pendente' }; }, 'Produção: ' + ant[1] + ' reaberta', m); };
+      return html`<div class="card stack"><b>🏭 Esteira da produção</b>
+        <div class="est-os">${ETAPAS_FAB.map(([k, t], j) => html`<div key=${k} class=${'est-os-p' + (j < atual ? ' f' : j === atual ? ' a' : '')}><i>${j < atual ? '✓' : j + 1}</i><small>${t}</small></div>`)}</div>
+        <div class="row" style=${{ gap: '8px' }}>
+          ${ant && html`<button class="btn btn-anim" onClick=${voltar}>◀ Reabrir etapa</button>`}
+          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${concluir}>✓ Concluir ${prox[1]}${ETAPAS_FAB[atual + 1] ? ' → ' + ETAPAS_FAB[atual + 1][1] : ''}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ Produção concluída</div>`}
         </div></div>`; })()}
     ${['terceirizada', 'terc_int', 'terc_ext'].includes(o.modoExecucao) && html`<div class="card stack"><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>`}
   </div>`;
