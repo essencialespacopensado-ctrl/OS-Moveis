@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['159', ['🎤 Busca por voz no Início: fale o cliente, nº ou ambiente (ex.: "cozinha da Cris", "26 045") e a OS já abre.', '🧲 Uma categoria só para puxadores, perfis, cavas, Zen e pegadores; lâminas ficam só em Acabamentos.']],
   ['157', ['🪑 Sem nome de ambiente no bloco (o ambiente já está no nº/nome da OS): cada "+ Adicionar móvel" abre direto o móvel para preencher.']],
   ['156', ['🪑 Móvel novo começa sem nome (você escolhe: balcão, guarda-roupa…).', '🎨 Acabamentos começam em MDF; saiu "chapa rápida" (fabricantes) — use a busca.', '📐 Acabamento interno e externo um embaixo do outro, sem espaços em branco.']],
   ['155', ['📈 Toda OS começa em 0%: sem parceiros, o % é metade etapa da OS e metade produção.']],
@@ -4554,13 +4555,9 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
     </div>
 
     <div class=${'card page-card stack sec-apl' + (naoApl('lpp') ? ' nao-aplica' : '')}>${togApl('lpp')}
-      <div class="sec-title"><span class="num-sec">3</span> Lâminas, perfis & puxadores</div>
+      <div class="sec-title"><span class="num-sec">3</span> Puxadores, perfis & cavas</div>
       <div class="stack">
-      <${ListaItens} num="•" titulo="Lâminas utilizadas" itens=${P.laminas} onChange=${v => setP(p => { p.laminas = v; })} placeholder="Ex: Lâmina natural carvalho americano" catalogo=${catalogo} filtro=${fMDF} sessao=${sessao}
-        grupos=${[{ grupo: 'Lâminas de mercado', itens: (op.LAMINAS || []).map(l => ({ n: l[0] + ' (' + l[1] + ')', b: l[5], d: (op.LAMINA_TONS || {})[l[2]] + ' · ' + l[3] })) }]} />
-      <${ListaItens} num="•" titulo="Perfis & cavas" itens=${P.perfis} onChange=${v => setP(p => { p.perfis = v; })} placeholder="Ex: Perfil gola alumínio champagne" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })}
-        grupos=${[op.PUXADOR?.[0]].filter(Boolean)} />
-    <${ListaItens} num="•" titulo="Puxadores" itens=${P.puxadores} onChange=${v => setP(p => { p.puxadores = v; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} grupos=${op.PUXADOR} />
+<${ListaItens} num="•" titulo="Puxadores, perfis, cavas e pegadores" itens=${[...(P.puxadores || []), ...(P.perfis || [])]} onChange=${v => setP(p => { p.puxadores = v; p.perfis = []; })} placeholder="Buscar puxador: gola preto, cava…" catalogo=${catalogo} filtro=${fPux} sessao=${sessao} salvarComo=${() => ({ tipo: 'Puxador' })} grupos=${op.PUXADOR} />
       </div></div>
 
     <div class=${'card page-card stack sec-apl' + (naoApl('led') ? ' nao-aplica' : '')}>${togApl('led')}
@@ -6173,8 +6170,22 @@ function MetricasPrazo({ sessao }) {
     <div class="dim" style=${{ fontSize: '11px' }}>Dias úteis comparando o prazo original com o dia da conclusão (tarefas abertas e atrasadas contam até hoje). 1 dia = ${HORAS_DIA}h.</div>`}
   </details>`;
 }
+/* acha a OS pelo que foi falado: número, cliente e/ou ambiente */
+function acharOSFala(lista, q) {
+  const PARE = new Set(['a', 'o', 'as', 'os', 'da', 'do', 'de', 'das', 'dos', 'e', 'abre', 'abrir', 'abra', 'mostra', 'quero', 'ver', 'buscar', 'busca', 'os', 'ordem', 'servico', 'cliente', 'na', 'no', 'pra', 'para']);
+  const t = norm(q); const toks = t.split(/\s+/).filter(w => w && !PARE.has(w)); const dig = t.replace(/\D/g, '');
+  let best = null, bs = 0;
+  lista.forEach(o => { const cod = numOS(o); let sc = 0;
+    if (dig.length >= 2 && (cod.replace(/\D/g, '').endsWith(dig.slice(-3)) || String(o.numeroAntigo || '') === dig)) sc += 5;
+    const cli = norm(o.cliente?.nome || ''), amb = norm(((o.ambientes || []).map(a => a.nome).join(' ')) + ' ' + (o.ambienteResumo || ''));
+    toks.forEach(w => { if (/^\d+$/.test(w)) return; if (w.length < 3) return; if (cli.split(/\s+/).some(x => x.startsWith(w) || (w.length > 4 && lev(x, w) <= 1))) sc += 2; if (amb.split(/\s+/).some(x => x.startsWith(w) || (w.length > 4 && lev(x, w) <= 1))) sc += 2.5; });
+    if (o.status !== 'concluida') sc += 0.1;
+    if (sc > bs) { bs = sc; best = o; } });
+  return bs >= 2 ? best : null;
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
-  const falaB = useFala({ onFinal: (t) => setBusca(String(t).replace(/[.?!]$/, '').trim()) });
+  const listaRef = useRef(null);
+  const falaB = useFala({ onInterim: (t) => setBusca(t), onFinal: (t) => { falaB.parar && falaB.parar(); const q = String(t).replace(/[.?!]$/, '').trim(); setBusca(q); const o = acharOSFala(listaRef.current || [], q); if (o) { setBusca(''); abrirOS(o.id); } } });
   const [lista, setLista] = useState(null);
   const [vista, setVista] = useState(() => { try { return localStorage.getItem('osm_ini_vista') || 'compacto'; } catch { return 'compacto'; } });
   useEffect(() => { try { localStorage.setItem('osm_ini_vista', vista); } catch {} }, [vista]);
@@ -6182,6 +6193,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const [busca, setBusca] = useState('');
   const [status, setStatus] = useState('');
   const [amb, setAmb] = useState('');
+  listaRef.current = lista;
   useEffect(() => {
     const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([]));
