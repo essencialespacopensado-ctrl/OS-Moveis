@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['126', ['👤 Nova seção Clientes (ao lado de Geral) reunindo Cadastro de clientes, Reuniões & Projetos e Contratos, com 3 botões grandes para começar.']],
   ['125', ['🆕 "O que mudou" agora fica no próprio app: cartão no Início com a versão atual e a aba Geral → Novidades com o histórico completo.']],
   ['124', ['🏭 A esteira de produção aparece num lugar só: na OS, aba Andamento. Um botão escolhe Produção interna, Terceirizada interna ou Terceirizada externa. Os parceiros (vidros, esquadrias, pintura…) continuam.']],
   ['123', ['🆕 A janela "O que mudou" agora aparece sempre depois de cada atualização (também no celular) e tem o botão 🆕 Novidades no topo para rever.']],
@@ -171,7 +172,8 @@ const STATUS_OS = [
 ];
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
-  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['clientes', 'Clientes'], ['contratos', 'Contratos'], ['projetos', 'Reuniões & Projetos'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
+  ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
+  ['Clientes', [['clientes', 'Cadastro de clientes'], ['projetos', 'Reuniões & Projetos'], ['contratos', 'Contratos']]],
   ['Produção', [['os', 'Ordens de Serviço'], ['cronograma', 'Cronograma'], ['pedidos', 'Peças extras'], ['catalogo', 'Catálogo'], ['excluir', 'Excluir OSs']]],
   ['Compras', [['compras', 'Compras, notas e parceiros']]],
   ['Equipe', [['equipe', 'Equipe e acessos']]],
@@ -5562,8 +5564,12 @@ function TelaClientes({ sessao, toast, catalogo }) {
   };
   const vis = (lista || []).filter(c => !q || norm(JSON.stringify(c)).includes(norm(q))).sort((a, b) => a.nome.localeCompare(b.nome));
   return html`<div class="fade-up stack">
-    <div class="page-head"><div><h2>👤 Clientes</h2><div class="dim">Cadastre uma vez — os dados vão para todas as OS do cliente (e saem na folha de impressão).</div></div>
-      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-anim" disabled=${!!lendo} onClick=${() => inp.current?.click()}>${lendo || '📑 Cadastrar pelo contrato'}</button><button class="btn btn-primary btn-anim" onClick=${() => setEd({ nome: '' })}>＋ Novo cliente</button></div></div>
+    <div class="page-head"><div><h2>👤 Clientes</h2><div class="dim">Cadastre uma vez — os dados vão para todas as OS do cliente (e saem na folha de impressão).</div></div></div>
+    <div class="cli-acoes">
+      <button class="cli-acao" onClick=${() => setEd({ nome: '' })}><span>✍️</span><b>Cadastrar digitando</b><small>Nome, telefone, endereço, obra…</small></button>
+      <button class="cli-acao" disabled=${!!lendo} onClick=${() => inp.current?.click()}><span>📑</span><b>${lendo || 'Cadastrar pelo contrato'}</b><small>A IA lê o contrato e preenche</small></button>
+      <button class="cli-acao" onClick=${() => window.__irPara && window.__irPara('projetos')}><span>✨</span><b>Nova reunião / projeto</b><small>Ata com microfone e OS automática</small></button>
+    </div>
     <input ref=${inp} type="file" hidden accept=".pdf,.doc,.docx,image/*" onChange=${e => { doContrato(e.target.files[0]); e.target.value = ''; }} />
     ${semCad.length > 0 && html`<div class="card warn-box"><b>${semCad.length} cliente(s) das OS ainda sem cadastro:</b><div class="row" style=${{ gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>${semCad.map(n => { const o = osDe(n)[0]; return html`<button key=${n} class="pill" onClick=${() => setEd({ nome: n, telefone: o?.cliente?.telefone || '', endereco: o?.cliente?.endereco || '', obra: o?.cliente?.obra || '', arquiteto: o?.arquiteto || '', _antigo: n })}>＋ ${n}</button>`; })}</div></div>`}
     <input class="inp" placeholder="🔍 Buscar cliente" value=${q} onInput=${e => setQ(e.target.value)} />
@@ -5745,7 +5751,8 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'quadro', 'clientes', 'contratos', 'projetos', 'amostras', 'importar', 'manual', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'quadro', 'amostras', 'importar', 'manual', 'config']],
+  ['clientes', '👤 Clientes', '#db2777', ['clientes', 'projetos', 'contratos']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
   ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],

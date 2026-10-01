@@ -1361,3 +1361,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cli-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px #0002}.cli-card small{opacity:.7}.cli-card .chip{align-self:flex-start}
 .novid-fundo{z-index:3500!important}.novid-caixa{max-height:85vh;overflow:auto;animation:mmPop .4s both}
 .novid-card{border-left:5px solid #7c3aed;display:flex;flex-direction:column;gap:6px;animation:mmPop .4s both}.novid-card.nova{box-shadow:0 0 0 3px #7c3aed33}
+.cli-acoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.cli-acao{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:16px;border-radius:16px;border:2px solid color-mix(in srgb,#db2777 30%,transparent);background:color-mix(in srgb,#db2777 7%,var(--surface-solid));color:var(--text);cursor:pointer;text-align:left;transition:transform .15s,box-shadow .15s;animation:mmPop .4s both}
+.cli-acao:hover{transform:translateY(-3px);box-shadow:0 10px 24px #db277733}.cli-acao span{font-size:28px}.cli-acao small{opacity:.7}
