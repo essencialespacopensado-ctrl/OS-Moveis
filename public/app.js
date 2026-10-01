@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['128', ['👥 Ao tocar num cliente no Quadro geral, abre a lista de OS do cliente (com avançar/voltar etapa e projeto).', '🤝 Obra terceirizada: botão "Pedido do parceiro" para o parceiro pedir à fábrica molduras, usinagem, corte, fita, furação, pintura… (na OS → Andamento e em Peças extras).']],
   ['127', ['🆕 Novidades em ordem: da versão mais nova para a mais antiga.']],
   ['126', ['👤 Nova seção Clientes (ao lado de Geral) reunindo Cadastro de clientes, Reuniões & Projetos e Contratos, com 3 botões grandes para começar.']],
   ['125', ['🆕 "O que mudou" agora fica no próprio app: cartão no Início com a versão atual e a aba Geral → Novidades com o histórico completo.']],
@@ -1466,7 +1467,7 @@ function AtaAoVivo({ base, ata, catalogo, toast }) {
 function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
   const [reab, setReab] = useState(null);
   const [lista, setLista] = useState([]);
-  const [busca, setBusca] = useState('');
+  const [busca, setBusca] = useState(() => { const b = window.__buscaOS || ''; window.__buscaOS = ''; return b; });
   const [status, setStatus] = useState('');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -2497,40 +2498,44 @@ function TelaAmostras({ sessao, toast }) {
 }
 
 /* ---------- Pedidos (peças extras, terceiros e compras) ---------- */
-const PED_TIPOS = [['interno', '🪵', 'Peça extra', 'Produção interna'], ['terceiro', '🤝', 'Terceirizado', 'Parceiro faz'], ['compra', '🛒', 'Compra', 'Comprar material']];
+const PED_TIPOS = [['interno', '🪵', 'Peça extra', 'Produção interna'], ['parceiro', '🤝', 'Pedido do parceiro', 'Parceiro pede p/ a fábrica'], ['terceiro', '🤝', 'Terceirizado', 'Parceiro faz'], ['compra', '🛒', 'Compra', 'Comprar material']];
 const PED_ITENS = [['peca', '🟫', 'Peça MDF'], ['cabideiro', '➖', 'Cabideiro'], ['tapafuro', '⚪', 'Tapa-furo'], ['dobradica', '🔩', 'Acab. dobradiça'], ['tinta', '🎨', 'Tinta p/ retoque'], ['frente', '🚪', 'Porta / frente'], ['gaveta', '🗄️', 'Gaveta'], ['prateleira', '📚', 'Prateleira'], ['outro', '📦', 'Outra peça']];
 const PED_ST = {
   interno: [['solicitado', 'Solicitado', '#9ca3af'], ['producao', 'Em produção', '#f59e0b'], ['pronto', 'Pronto na fábrica', '#2563eb'], ['entregue', 'Entregue na obra', '#16a34a']],
   terceiro: [['orcar', 'A orçar', '#9ca3af'], ['aguard_orc', 'Aguard. orçamento', '#f59e0b'], ['aguard_aprov', 'Aguard. aprovação', '#ea580c'], ['pedido', 'Pedido feito', '#2563eb'], ['recebido', 'Recebido', '#0d9488'], ['entregue', 'Entregue na obra', '#16a34a']],
 };
-PED_ST.compra = PED_ST.terceiro;
+PED_ST.compra = PED_ST.terceiro; PED_ST.parceiro = PED_ST.interno;
+const PED_ITENS_PARC = [['moldura', '🖼️', 'Moldura'], ['usinagem', '⚙️', 'Usinagem'], ['corte', '🪚', 'Corte'], ['fita', '🎞️', 'Fita de borda'], ['furacao', '🕳️', 'Furação'], ['pintura', '🎨', 'Pintura / laca'], ['peca', '🟫', 'Peça MDF'], ['outro', '📦', 'Outro serviço']];
+PED_ITENS_PARC.forEach(x => { if (!PED_ITENS.some(y => y[0] === x[0])) PED_ITENS.push(x); });
 const stPed = (p) => (PED_ST[p.tipo] || PED_ST.interno).find(s => s[0] === p.st) || (PED_ST[p.tipo] || PED_ST.interno)[0];
 const pedAberto = (p) => p.st !== 'entregue';
 const resumoPed = (p) => [p.qtd ? p.qtd + '×' : '', (PED_ITENS.find(i => i[0] === p.item) || [])[2] || '', p.cor, p.larg || p.alt ? (p.larg || '?') + '×' + (p.alt || '?') + 'mm' : '', p.esp ? p.esp + 'mm' : '', p.fita && Object.values(p.fita).some(Boolean) ? 'fita ' + ['cima', 'baixo', 'esq', 'dir'].filter(k => p.fita[k]).join('/') : '', p.veio ? 'veio ' + ({ h: '↔', v: '↕', x: 'indif.' })[p.veio] : ''].filter(Boolean).join(' · ');
 
-function NovoPedido({ sessao, os, toast, fechar, catalogo }) {
-  const [p, setP] = useState({ tipo: 'interno', item: 'peca', qtd: 1, cor: '', larg: '', alt: '', esp: '18', fita: { cima: false, baixo: false, esq: false, dir: false }, veio: '', prazo: '', obs: '', fotos: [], parceiro: '' });
+function NovoPedido({ sessao, os, toast, fechar, catalogo, doParceiro }) {
+  const [p, setP] = useState({ tipo: doParceiro ? 'parceiro' : 'interno', item: doParceiro ? 'moldura' : 'peca', parceiro: doParceiro ? (os.execucao?.parceiro?.nome || '') : '', qtd: 1, cor: '', larg: '', alt: '', esp: '18', fita: { cima: false, baixo: false, esq: false, dir: false }, veio: '', prazo: '', obs: '', fotos: [] });
   const [salvando, setSalvando] = useState(false);
   const cam = useRef(null);
   const set = (k, v) => setP(x => ({ ...x, [k]: v }));
   const fala = useFala({ onFinal: (t) => setP(x => ({ ...x, obs: (x.obs ? x.obs + ' ' : '') + t })) });
-  const ehPeca = ['peca', 'frente', 'gaveta', 'prateleira'].includes(p.item);
+  const ehPeca = ['peca', 'frente', 'gaveta', 'prateleira', 'moldura', 'corte', 'fita'].includes(p.item);
   const ck = [['Qtd', p.qtd > 0], ['Cor', !!p.cor], ['Tamanho', !ehPeca || (p.larg && p.alt)], ['Espessura', !ehPeca || !!p.esp], ['Fita', !ehPeca || Object.values(p.fita).some(Boolean) || p.semFita], ['Veio', !ehPeca || !!p.veio], ['Prazo', !!p.prazo]];
   const salvar = async () => {
     setSalvando(true);
     try {
       const st = (PED_ST[p.tipo] || PED_ST.interno)[0][0];
-      registrar(sessao, os.id, '🪵', 'Pedido de peça extra', (p.obs || '').slice(0, 120));
+      if (doParceiro && !String(p.parceiro || '').trim()) { setSalvando(false); return toast('Informe qual parceiro está pedindo.'); }
+      registrar(sessao, os.id, doParceiro ? '🤝' : '🪵', doParceiro ? 'Pedido do parceiro ' + p.parceiro + ': ' + (PED_ITENS.find(x => x[0] === p.item) || [])[2] : 'Pedido de peça extra', (p.obs || '').slice(0, 120));
       await F().fsMod.addDoc(col('empresas', sessao.empresaId, 'pedidos'), { ...p, st, osId: os.id, osCod: numOS(os), cliente: os.cliente?.nome || '', ambiente: (os.ambientes || []).map(a => a.nome).join(', ') || os.ambienteResumo || '', quem: sessao.nome, em: nowIso(), hist: [{ st, quem: sessao.nome, em: nowIso() }] });
       toast('Pedido enviado.', 'ok'); fechar();
     } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
     setSalvando(false);
   };
   return html`
-    <div class="sheet-t">🪵 Pedir peça extra</div>
+    <div class="sheet-t">${doParceiro ? '🤝 Pedido do parceiro para a fábrica' : '🪵 Pedir peça extra'}</div>
+    ${doParceiro && html`<div class="field"><span class="lbl">Parceiro que está pedindo</span><input class="inp" value=${p.parceiro} placeholder="Nome do parceiro" onInput=${e => set('parceiro', e.target.value)} /></div>`}
     <div class="dim" style=${{ marginTop: '-6px' }}>${numOS(os)} · ${os.cliente?.nome} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div>
     <span class="lbl">O que precisa?</span>
-    <div class="ped-itens">${PED_ITENS.map(([k, ic, t]) => html`<button key=${k} class=${'ped-item' + (p.item === k ? ' on' : '')} onClick=${() => set('item', k)}><span>${ic}</span>${t}</button>`)}</div>
+    <div class="ped-itens">${(doParceiro ? PED_ITENS_PARC : PED_ITENS.filter(x => !PED_ITENS_PARC.slice(0, 6).some(y => y[0] === x[0]))).map(([k, ic, t]) => html`<button key=${k} class=${'ped-item' + (p.item === k ? ' on' : '')} onClick=${() => set('item', k)}><span>${ic}</span>${t}</button>`)}</div>
     <div class="ped-linha">
       <div class="field"><span class="lbl">Quantidade</span><div class="stepper"><button onClick=${() => set('qtd', Math.max(1, (+p.qtd || 1) - 1))}>−</button><b>${p.qtd}</b><button onClick=${() => set('qtd', (+p.qtd || 0) + 1)}>+</button></div></div>
       <div class="field" style=${{ flex: 1 }}><span class="lbl">Cor / acabamento</span><${CatalogoInput} value=${p.cor} placeholder="Ex: Freijó Duratex, branco TX…" catalogo=${catalogo} filtro=${{ tipos: ['MDF'] }} sessao=${sessao} onChange=${v => set('cor', v)} onPick=${it => set('cor', [it.nome, it.fabricante].filter(Boolean).join(' '))} className="inp" /></div>
@@ -2597,13 +2602,14 @@ function PedidosOS({ sessao, os, toast, catalogo }) {
   const [lista, setLista] = useState(null);
   const [novo, setNovo] = useState(false);
   const [conf, setConf] = useState(null);
+  const terc = ['terceirizada', 'terc_int', 'terc_ext'].includes(os.modoExecucao);
   useEffect(() => {
     const { onSnapshot, query, where } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'pedidos'), where('osId', '==', os.id)), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.em).localeCompare(String(a.em)))), () => setLista([]));
   }, [os.id]);
-  if (novo) return html`<${NovoPedido} sessao=${sessao} os=${os} toast=${toast} catalogo=${catalogo} fechar=${() => setNovo(false)} />`;
+  if (novo) return html`<${NovoPedido} sessao=${sessao} os=${os} toast=${toast} catalogo=${catalogo} doParceiro=${novo === 'parceiro'} fechar=${() => setNovo(false)} />`;
   return html`
-    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🪵 Peças extras</div><button class="btn btn-verde" onClick=${() => setNovo(true)}>＋ Pedir peça</button></div>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sheet-t">🪵 Peças extras</div><span class="row" style=${{ gap: '6px' }}>${terc && html`<button class="btn btn-anim" style=${{ background: '#7c3aed', color: '#fff' }} onClick=${() => setNovo('parceiro')}>🤝 Pedido do parceiro</button>`}<button class="btn btn-verde" onClick=${() => setNovo(true)}>＋ Pedir peça</button></span></div>
     ${lista === null ? html`<div class="dim">Carregando…</div>` : lista.length === 0 ? html`<div class="vazio dim">Nenhuma peça pedida. O marceneiro toca em “Pedir peça” quando precisar de algo na obra.</div>` : lista.map(p => html`<${CartaoPedido} key=${p.id} p=${p} sessao=${sessao} toast=${toast} pedirSenha=${(t, fn) => setConf({ t, fn })} />`)}
     ${conf && html`<${SenhaMotivo} titulo=${conf.t} texto="Voltar uma etapa pede motivo e senha." botao="Voltar" onOk=${conf.fn} fechar=${() => setConf(null)} />`}`;
 }
@@ -3155,7 +3161,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
           const pend = g.cards.reduce((n, c) => n + c.pendParc.length, 0), atr = g.cards.filter(c => c.atras).length, pendD = g.cards.reduce((n, c) => n + (c.o.pendAbertas || 0), 0);
           const prazos = g.cards.map(c => lerPrazo(c.o.prazoEntrega)).filter(Boolean).sort((a, b) => a - b);
           const cor = corCliente(g.nome);
-          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor, flex: g.cards.length + ' 1 ' + Math.min(560, 180 + g.cards.length * 70) + 'px' }} onClick=${() => setCliSel(k)}>
+          return html`<button key=${k} class=${'qg-cliente' + (atr ? ' atras' : '')} style=${{ '--cc': cor, flex: g.cards.length + ' 1 ' + Math.min(560, 180 + g.cards.length * 70) + 'px' }} onClick=${() => { window.__buscaOS = g.nome; window.__irPara && window.__irPara('os'); }}>
             <div class="qg-cli"><b>${g.nome}</b><small>${g.cards.length} ${g.cards.length === 1 ? 'ambiente' : 'ambientes'} · ${g.cards.map(c => (c.o.ambientes || [])[0]?.nome || c.o.ambienteResumo || numOS(c.o)).slice(0, 4).join(', ')}${g.cards.length > 4 ? '…' : ''}</small></div>
             <div class="pct-rot"><small>Conclusão da obra</small><${BarraPct} p=${Math.round(g.cards.reduce((n, c) => n + pctObra(c.o), 0) / g.cards.length)} /></div>
             <div class="qg-badges">
@@ -4088,6 +4094,7 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
       ${parc.length > 0 && html`<div class="qg-parc">${parc.map(x => { const st = infoSt(x.st); return html`<span key=${x.k} class="qg-chip" style=${{ borderColor: st[3], background: st[3] + '1f' }}><span>${x.ic}</span>${x.t.split(/[ /]/)[0]}<b style=${{ color: st[3] }}>· ${st[2]}</b>${x.previsao ? html`<small>${String(x.previsao).slice(0, 5)}</small>` : ''}</span>`; })}</div>`}
     </div>
     <${ExecucaoOS} os=${o} alterar=${alterar} sessao=${sessao} toast=${toast} />
+    ${['terceirizada', 'terc_int', 'terc_ext'].includes(o.modoExecucao) && html`<div class="card stack"><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>`}
   </div>`;
 }
 function FichaOS({ sessao, osId, fechar, editar, toast }) {
@@ -6340,6 +6347,7 @@ function TelaConfig({ sessao, toast }) {
 }
 
 function Principal({ sessao, toast }) {
+  
   const novaVersao = useNovaVersao();
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
@@ -6355,6 +6363,7 @@ function Principal({ sessao, toast }) {
   const [conta, setConta] = useState(false);
   const [statusIA, setStatusIA] = useState(null);
   const catalogo = useCatalogo(sessao.empresaId);
+  window.__CATALOGO = catalogo;
 
   useEffect(() => { try { localStorage.setItem('osm_aba', aba); } catch {} }, [aba]);
   useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatusIA).catch(() => setStatusIA({ ia: false })); }, []);
@@ -6427,7 +6436,7 @@ function Principal({ sessao, toast }) {
       ${ajuda && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setAjuda(false)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
         <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">❓ Como funciona</div><button class="x-btn" onClick=${() => setAjuda(false)}>✕</button></div>
         <${ManualAba} aba=${aba} /><${LembreteAssistente} /><button class="btn btn-sm" onClick=${() => { setAjuda(false); irPara('manual'); }}>📖 Ver o manual completo</button></div></div>`, document.body)}
-      ${(histNav.current.length > 0 || osAberta || ficha) && html`<button class="btn-voltar" title="Voltar para a página anterior" onClick=${voltarPag}>← Voltar</button>`}
+      ${(histNav.current.length > 0 || osAberta || ficha) && html`<button class="btn-voltar-pag" title="Voltar para a página anterior" onClick=${voltarPag}>← Voltar</button>`}
       ${aba !== 'manual' && MANUAL[aba] && html`<button class="btn-ajuda" title="Como funciona esta tela" onClick=${() => setAjuda(true)}>❓</button>`}
       ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
