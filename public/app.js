@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['141', ['🙈 Catálogos começam escondidos; só abrem quando você toca em ✓ Aplica.']],
   ['140', ['✓/✕ Cada catálogo (acabamentos, portas, LED, ferragens, fechaduras, vidros, tecidos) tem botão Aplica / Não aplica; ao marcar Não aplica ele fecha.']],
   ['139', ['🎨 Acabamentos e materiais agora ficam dentro de cada conjunto de móveis (botão "Acabamentos & materiais deste conjunto"), e não mais soltos na OS.']],
   ['138', ['📑 Leitura do contrato revisável: todos os dados lidos (cliente, endereços, prazo, arquiteto, nº, valor, pagamento) ficam editáveis antes de criar as OS; campos vazios em amarelo.', '📍 Novo campo "Endereço de montagem" no cliente e na OS (também lido do contrato).']],
@@ -4572,7 +4573,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
   const setTec = (k, v) => setP(p => { p.tec = { ...(p.tec || tec), [k]: v }; });
   const vid = P.vidros || {};
   const setVid = (k, v) => setP(p => { p.vidros = { ...(p.vidros || {}), [k]: v }; });
-  const naoApl = (k) => !!(P.naoAplica || {})[k];
+  const naoApl = (k) => (P.naoAplica || {})[k] !== false;
   const togApl = (k) => html`<div class="tog-apl"><button class=${!naoApl(k) ? 'on' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: false }; })}>✓ Aplica</button><button class=${naoApl(k) ? 'on nao' : ''} onClick=${() => setP(p => { p.naoAplica = { ...(p.naoAplica || {}), [k]: true }; })}>✕ Não aplica</button></div>`;
   const simNao = (ativo, set, sim, nao) => html`<div class="seg-mini"><button class=${!ativo ? 'on' : ''} onClick=${() => set('ativo', false)}>${nao}</button><button class=${ativo ? 'on' : ''} onClick=${() => set('ativo', true)}>${sim}</button></div>`;
 
