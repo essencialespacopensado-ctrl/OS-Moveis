@@ -1448,3 +1448,11 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .mat-chip{border:1.5px solid color-mix(in srgb,#d97706 40%,transparent);background:var(--surface-solid);color:var(--text);border-radius:999px;padding:5px 12px;font-weight:700;font-size:12.5px;cursor:pointer;transition:all .2s}
 .mat-chip:hover{transform:translateY(-1px)}.mat-chip.on{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border-color:transparent;box-shadow:0 4px 12px #d9770644}
 .acab-box{padding:10px!important;gap:6px!important}
+/* v153 — linha da categoria é o botão */
+.apl-ov{position:absolute;left:0;right:0;top:0;height:46px;background:transparent;border:0;cursor:pointer;z-index:3}
+.sec-apl{padding-top:12px!important}
+.sec-apl:not(.nao-aplica){box-shadow:0 0 0 2px var(--k),0 8px 22px color-mix(in srgb,var(--k) 25%,transparent)!important}
+.sec-apl>:nth-child(2)::after{content:"";}
+.nao-aplica>*:not(.apl-ov):not(:nth-child(2)){display:none!important}
+.nao-aplica{opacity:1;padding:10px 12px!important}
+.sec-apl:hover{transform:translateX(4px)}

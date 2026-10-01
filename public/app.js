@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['153', ['🪑 "+ Adicionar móvel" cria um bloco novo (como um ambiente) com todas as categorias.', '👆 A própria linha da categoria abre/fecha (sem botão Aplica).', '🧱 Tamponamento foi para dentro de Acabamentos & materiais.']],
   ['152', ['🧹 Saiu o aviso "Revisar: largura, altura…" dos móveis.']],
   ['151', ['🎨 Materiais (MDF, Fórmica, Lâmina, Madeira, Laca) viraram botões pequenos lado a lado.', '📦 Caixa, frentes, prateleiras e ⚙ espessuras ficam só dentro de Acabamentos & materiais.']],
   ['150', ['🧱 Saiu "parede revestida" dos conjuntos.', '⚙ Espessuras configuráveis (caixa, frentes e prateleiras) — botão ⚙ Espessuras no conjunto; e nova linha de espessura das prateleiras.', '📋 O conjunto mostra todas as etapas da OS de uma vez, cada uma fechada; o conteúdo só aparece ao tocar em Aplica.', '🎨 Catálogos coloridos por categoria, com fundo tecnológico animado; lâminas, perfis e puxadores agora são uma categoria só, em lista.']],
@@ -1951,8 +1952,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         ${cartaoVoz}
         <div class="card page-card">
           <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div><div class="sec-title"><span class="num-sec">1</span> Conjuntos de móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
-            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar conjunto</button>
+            <div><div class="sec-title"><span class="num-sec">🪑</span> Móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
+            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo móvel')); })}>+ Adicionar móvel</button>
           </div>
           <div class="stack">
             ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} padraoGeral=${P} />`)}
@@ -4513,7 +4514,7 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
   const vid = P.vidros || {};
   const setVid = (k, v) => setP(p => { p.vidros = { ...(p.vidros || {}), [k]: v }; });
   const naoApl = (k) => (P.naoAplica || {})[k] !== false;
-  const togApl = (k) => html`<button class=${'btn-apl' + (!naoApl(k) ? ' on' : '')} onClick=${() => setP(p => { const v = !naoApl(k); p.naoAplica = { ...(p.naoAplica || {}), [k]: v }; const m = { led: 'led', fech: 'fech', vidros: 'vidros', tec: 'tec' }[k]; if (m) p[m] = { ...(p[m] || {}), ativo: !v }; })}><i></i>${!naoApl(k) ? 'Aplica' : 'Aplica?'}</button>`;
+  const togApl = (k) => html`<button class="apl-ov" title=${naoApl(k) ? 'Abrir' : 'Fechar'} onClick=${() => setP(p => { const v = !naoApl(k); p.naoAplica = { ...(p.naoAplica || {}), [k]: v }; const m = { led: 'led', fech: 'fech', vidros: 'vidros', tec: 'tec' }[k]; if (m) p[m] = { ...(p[m] || {}), ativo: !v }; })}></button>`;
   const simNao = () => null;
   const simNao0 = (ativo, set, sim, nao) => html`<div class="seg-mini"><button class=${!ativo ? 'on' : ''} onClick=${() => set('ativo', false)}>${nao}</button><button class=${ativo ? 'on' : ''} onClick=${() => set('ativo', true)}>${sim}</button></div>`;
 
@@ -4525,6 +4526,9 @@ function EspecificacoesOS({ P, setP, catalogo, sessao }) {
         <${AcabBox} lado="interno" a=${acab('interno')} set=${setAcab('interno')} catalogo=${catalogo} sessao=${sessao} />
         <${AcabBox} lado="externo" a=${acab('externo')} set=${setAcab('externo')} catalogo=${catalogo} sessao=${sessao} />
       </div>
+              <div class="stack" style=${{ gap: '5px' }}><span class="lbl" style=${{ margin: 0 }}>🧱 Tamponamento</span>
+                <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${[['sem', 'Sem'], ['aparente', 'Aparente'], ['nao_aparente', 'Não aparente']].map(([v, t]) => html`<button key=${v} class=${'pill' + ((P.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => setP(p => { p.tamponamento = { ...(p.tamponamento || {}), tipo: v }; })}>${t}</button>`)}
+                  ${(P.tamponamento?.tipo || 'sem') !== 'sem' && (window.OPCOES?.TAMP_ESP || ['15', '18', '25', '36']).map(x => html`<button key=${x} class=${'pill' + (P.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => setP(p => { p.tamponamento = { ...(p.tamponamento || {}), espessura: x }; })}>${x}${/mm/.test(x) ? '' : 'mm'}</button>`)}</div></div>
       <div class="row" style=${{ gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}><span class="lbl" style=${{ margin: 0 }}>📚 Prateleiras</span>${(window.__ESP?.prat || ['15', '18', '25']).map(e => html`<button key=${e} class=${'pill' + (String(P.prateleira || '') === e ? ' on' : '')} onClick=${() => setP(p => { p.prateleira = e; })}>${e}mm</button>`)}
         <button class="btn btn-sm btn-ghost" style=${{ alignSelf: 'center' }} title="Configurar espessuras" onClick=${async () => { const cur = window.__ESP || {}; const t = await pedirTexto('⚙ Espessuras (mm, separadas por vírgula)\nCaixa ; Frentes ; Prateleiras', 'Ex: 15,18 ; 18,25 ; 15,18', [(cur.interno || ['6','15','18','25']).join(','), (cur.externo || ['6','15','18','25']).join(','), (cur.prat || ['15','18','25']).join(',')].join(' ; ')); if (!t) return; const [i1, e1, p1] = t.split(';').map(x => (x || '').split(',').map(y => y.replace(/\D/g, '')).filter(Boolean)); const v = { interno: i1?.length ? i1 : cur.interno, externo: e1?.length ? e1 : cur.externo, prat: p1?.length ? p1 : cur.prat }; window.__ESP = v; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { espessurasCfg: v }); } catch {} setP(p => { p.__t = Date.now(); }); }}>⚙ Espessuras</button></div>
       <div class="field"><span class="lbl">Outras características da especificação</span><input class="inp" placeholder="Ex: fita de borda ABS 1mm colada com PUR nas áreas molhadas" value=${P.outras || ''} onInput=${e => setP(p => { p.outras = e.target.value; })} /></div>
@@ -4722,12 +4726,8 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
       ${!fechado && html`
         <div class="amb-body">
           ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
-          <button class="btn btn-sm" onClick=${() => up(a => { a.moveis = a.moveis || []; a.moveis.push(novoMovel('Novo móvel')); })}>+ Adicionar móvel</button>
           <div class="amb-esp">
-            ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
-              <div class="card stack"><b>🧱 Tamponamento</b>
-                <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${[['sem', 'Sem'], ['aparente', 'Aparente'], ['nao_aparente', 'Não aparente']].map(([v, t]) => html`<button key=${v} class=${'pill' + ((amb.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), tipo: v }; })}>${t}</button>`)}
-                  ${(amb.tamponamento?.tipo || 'sem') !== 'sem' && (window.OPCOES?.TAMP_ESP || ['15', '18', '25', '36']).map(x => html`<button key=${x} class=${'pill' + (amb.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), espessura: x }; })}>${x}${/mm/.test(x) ? '' : 'mm'}</button>`)}</div></div>
+            ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>
               <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
         </div>`}
     </div>`;
