@@ -1491,3 +1491,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .po2 .po2-tab td{padding:4px 6px;font-size:8.6pt}
 .po2-obs-m{font-style:italic;color:#57534e;font-size:8pt}
 @media(max-width:700px){.po2-info{grid-template-columns:repeat(2,1fr)}}
+.busca-telas{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.bt-chip{border:0;border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed);box-shadow:0 2px 8px #2563eb44}
+.bt-chip:hover{filter:brightness(1.1)}

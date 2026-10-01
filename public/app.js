@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['165', ['🔍 A busca do Início agora acha tudo: OSs, clientes e também telas e funções (compras, financeiro, equipe, amostras, cronograma, catálogo…). Digite ou fale e toque no resultado — ou Enter para ir direto.']],
   ['164', ['📄 Nova folha de impressão da OS: colorida, compacta, organizada por conjunto de móveis, com as especificações de cada conjunto em blocos coloridos e sem campos vazios.', '🟢 Voz ligada ao abrir o app: no Início o assistente já fica ouvindo — fale "cozinha da Cris", "vai pra compras"... Botão Voz ligada/desligada para desligar quando quiser.', '🖱 Rolar dentro da lista de opções não fecha mais; ao rolar a página a lista acompanha.']],
   ['163', ['🔝 Listas de opções/catálogo agora abrem flutuando por cima de tudo, no lugar certo.']],
   ['162', ['👁 Botão "Ver OS" no topo da OS: abre a OS pronta, na folha. Fica destacado depois de revisada.', '⚡ Assistente instantâneo: fale ou escreva "abre a cozinha da Cris", "26 045", "imprime a OS da Aline" ou "vai pra compras" — abre na hora, sem esperar a IA. Perguntas e mudanças continuam indo para a IA.']],
@@ -5916,7 +5917,9 @@ function acaoRapida(q) {
   const t = norm(q), n = t.split(/\s+/).length;
   const abrir = /\b(abre|abrir|abra|mostra|mostrar|ver|entra|entrar|vai|vamos|imprime|imprimir)\b/.test(t);
   if (!abrir && (n > 4 || /\b(qual|quando|quanto|quem|como|por que|porque|muda|mudar|coloca|adiciona|marca|conclui)\b/.test(t))) return false;
-  const o = acharOSFala(window.__listaOS || [], q); if (!o || !window.__abrirOS) return false;
+  const o = acharOSFala(window.__listaOS || [], q);
+  if (!o) { const tl = acharTelas(q); if (tl.length && tl[0].sc >= 3 && window.__irPara) { window.__irPara(tl[0].aba); return true; } return false; }
+  if (!window.__abrirOS) return false;
   window.__ultimaOS = o.id; window.__abrirOS(o.id);
   if (/imprim/.test(t)) { window.__modoFicha = 'folha'; setTimeout(() => { document.body.classList.add('imp-ficha'); window.print(); document.body.classList.remove('imp-ficha'); }, 900); }
   return true;
@@ -6182,6 +6185,18 @@ function acharOSFala(lista, q) {
     if (sc > bs) { bs = sc; best = o; } });
   return bs >= 2 ? best : null;
 }
+/* Busca universal de telas e funções (instantânea) */
+function acharTelas(q) {
+  const t = norm(q).replace(/\b(abre|abrir|abra|vai|vamos|ir|pra|para|pro|a|o|as|os|de|da|do|tela|pagina|mostra|ver|entra|entrar)\b/g, ' ').trim(); if (t.length < 3) return [];
+  const toks = t.split(/\s+/).filter(w => w.length >= 3); if (!toks.length) return [];
+  const res = [];
+  const pont = (txt, peso) => { const n = norm(txt); let sc = 0; toks.forEach(w => { if (n.split(/[^a-z0-9]+/).some(x => x.startsWith(w) || (w.length > 4 && x.length > 3 && lev(x.slice(0, w.length), w) <= 1))) sc += peso; }); return sc; };
+  Object.keys(NOMES_ABA).forEach(aba => { const nome = NOMES_ABA[aba]; const sec = (SECOES.find(x => x[3].includes(aba)) || [])[1] || '';
+    let sc = pont(nome, 3) + pont(sec, 1); for (const [re, v] of TELAS_VOZ) if (v === aba && re.test(t)) sc += 3;
+    if (sc) res.push({ aba, t: nome, sc: sc + 0.5 });
+    (MAPA[aba] || []).forEach(([f, d]) => { const s2 = pont(f, 2.5) + pont(d, 0.6); if (s2 >= 2) res.push({ aba, t: nome + ' › ' + f, f, sc: s2 }); }); });
+  return res.sort((a, b) => b.sc - a.sc).slice(0, 6);
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
   const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
@@ -6218,6 +6233,8 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
     (!busca || norm(`${numOS(o)} ${o.numero} ${o.numeroAntigo} ${o.cliente?.nome} ${o.cliente?.obra} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(norm(busca))));
 
   const togg = html`<div class="seg-mini ini-vistas">${[['compacto', '☰ Compacto'], ['cliente', '🎨 Por cliente'], ['kanban', '▥ Kanban'], ['detalhado', '▦ Detalhado']].map(([v, t]) => html`<button key=${v} class=${vista === v ? 'on' : ''} onClick=${() => setVista(v)}>${t}</button>`)}</div>`;
+  const telasAch = busca ? acharTelas(busca) : [];
+  const resTelas = telasAch.length > 0 && html`<div class="busca-telas">${telasAch.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setBusca(''); irPara(x.aba); }}>${x.t}</button>`)}</div>`;
   const cabecalho = html`
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <b style=${{ fontSize: '17px' }}>Produção <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
@@ -6228,9 +6245,9 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
       <div class="ini-fluxo">
         ${tiles.filter(t => t.f).map(t => html`<button key=${t.t} class=${'ini-f ' + t.cls + (status === t.f ? ' sel' : '')} onClick=${() => setStatus(v => v === t.f ? '' : t.f)}><b>${lista === null ? '…' : t.n}</b><small>${t.t.replace(/^\d\. /, '').replace('Aguard. liberação', 'Liberação')}</small></button>`)}
       </div>
-      <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="🔍 Buscar nº, cliente, ambiente… ou fale" value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="🔍 Buscar OS, cliente, tela, função… ou fale" value=${busca} onInput=${e => setBusca(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && busca.trim()) { if (acaoRapida(busca) ) setBusca(''); } }} />
         <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button>
-        <button class=${'btn btn-sm voz-auto' + (vozAuto ? ' on' : '')} title="Assistente de voz sempre ouvindo ao abrir o app" onClick=${togAuto}>${vozAuto ? '🟢 Voz ligada' : '⚪ Voz desligada'}</button></div>`;
+        <button class=${'btn btn-sm voz-auto' + (vozAuto ? ' on' : '')} title="Assistente de voz sempre ouvindo ao abrir o app" onClick=${togAuto}>${vozAuto ? '🟢 Voz ligada' : '⚪ Voz desligada'}</button></div>${resTelas}`;
   if (vista === 'cliente') {
     const grupos = {};
     filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
