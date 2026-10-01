@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['143', ['🔒 A OS só fica bloqueada para edição depois de marcada como revisada (aí pede motivo para editar).']],
   ['142', ['📋 Edição da OS mais enxuta: cabeçalho numa linha só (nº, cliente, ambiente, prazo, etapa, revisar, PDF).', '🎨 Cada conjunto já mostra na frente a cor do MDF da caixa e das frentes com a espessura em um toque; o resto fica em "Mais detalhes".']],
   ['141', ['🙈 Catálogos começam escondidos; só abrem quando você toca em ✓ Aplica.']],
   ['140', ['✓/✕ Cada catálogo (acabamentos, portas, LED, ferragens, fechaduras, vidros, tecidos) tem botão Aplica / Não aplica; ao marcar Não aplica ele fecha.']],
@@ -1810,7 +1811,8 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
     { n: 3, t: 'Execução', s: 'Interna vs. terceirizada' },
   ];
   const ir = (n) => { setEtapa(n); window.scrollTo(0, 0); };
-  const bloqueada = os.status === 'concluida' && !liberada;
+  const revisadaOk = !!(os.revisao?.em && (!os.atualizadoEm || os.revisao.em >= os.atualizadoEm));
+  const bloqueada = revisadaOk && !liberada;
   const pdf = () => { setImprimir(true); setTimeout(() => { window.print(); setImprimir(false); }, 150); };
   const P = os.padrao || {};
   const setP = (fn) => alterar(o => { o.padrao = o.padrao || {}; fn(o.padrao); });
@@ -1881,7 +1883,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>`; })()}
 
       ${bloqueada && html`<div class="card page-card trava-aviso row" style=${{ justifyContent: 'space-between' }}>
-        <div><b>🔒 OS pronta — bloqueada para edição.</b><div class="dim">Para editar é preciso a sua senha e o motivo da alteração (fica no histórico).</div></div>
+        <div><b>🔒 OS revisada — bloqueada para edição.</b><div class="dim">Para editar é preciso a sua senha e o motivo da alteração (fica no histórico).</div></div>
         <button class="btn btn-marrom" onClick=${() => setPedirLib(true)}>🔓 Desbloquear para editar</button></div>`}
       ${(os.historico || []).length > 0 && html`<details class="card page-card"><summary class="dim">📜 Histórico de alterações após pronta (${os.historico.length})</summary>
         ${os.historico.map((h, i) => html`<div key=${i} class="item-lista"><span>${h.motivo}<br/><small class="dim">${h.quem} · ${fmtData(h.quando)}</small></span></div>`)}</details>`}
