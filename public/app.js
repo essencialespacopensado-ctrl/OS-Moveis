@@ -46,7 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
-  ['150', ['🧱 Saiu "parede revestida" dos conjuntos.', '⚙ Espessuras configuráveis (caixa, frentes e prateleiras) — botão ⚙ Espessuras no conjunto; e nova linha de espessura das prateleiras.', '📁 Conjuntos e catálogos abrem fechados (toque para abrir).', '🎨 Catálogos coloridos por categoria, com fundo tecnológico animado; lâminas, perfis e puxadores agora são uma categoria só, em lista.']],
+  ['150', ['🧱 Saiu "parede revestida" dos conjuntos.', '⚙ Espessuras configuráveis (caixa, frentes e prateleiras) — botão ⚙ Espessuras no conjunto; e nova linha de espessura das prateleiras.', '📋 O conjunto mostra todas as etapas da OS de uma vez, cada uma fechada; o conteúdo só aparece ao tocar em Aplica.', '🎨 Catálogos coloridos por categoria, com fundo tecnológico animado; lâminas, perfis e puxadores agora são uma categoria só, em lista.']],
   ['149', ['🔘 Corrigido: o botão Aplica agora aparece (pulsando) embaixo do nome de cada categoria fechada.']],
   ['148', ['🔘 Botão único "Aplica" animado, logo abaixo do nome de cada categoria e de cada material.']],
   ['147', ['🎨 Em Acabamentos & materiais, cada tipo (MDF, Fórmica, Lâmina, Madeira, Laca) é uma linha numerada com Aplica / Não aplica; só o que aplica abre.']],
@@ -4702,14 +4702,13 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
 }
 
 function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
-  const [esp, setEsp] = useState(false);
-  const [fechado, setFechado] = useState(true);
+  const [esp, setEsp] = useState(true);
+  const [fechado, setFechado] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
   const up = (fn) => alterar(o => fn(o.ambientes[ai]));
   return html`
     <div class="amb">
       <div class="amb-head">
-        <button class="x-btn" style=${{ fontSize: '16px' }} onClick=${() => setFechado(v => !v)} title=${fechado ? 'Abrir' : 'Recolher'}>${fechado ? '▸' : '▾'}</button>
         <input class="inp" style=${{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '17px', background: 'transparent', border: 'none', padding: '4px' }} value=${amb.nome} placeholder="Nome do ambiente" onInput=${e => up(a => { a.nome = e.target.value; })} onBlur=${e => up(a => { a.nome = nomePadrao(e.target.value); })} />
         <span class="chip">${(amb.moveis || []).length} móveis</span>
         ${confirmar
@@ -4730,7 +4729,7 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
             <div class="amb-mat"><span class="lbl">📚 Prateleiras</span><div class="row" style=${{ gap: '4px' }}>${(window.__ESP?.prat || ['15', '18', '25']).map(e => html`<button key=${e} class=${'pill' + (String(PP.prateleira || '') === e ? ' on' : '')} onClick=${() => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); a.padrao.prateleira = e; })}>${e}mm</button>`)}</div></div>
             <button class="btn btn-sm btn-ghost" style=${{ alignSelf: 'center' }} title="Configurar espessuras" onClick=${async () => { const cur = window.__ESP || {}; const t = await pedirTexto('⚙ Espessuras (mm, separadas por vírgula)\nCaixa ; Frentes ; Prateleiras', 'Ex: 15,18 ; 18,25 ; 15,18', [(cur.interno || ['6','15','18','25']).join(','), (cur.externo || ['6','15','18','25']).join(','), (cur.prat || ['15','18','25']).join(',')].join(' ; ')); if (!t) return; const [i1, e1, p1] = t.split(';').map(x => (x || '').split(',').map(y => y.replace(/\D/g, '')).filter(Boolean)); const v = { interno: i1?.length ? i1 : cur.interno, externo: e1?.length ? e1 : cur.externo, prat: p1?.length ? p1 : cur.prat }; window.__ESP = v; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { espessurasCfg: v }); } catch {} up(a => { a.__t = Date.now(); }); }}>⚙ Espessuras</button>
             </div>`; })()}
-          <div class="amb-esp"><button class=${'btn btn-sm btn-anim' + (esp ? ' btn-primary' : '')} onClick=${() => setEsp(v => !v)}>⚙️ Mais detalhes (portas, LED, ferragens, vidros…) ${esp ? '▴' : '▾'}</button>
+          <div class="amb-esp">
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>${!amb.padrao && html`<small class="dim">Começa com o padrão da OS — ao editar, vale só para este conjunto.</small>`}
               <div class="card stack"><b>🧱 Tamponamento</b>
                 <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${[['sem', 'Sem'], ['aparente', 'Aparente'], ['nao_aparente', 'Não aparente']].map(([v, t]) => html`<button key=${v} class=${'pill' + ((amb.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => up(a => { a.tamponamento = { ...(a.tamponamento || {}), tipo: v }; })}>${t}</button>`)}
