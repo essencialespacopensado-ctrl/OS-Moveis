@@ -46,6 +46,7 @@ async function garantirCoresClientes(sessao, nomes) {
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
+  ['119', ['✏️ Edição da OS: a etapa 1 tem só os dados do cliente; a etapa 2 começa pelos conjuntos de móveis (+ Adicionar conjunto), depois especificações. Contrato, ata e andamento ficam no fim, recolhidos.']],
   ['118', ['🛠 Acesso do desenvolvedor com login + senha e "Esqueci a senha" (link no seu e-mail).']],
   ['117', ['📐 Listas de OS por cliente em mosaico: cada cartão tem só a altura das suas OS, sem espaço em branco.']],
   ['116', ['📐 Quadro geral: cartões dos clientes com tamanho proporcional ao número de OS e lado a lado, sem desperdiçar espaço. As OS de um cliente ficam em grade.']],
@@ -1761,7 +1762,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
   const diasPrazo = prazoD ? Math.ceil((prazoD.getTime() - Date.now()) / 86400000) : null;
   const ETAPAS = [
     { n: 1, t: 'Dados da OS', s: 'Cliente, obra & prazos' },
-    { n: 2, t: 'Especificações', s: 'MDF, ferragens, LED & móveis' },
+    { n: 2, t: 'Conjuntos & especificações', s: 'Móveis, MDF, ferragens, LED' },
     { n: 3, t: 'Execução', s: 'Interna vs. terceirizada' },
   ];
   const ir = (n) => { setEtapa(n); window.scrollTo(0, 0); };
@@ -1841,7 +1842,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
         </div>
         <div class="row">
           <button class="btn" onClick=${pdf}>📄 Exportar PDF</button>
-          ${etapa < 3 && html`<button class="btn btn-marrom" onClick=${() => ir(etapa + 1)}>Ir para ${etapa === 1 ? 'Especificações' : 'Execução'} →</button>`}
+          ${etapa < 3 && html`<button class="btn btn-marrom" onClick=${() => ir(etapa + 1)}>Ir para ${etapa === 1 ? 'Conjuntos de móveis' : 'Execução'} →</button>`}
         </div>
       </div>
 
@@ -1878,6 +1879,71 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       ${imprimirPedido && ReactDOM.createPortal(html`<${ImpressaoPedido} os=${os} pedido=${imprimirPedido} empresa=${sessao.empresaNome} />`, document.getElementById('print-area'))}
       <fieldset class="trava" disabled=${bloqueada}>
       ${etapa === 1 && html`
+        <div style=${{ maxWidth: '760px', width: '100%', margin: '0 auto' }} class="stack">
+          <div class="card page-card stack">
+            <div class="sec-title">👤 Dados do cliente</div>
+            <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
+            <div class="grid2">
+              <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
+              <div class="field"><label class="lbl" for="os-obra">Obra / local</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
+            </div>
+            <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
+            <div class="grid2">
+              <div class="field"><label class="lbl" for="os-resp">Responsável</label><input id="os-resp" class="inp" value=${os.responsavel || ''} placeholder=${sessao.nome} onInput=${e => alterar(o => { o.responsavel = e.target.value; })} /></div>
+              <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} /></div>
+            </div>
+            <div class="field"><label class="lbl" for="os-amb">Ambiente(s) planejado(s)</label><input id="os-amb" class="inp" placeholder="Ex: Cozinha gourmet, suíte master, closet" value=${os.ambienteResumo || (os.ambientes || []).map(a => a.nome).join(', ')} onInput=${e => alterar(o => { o.ambienteResumo = e.target.value; })} /></div>
+            <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
+          </div>
+          <button class="btn btn-marrom btn-block" onClick=${() => ir(2)}>Salvar e ir para os conjuntos de móveis →</button>
+        </div>`}
+
+      ${etapa === 2 && html`
+        ${cartaoVoz}
+        <div class="card page-card">
+          <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div><div class="sec-title"><span class="num-sec">1</span> Conjuntos de móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
+            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar conjunto</button>
+          </div>
+          <div class="stack">
+            ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} />`)}
+            ${!(os.ambientes || []).length && html`<div class="vazio dim">Nenhum conjunto ainda. Adicione, fale, ou gere a OS a partir de uma reunião.</div>`}
+          </div>
+        </div>
+        <${EspecificacoesOS} P=${P} setP=${setP} catalogo=${catalogo} sessao=${sessao} />
+        <div class="card page-card stack">
+            <div class="sec-title">🧱 Padrões de estrutura & tamponamento</div>
+            <span class="lbl">Tipo de tamponamento</span>
+            <div class="opcoes3">
+              ${[['aparente', 'Aparente', 'Laterais visíveis'], ['nao_aparente', 'Não aparente', 'Portas cobrem caixa'], ['sem', 'Sem tamponam.', 'Caixa simples']].map(([v, t, d]) => html`
+                <button key=${v} class=${'opc' + ((os.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), tipo: v }; })}><b>${t}</b><small>${d}</small></button>`)}
+            </div>
+            ${(os.tamponamento?.tipo || 'sem') !== 'sem' && html`
+              <span class="lbl">Espessura do tamponamento</span>
+              <div class="row" style=${{ gap: '6px' }}>${(window.OPCOES?.TAMP_ESP || []).map(x => html`<button key=${x} class=${'pill' + (os.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), espessura: x }; })}>${x}</button>`)}</div>`}
+            <div class="grid2">
+              <div class="field"><label class="lbl">MDF interno (caixaria)</label><input class="inp" placeholder="Ex: MDF Branco TX 15mm" value=${P.acab?.interno?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.interno = { ...(p.acab.interno || {}), desc: e.target.value }; })} /></div>
+              <div class="field"><label class="lbl">MDF externo (frentes e tamponamento)</label><input class="inp" placeholder="Ex: MDF Freijó Puro Duratex 18mm" value=${P.acab?.externo?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.externo = { ...(p.acab.externo || {}), desc: e.target.value }; })} /></div>
+            </div>
+            <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
+              <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
+                <option value="interna">Execução 100% interna</option><option value="terceirizada">Execução 100% terceirizada</option><option value="mista">Mista / híbrida</option>
+              </select></div>
+            <div class="field"><label class="lbl" for="os-obs">Observações e detalhes técnicos acordados na reunião</label><textarea id="os-obs" class="inp" rows="3" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
+          </div>
+        <div class="card page-card stack">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <div class="sec-title"><span class="num-sec">12</span> Paredes inteiras / painéis revestidos</div>
+            <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!P.parede?.ativo} onChange=${e => setP(p => { p.parede = { ...(p.parede || {}), ativo: e.target.checked }; })} /> Possui parede inteira</label>
+          </div>
+          ${P.parede?.ativo && html`
+            <textarea class="inp" rows="2" placeholder="Especificação da parede inteira" value=${P.parede?.espec || ''} onInput=${e => setP(p => { p.parede.espec = e.target.value; })}></textarea>
+            <div class="grid2">
+              <input class="inp" placeholder="Paginação / padrão (ex: friso vertical a cada 60cm)" value=${P.parede?.paginacao || ''} onInput=${e => setP(p => { p.parede.paginacao = e.target.value; })} />
+              <input class="inp" placeholder="Método de fixação" value=${P.parede?.fixacao || ''} onInput=${e => setP(p => { p.parede.fixacao = e.target.value; })} />
+            </div>`}
+        </div>
+        <details class="card page-card"><summary class="sec-title" style=${{ cursor: 'pointer' }}>📑 Contrato, ata, andamento e checklist</summary><div class="stack" style=${{ marginTop: '10px' }}>
         <div class="grid2" style=${{ alignItems: 'start' }}>
           <${ContratoOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
           <${AtaOS} os=${os} alterar=${alterar} catalogo=${catalogo} toast=${toast} />
@@ -1899,44 +1965,6 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           ${idxSt === (STATUS_OS.length - 1) && html`<div class="ok-box" style=${{ marginTop: '12px' }}>OS concluída ✓</div>`}
         </div>
 
-        <div class="grid2" style=${{ alignItems: 'start' }}>
-          <div class="card page-card stack">
-            <div class="sec-title">🏢 Dados da obra & responsáveis</div>
-            <div class="field"><label class="lbl" for="os-cli">Cliente</label><input id="os-cli" class="inp" value=${os.cliente?.nome || ''} onInput=${setCli('nome')} /></div>
-            <div class="grid2">
-              <div class="field"><label class="lbl" for="os-tel">Telefone</label><input id="os-tel" class="inp" value=${os.cliente?.telefone || ''} onInput=${setCli('telefone')} /></div>
-              <div class="field"><label class="lbl" for="os-obra">Obra / local</label><input id="os-obra" class="inp" value=${os.cliente?.obra || ''} onInput=${setCli('obra')} /></div>
-            </div>
-            <div class="field"><label class="lbl" for="os-end">Endereço</label><input id="os-end" class="inp" value=${os.cliente?.endereco || ''} onInput=${setCli('endereco')} /></div>
-            <div class="grid2">
-              <div class="field"><label class="lbl" for="os-resp">Responsável</label><input id="os-resp" class="inp" value=${os.responsavel || ''} placeholder=${sessao.nome} onInput=${e => alterar(o => { o.responsavel = e.target.value; })} /></div>
-              <div class="field"><label class="lbl" for="os-arq">Arquiteto / designer</label><input id="os-arq" class="inp" value=${os.arquiteto || ''} onInput=${e => alterar(o => { o.arquiteto = e.target.value; })} /></div>
-            </div>
-            <div class="field"><label class="lbl" for="os-amb">Ambiente(s) planejado(s)</label><input id="os-amb" class="inp" placeholder="Ex: Cozinha gourmet, suíte master, closet" value=${os.ambienteResumo || (os.ambientes || []).map(a => a.nome).join(', ')} onInput=${e => alterar(o => { o.ambienteResumo = e.target.value; })} /></div>
-            <div class="field"><label class="lbl" for="os-prazo">Prazo de entrega (dd/mm/aaaa)</label><input id="os-prazo" class="inp" placeholder="Ex: 30/11/2026" value=${os.prazoEntrega || ''} onInput=${e => alterar(o => { o.prazoEntrega = e.target.value; })} /></div>
-          </div>
-          <div class="card page-card stack">
-            <div class="sec-title">🧱 Padrões de estrutura & tamponamento</div>
-            <span class="lbl">Tipo de tamponamento</span>
-            <div class="opcoes3">
-              ${[['aparente', 'Aparente', 'Laterais visíveis'], ['nao_aparente', 'Não aparente', 'Portas cobrem caixa'], ['sem', 'Sem tamponam.', 'Caixa simples']].map(([v, t, d]) => html`
-                <button key=${v} class=${'opc' + ((os.tamponamento?.tipo || 'sem') === v ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), tipo: v }; })}><b>${t}</b><small>${d}</small></button>`)}
-            </div>
-            ${(os.tamponamento?.tipo || 'sem') !== 'sem' && html`
-              <span class="lbl">Espessura do tamponamento</span>
-              <div class="row" style=${{ gap: '6px' }}>${(window.OPCOES?.TAMP_ESP || []).map(x => html`<button key=${x} class=${'pill' + (os.tamponamento?.espessura === x ? ' on' : '')} onClick=${() => alterar(o => { o.tamponamento = { ...(o.tamponamento || {}), espessura: x }; })}>${x}</button>`)}</div>`}
-            <div class="grid2">
-              <div class="field"><label class="lbl">MDF interno (caixaria)</label><input class="inp" placeholder="Ex: MDF Branco TX 15mm" value=${P.acab?.interno?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.interno = { ...(p.acab.interno || {}), desc: e.target.value }; })} /></div>
-              <div class="field"><label class="lbl">MDF externo (frentes e tamponamento)</label><input class="inp" placeholder="Ex: MDF Freijó Puro Duratex 18mm" value=${P.acab?.externo?.desc || ''} onInput=${e => setP(p => { p.acab = p.acab || {}; p.acab.externo = { ...(p.acab.externo || {}), desc: e.target.value }; })} /></div>
-            </div>
-            <div class="field"><label class="lbl" for="os-exec">Modo de execução</label>
-              <select id="os-exec" class="inp" value=${os.modoExecucao || 'interna'} onChange=${e => alterar(o => { o.modoExecucao = e.target.value; })}>
-                <option value="interna">Execução 100% interna</option><option value="terceirizada">Execução 100% terceirizada</option><option value="mista">Mista / híbrida</option>
-              </select></div>
-            <div class="field"><label class="lbl" for="os-obs">Observações e detalhes técnicos acordados na reunião</label><textarea id="os-obs" class="inp" rows="3" value=${os.observacoesGerais || ''} onInput=${e => alterar(o => { o.observacoesGerais = e.target.value; })}></textarea></div>
-          </div>
-        </div>
-        ${cartaoVoz}
         ${(() => { const ck = [
             ['1. Cliente & obra', !!(os.cliente?.nome && (os.cliente?.obra || os.cliente?.endereco))],
             ['2. Ambiente & prazo', !!((os.ambienteResumo || (os.ambientes || []).length) && os.prazoEntrega)],
@@ -1946,34 +1974,9 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           return html`<div class="card page-card stack">
             <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">✅ Checklist de prontidão da OS</div><span class=${'chip ' + (ok === 4 ? 'chip-accent' : '')}>${ok}/4 ${ok === 4 ? 'pronto para concluir' : 'recomendado preencher'}</span></div>
             <div class="opcoes4">${ck.map(([t, v]) => html`<div key=${t} class=${'opc' + (v ? ' on' : '')}><b>${v ? '✓' : '!'} ${t}</b><small>${v ? 'Validado' : 'Incompleto'}</small></div>`)}</div>
-            <button class="btn btn-marrom btn-block" onClick=${() => ir(2)}>Salvar e avançar para Etapa 2 (Especificações) →</button>
-          </div>`; })()}`}
-
-      ${etapa === 2 && html`
-        ${cartaoVoz}
-        <${EspecificacoesOS} P=${P} setP=${setP} catalogo=${catalogo} sessao=${sessao} />
-        <div class="card page-card">
-          <div class="row" style=${{ justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div><div class="sec-title"><span class="num-sec">11</span> Conjuntos / ambientes e móveis</div><div class="dim">Cada ambiente com seus móveis, medidas, MDF e ferragens próprias</div></div>
-            <button class="btn btn-marrom" onClick=${() => alterar(o => { o.ambientes = o.ambientes || []; o.ambientes.push(novoAmbiente('Novo ambiente')); })}>+ Adicionar conjunto</button>
-          </div>
-          <div class="stack">
-            ${(os.ambientes || []).map((a, ai) => html`<${AmbienteOS} key=${a.id || ai} amb=${a} ai=${ai} alterar=${alterar} catalogo=${catalogo} sessao=${sessao} />`)}
-            ${!(os.ambientes || []).length && html`<div class="vazio dim">Nenhum conjunto ainda. Adicione, fale, ou gere a OS a partir de uma reunião.</div>`}
-          </div>
-        </div>
-        <div class="card page-card stack">
-          <div class="row" style=${{ justifyContent: 'space-between' }}>
-            <div class="sec-title"><span class="num-sec">12</span> Paredes inteiras / painéis revestidos</div>
-            <label class="row dim" style=${{ gap: '6px' }}><input type="checkbox" checked=${!!P.parede?.ativo} onChange=${e => setP(p => { p.parede = { ...(p.parede || {}), ativo: e.target.checked }; })} /> Possui parede inteira</label>
-          </div>
-          ${P.parede?.ativo && html`
-            <textarea class="inp" rows="2" placeholder="Especificação da parede inteira" value=${P.parede?.espec || ''} onInput=${e => setP(p => { p.parede.espec = e.target.value; })}></textarea>
-            <div class="grid2">
-              <input class="inp" placeholder="Paginação / padrão (ex: friso vertical a cada 60cm)" value=${P.parede?.paginacao || ''} onInput=${e => setP(p => { p.parede.paginacao = e.target.value; })} />
-              <input class="inp" placeholder="Método de fixação" value=${P.parede?.fixacao || ''} onInput=${e => setP(p => { p.parede.fixacao = e.target.value; })} />
-            </div>`}
-        </div>`}
+            <button class="btn btn-marrom btn-block" onClick=${() => ir(3)}>Salvar e avançar para Etapa 3 (Execução) →</button>
+          </div>`; })()}
+        </div></details>`}
 
       ${etapa === 3 && html`<${ExecucaoOS} os=${os} alterar=${alterar} sessao=${sessao} toast=${toast} />`}
       </fieldset>
