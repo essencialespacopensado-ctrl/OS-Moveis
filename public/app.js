@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['191', ['🎯 Ordens a terceiros: as especificações trazem só o que é da categoria escolhida e dos móveis marcados (ex.: Vidros não puxa mais couro, puxador ou box).', '📷 Em todas as fotos dá para escolher Câmera ou Galeria.']],
   ['190', ['🧾 Botão renomeado para "Ordens a terceiros". Agora você marca para quais móveis da OS é a ordem (A, B, C…) e as especificações se ajustam; as fotos já vêm ligadas ao móvel quando só um está marcado.']],
   ['189', ['🧾 Ordem para parceiro: as especificações agora vêm só do que é ligado ao tipo escolhido (ex.: Pintura puxa laca, cores, verniz; Vidros puxa vidros e espelhos…). Cada foto pede de qual móvel é (A, B, C…), e isso sai na impressão.', '📐 Serralheria exige o PDF do desenho técnico (fica salvo na ordem, botão 📐 para abrir).']],
   ['188', ['🧪 Zerar (testes) agora limpa toda a atividade da OS — esteiras, tempos, paradas, liberações, parceiros, compras, peças extras, diário e cronograma — deixando só a OS.', '🔓 O aviso de liberado com pendência também sai na folha de impressão.']],
@@ -145,6 +146,13 @@ function CartaoNovidades({ irPara }) {
     <button class="btn btn-primary btn-sm" style=${{ alignSelf: 'flex-end' }} onClick=${() => { try { localStorage.setItem('gp-card-novid', v); } catch {} setFechado(true); }}>Entendi</button></div>`;
 }
 /* ---------- Sugestões & anotações ---------- */
+/* Botões de foto: câmera ou galeria */
+function FotoBtns({ onFiles, multiple = true, rotulo = '' }) {
+  const fn = (e) => { onFiles(e.target.files); e.target.value = ''; };
+  return html`<span class="foto-btns">${rotulo && html`<small class="dim">${rotulo}</small>`}
+    <label class="btn btn-sm">📷 Câmera<input type="file" accept="image/*" capture="environment" style=${{ display: 'none' }} onChange=${fn} /></label>
+    <label class="btn btn-sm">🖼 Galeria<input type="file" accept="image/*" multiple=${multiple} style=${{ display: 'none' }} onChange=${fn} /></label></span>`;
+}
 function TelaSugestoes({ sessao }) {
   const [lista, setLista] = useState(null);
   const [txt, setTxt] = useState('');
@@ -174,7 +182,7 @@ function TelaSugestoes({ sessao }) {
         <textarea class="inp" rows="2" style=${{ flex: 1 }} placeholder=${tipo === 'nota' ? 'Anote algo… (ou toque no 🎤 e fale)' : 'Sua ideia para melhorar a empresa ou o app… (ou fale)'} value=${txt + (interim ? ' ' + interim : '')} onInput=${e => setTxt(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) salvar(); }}></textarea>
         <div class="stack" style=${{ gap: '6px' }}>
           <button class=${'btn btn-sm' + (fala.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => fala.ouvindo ? fala.parar() : fala.iniciar()}>${fala.ouvindo ? '■' : '🎤'}</button>
-          <label class="btn btn-sm" title="Anexar fotos">📷<input type="file" accept="image/*" multiple capture="environment" style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
+          <${FotoBtns} onFiles=${addFotos} />
           <button class="btn btn-primary btn-sm" disabled=${salvando} onClick=${salvar}>${salvando ? '…' : 'Salvar'}</button></div>
       </div>
       ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}
@@ -2618,7 +2626,7 @@ function NovoPedido({ sessao, os, toast, fechar, catalogo, doParceiro }) {
       <div class="field"><span class="lbl">Precisa até</span><input class="inp" type="date" value=${p.prazo} onInput=${e => set('prazo', e.target.value)} /></div>
       <div class="field" style=${{ flex: 1 }}><span class="lbl">Observação</span><div class="row" style=${{ flexWrap: 'nowrap', gap: '4px' }}><input class="inp" placeholder="Ex: porta do aéreo riscou na montagem" value=${p.obs} onInput=${e => set('obs', e.target.value)} />
         <button class=${'btn ' + (fala.ouvindo ? 'btn-mic-on pulse' : 'btn-teal')} onClick=${fala.ouvindo ? fala.parar : fala.iniciar}>🎤</button>
-        <button class="btn" onClick=${() => cam.current?.click()}>📷</button>
+        <${FotoBtns} multiple=${false} onFiles=${async (fs) => { const f = fs[0]; if (f) { const img = await imagemParaJpeg(f, 1024); setP(x => ({ ...x, fotos: [...x.fotos, img].slice(0, 6) })); } }} />
         <input ref=${cam} type="file" accept="image/*" capture="environment" hidden onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (f) { const img = await imagemParaJpeg(f, 1024); setP(x => ({ ...x, fotos: [...x.fotos, img].slice(0, 4) })); } }} /></div></div>
     </div>
     ${p.fotos.length > 0 && html`<div class="dia-fotos">${p.fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setP(x => ({ ...x, fotos: x.fotos.filter((_, j) => j !== i) }))}>✕</button></span>`)}</div>`}
@@ -4160,10 +4168,11 @@ function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
   </div></div>`, document.body);
 }
 /* ---------- Ordem para parceiro (pintura, serralheria, vidros…) ---------- */
-const GRUPOS_TIPO = { vidros: ['Vidros'], tapecaria: ['Tecidos'] };
+const GRUPOS_TIPO = {};
+const ALLOW_TIPO = { vidros: { Vidros: 1 }, tapecaria: { Tecidos: 1 }, pintura: { Acabamentos: 0, Portas: 0 }, serralheria: { 'Puxadores & perfis': 0, Ferragens: 0 }, pedra: { Acabamentos: 0 }, lamina: { Acabamentos: 0 }, corte: { Acabamentos: 1 } };
 const RE_TIPO = {
   pintura: /laca|pint|\bcor(es)?\b|verniz|tinta|fosc|brilh|acetin|primer|\bpu\b|seladora|patina|pátina|ral\b|suvinil|coral/i,
-  vidros: /vidro|espelh|cristal|temperad|bisot|jatead|fum[eê]|reflecta|box\b/i,
+  vidros: /vidro|espelh|cristal|temperad|bisot|jatead|fum[eê]|reflecta/i,
   tapecaria: /tecid|couro|estof|tape[cç]|espuma|almofad|courino|linho|veludo|capiton/i,
   serralheria: /serralh|metal|ferro|alum[ií]n|inox|lat[aã]o|estrutura met|solda|tubo|cantoneira|perfil met/i,
   pedra: /pedra|m[aá]rmor|granit|quartz|silestone|dekton|nanoglass|porcelanato|cuba/i,
@@ -4185,7 +4194,8 @@ function specsParceiro(o, tipo, sel) {
       linhas.push('• ' + String.fromCharCode(65 + mi) + ') ' + nomePadrao(m.nome) + (m.quantidade > 1 ? ' (' + m.quantidade + 'x)' : '') + med);
       rel.forEach(x => linhas.push('     ' + x));
     });
-    gruposEspec(a.padrao || o.padrao).forEach(([, t, , li]) => li.forEach(([k, v]) => { const l = t + (k ? ' · ' + k : '') + ': ' + v; if (!re || (GRUPOS_TIPO[tipo] || []).includes(t) || re.test(l)) linhas.push('   ' + l); }));
+    const AL = ALLOW_TIPO[tipo];
+    gruposEspec(a.padrao || o.padrao).forEach(([, t, , li]) => { if (AL && !(t in AL)) return; li.forEach(([k, v]) => { const l = t + (k ? ' · ' + k : '') + ': ' + v; if (!AL || AL[t] || re.test(l)) linhas.push('   ' + l); }); });
     if (temSel && !linhas.some(l => l.startsWith('•'))) return;
     if (linhas.length) { L.push('▸ ' + (nomePadrao(a.nome) || 'Conjunto')); L.push(...linhas); }
   });
@@ -4226,7 +4236,7 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
     <div class="field"><span class="lbl">Para quais móveis da OS? <small class="dim">(nenhum marcado = todos os relacionados)</small></span><div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${movChips.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (selM.has(x.k) ? ' on' : '')} onClick=${() => togM(x.k)}>${selM.has(x.k) ? '✓ ' : ''}${x.t}</button>`)}</div></div>
     <div class="field"><span class="lbl">Especificações (puxadas da OS — pode editar)</span><textarea class="inp" rows="9" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></div>
     <div class="row" style=${{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>${tipo === 'serralheria' && html`<label class=${'btn btn-sm' + (pdf ? ' btn-verde' : ' op-falta')}>📐 ${pdf ? pdf.nome : 'PDF do desenho técnico (obrigatório)'}<input type="file" accept="application/pdf" style=${{ display: 'none' }} onChange=${e => { lerPdf(e.target.files[0]); e.target.value = ''; }} /></label>`}
-      <label class="btn btn-sm">📷 Fotos (escolha o móvel de cada uma)<input type="file" accept="image/*" multiple style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
+      <${FotoBtns} onFiles=${addFotos} rotulo="Fotos (escolha o móvel de cada uma):" />
     </div>
     ${fotos.length > 0 && html`<div class="op-fotos">${fotos.map((f, i) => html`<div key=${i} class="op-foto"><img src=${f.src} /><button class="op-x" onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button>
       <select class=${'inp inp-sm' + (f.movel ? '' : ' op-falta')} value=${f.movel} onChange=${e => setFotos(fotos.map((g, j) => j === i ? { ...g, movel: e.target.value } : g))}><option value="">De qual móvel?</option>${moveisL.map(n => html`<option key=${n} value=${n}>${n}</option>`)}</select></div>`)}</div>`}
