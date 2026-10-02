@@ -1642,3 +1642,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
   .side-burger{display:block}
 }
 @media print{.side,.side-fundo,.side-burger{display:none!important}.com-side>header,.com-side>.shell{margin-left:0!important}}
+@media(min-width:901px){.btn-ajuda,.btn-novid,.btn-voltar-pag,.dev-cantinho,.transf-mini{left:calc(var(--side-w) + 14px)!important}}

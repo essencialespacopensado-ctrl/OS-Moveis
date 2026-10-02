@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['198', ['🧭 Botões flutuantes (❓, 🆕, ← Voltar) não ficam mais em cima do menu lateral.']],
   ['197', ['🧭 Novo visual: menu lateral azul à esquerda (como o Conta Azul) com as seções Geral, Clientes, Produção, Compras, Equipe e Financeiro — toque para abrir as telas de cada uma. No celular o menu abre pelo ☰.']],
   ['196', ['💾 No final do preenchimento da OS: salvar em 📄 PDF, 📝 Word ou 📊 Excel (Excel com abas OS, Móveis e Especificações).']],
   ['195', ['🔑 Palavras-chave (vidro, pintura, serralheria…) aparecem destacadas só 1 vez em cada móvel e nunca nos títulos.']],
