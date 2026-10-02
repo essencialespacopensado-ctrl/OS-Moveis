@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['182', ['🚚 Nova aba Ordem de entrega na OS: escolha os móveis que vão na entrega e imprima um check-list ☐ de cada móvel com medidas, MDF, ferragens, puxadores, LED e todos os acessórios do conjunto, com assinaturas de expedição, montador e cliente.', '📄 Folha da OS: depois do cliente aparece o endereço de montagem; saiu o número 01 dos conjuntos.']],
   ['181', ['🔧 Corrigido: concluir etapas da esteira da produção fazia a esteira do escritório pular sozinha até "OS concluída". Agora as duas esteiras são independentes — o escritório só avança quando você toca ▶.']],
   ['180', ['📄 Folha da OS: no topo, em destaque, o ambiente (ex.: BWC Master); embaixo o nome do cliente; cada conjunto mostra os nomes dos móveis que você digitou.', '⬆ Se a tela atualizar no meio de um envio de arquivo, fica um aviso discreto embaixo mostrando o que parou, com ✕ para fechar.']],
   ['179', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS e mostrava 100%. As etapas estavam com códigos internos trocados — o administrador vê um aviso no Início com o botão 🔧 Corrigir (nomes e ordem não mudam).', '🧱 Tamponamento e prateleiras escolhidos em cada conjunto agora ficam salvos e aparecem na folha de impressão.', '🙈 No Editar OS, o móvel não repete mais o nome do ambiente que já aparece no topo.']],
@@ -4245,7 +4246,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'andamento' : 'cal')}>📆 Ver no calendário</button>
       </div>
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
@@ -4253,7 +4254,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
-      <div class=${'ficha-papel' + (modoV === 'folha' ? '' : ' so-imp')}><${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}></div>
+      <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
@@ -4941,6 +4942,58 @@ function gruposEspec(P) {
     ['🧵', 'Tecidos', '#db2777', [['', textoTec(P.tec) || (P.tecidos || []).join('; ')]]],
   ].map(([i, t, c, l]) => [i, t, c, l.filter(([, v]) => v)]).filter(([, , , l]) => l.length);
 }
+/* ---------- Ordem de entrega: check-list por móvel com tudo que compõe ---------- */
+function OrdemEntrega({ os, empresa }) {
+  const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
+  const ambs = os.ambientes || [];
+  const todos = ambs.flatMap((a, ai) => (a.moveis || []).map((m, mi) => ({ a, ai, m, k: ai + '-' + mi })));
+  const [sel, setSel] = useState(() => new Set(todos.map(x => x.k)));
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const tog = (k) => setSel(v => { const n = new Set(v); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
+  const itensMovel = (m) => [
+    [m.largura || m.altura || m.profundidade ? 'Medidas' : '', [m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ') + ' mm'],
+    ['Caixa', mdf(m.mdfCaixa)], ['Frente', mdf(m.mdfFrente)], ['Fita', m.fitaBorda], ['Portas', m.portas], ['Gavetas', m.gavetas],
+    ['Puxador', m.puxador], ['Iluminação', m.iluminacao],
+    ...(m.ferragens || []).map(f => ['Ferragem', (f.quantidade ? f.quantidade + '× ' : '') + [f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' ')]),
+  ].filter(([k, v]) => k && v && String(v).trim());
+  const vai = todos.filter(x => sel.has(x.k));
+  const porAmb = ambs.map((a, ai) => ({ a, ai, l: vai.filter(x => x.ai === ai) })).filter(g => g.l.length);
+  return html`<div class="oe-wrap">
+    <div class="oe-sel so-tela">
+      <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🚚 Quais móveis vão nesta entrega?</b>
+        <span class="row" style=${{ gap: '6px' }}><small>Data:</small><input type="date" class="inp inp-sm" value=${data} onInput=${e => setData(e.target.value)} />
+        <button class="btn btn-sm" onClick=${() => setSel(new Set(todos.map(x => x.k)))}>Todos</button><button class="btn btn-sm" onClick=${() => setSel(new Set())}>Nenhum</button></span></div>
+      <div class="oe-chips">${todos.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (sel.has(x.k) ? ' on' : '')} onClick=${() => tog(x.k)}>${sel.has(x.k) ? '✓ ' : ''}${x.m.nome || 'Móvel'}</button>`)}</div>
+    </div>
+    <div class="po po2 oe" style=${varsCores(cor)}>
+      <div class="po-topo">
+        <div class="row" style=${{ gap: '12px', flexWrap: 'nowrap', alignItems: 'center' }}><${LogoImp} empresa=${empresa} /><div>
+          <div class="po-emp">${empresa || 'Gestão Pró'} · Ordem de entrega</div>
+          <div class="po-tit">${nomePadrao(ambs.map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Entrega'}</div>
+          <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b>${(os.cliente?.enderecoMontagem || os.cliente?.endereco) ? ' · 📍 ' + (os.cliente.enderecoMontagem || os.cliente.endereco) : ''}</div>
+        </div></div>
+        <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">🚚 Entrega ${data ? data.split('-').reverse().join('/') : ''} · ${vai.length} móvel(is)</div></div>
+      </div>
+      ${!vai.length ? html`<div class="vazio dim">Marque acima os móveis desta entrega.</div>` : porAmb.map(({ a, l }) => { const g = gruposEspec(a.padrao || os.padrao); return html`<div key=${a.id || a.nome} class="po2-amb">
+        ${l.map(({ m, k }, n) => html`<div key=${k} class="oe-movel">
+          <div class="oe-mt"><span class="oe-box"></span><b>${n + 1}. ${m.nome || 'Móvel'}</b><em>Qtd ${m.quantidade || 1}</em></div>
+          ${m.observacoes && html`<div class="po2-obs-m">${m.observacoes}</div>`}
+          <div class="oe-itens">${itensMovel(m).map(([k2, v], i) => html`<div key=${i} class="oe-it"><span class="oe-box p"></span><small>${k2}</small> ${v}</div>`)}</div>
+        </div>`)}
+        ${g.length > 0 && html`<div class="oe-acess"><div class="oe-acess-t">🧰 Acessórios e acabamentos do conjunto — conferir</div>
+          ${g.map(([ic, t, c, li]) => li.map(([k2, v], i) => html`<div key=${t + i} class="oe-it" style=${{ '--k': c }}><span class="oe-box p"></span><small>${ic} ${t}${k2 ? ' · ' + k2 : ''}</small> ${v}</div>`))}</div>`}
+      </div>`; })}
+      <div class="oe-final">
+        <div class="oe-it"><span class="oe-box p"></span> Parafusos, cavilhas e kit de montagem</div>
+        <div class="oe-it"><span class="oe-box p"></span> Proteção / embalagem conferida</div>
+        <div class="oe-it"><span class="oe-box p"></span> Projeto / folha da OS junto</div>
+      </div>
+      <div class="po-ass">${['Conferido (expedição)', 'Motorista / montador', 'Cliente — recebi'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+      <div class="po-rod"><span>${empresa || ''} · Ordem de entrega · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
+    </div>
+  </div>`;
+}
 function ImpressaoOS({ os, empresa }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
@@ -4948,7 +5001,7 @@ function ImpressaoOS({ os, empresa }) {
   const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : '';
   const info = [
     ['📞', 'Telefone', os.cliente?.telefone], ['🚚', 'Entrega', os.prazoEntrega], ['🏗', 'Obra', os.cliente?.obra],
-    ['📍', 'Montagem', os.cliente?.enderecoMontagem || os.cliente?.endereco], ['📐', 'Arquiteto', os.arquiteto], ['🧑‍🔧', 'Responsável', os.responsavel], ['🧱', 'Tamponamento', tamp],
+    ['📐', 'Arquiteto', os.arquiteto], ['🧑‍🔧', 'Responsável', os.responsavel], ['🧱', 'Tamponamento', tamp],
   ].filter(([, , v]) => v);
   const ambs = os.ambientes || [];
   const totalMov = ambs.reduce((n, a) => n + (a.moveis || []).length, 0);
@@ -4959,7 +5012,7 @@ function ImpressaoOS({ os, empresa }) {
         <div class="row" style=${{ gap: '12px', flexWrap: 'nowrap', alignItems: 'center' }}><${LogoImp} empresa=${empresa} /><div>
           <div class="po-emp">${empresa || 'Gestão Pró'}</div>
           <div class="po-tit">${nomePadrao(ambs.map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Ordem de Serviço'}</div>
-          <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b> · ${ambs.length} conjunto(s) · ${totalMov} móvel(is)</div>
+          <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b>${(os.cliente?.enderecoMontagem || os.cliente?.endereco) ? ' · 📍 ' + (os.cliente.enderecoMontagem || os.cliente.endereco) : ''}</div>
         </div></div>
         <div class="po-num">
           <div class="po-cod">${numOS(os)}</div>
@@ -4970,7 +5023,7 @@ function ImpressaoOS({ os, empresa }) {
       ${info.length > 0 && html`<div class="po2-info">${info.map(([i, k, v]) => html`<div key=${k} class="po2-cel"><span>${i}</span><div><small>${k}</small><b>${v}</b></div></div>`)}</div>`}
       ${ambs.map((a, ai) => { const g = gruposEspec(a.padrao || os.padrao); const mv = a.moveis || []; const cols = COLS.filter(([, f]) => mv.some(m => f(m)));
         return html`<div key=${a.id || ai} class="po2-amb">
-          <div class="po2-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span><b>${mv.map(m => m.nome).filter(n => n && norm(n) !== norm(a.nome)).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
+          <div class="po2-amb-t"><b>${mv.map(m => m.nome).filter(n => n && norm(n) !== norm(a.nome)).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
           ${g.length > 0 && html`<div class="po2-esp">${g.map(([i, t, c, l]) => html`<div key=${t} class="po2-tile" style=${{ '--k': c }}><div class="po2-tile-t">${i} ${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po2-kv">${k && html`<small>${k}</small>`}<span>${v}</span></div>`)}</div>`)}</div>`}
           ${mv.length > 0 && html`<table class="po2-tab"><thead><tr><th>Móvel</th>${cols.map(([t]) => html`<th key=${t}>${t}</th>`)}</tr></thead><tbody>
             ${mv.map(m => html`<tr key=${m.id}><td><b>${m.nome}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}
