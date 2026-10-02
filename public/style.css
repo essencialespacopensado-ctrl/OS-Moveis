@@ -1524,3 +1524,15 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
   .bg-barra.exp{width:calc(100vw - 24px)!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))}
 }
 .modal-fundo~.bg-barra,body.ficha-aberta .bg-barra{z-index:1!important}
+/* v171 busca no topo, não flutua */
+.bg-barra{position:relative!important;left:auto!important;bottom:auto!important;transform:none!important;z-index:30!important;opacity:1!important;width:240px!important}
+.bg-barra:focus-within,.bg-barra.com-res{width:320px!important}
+.bg-linha{box-shadow:none;background:var(--surface,#fff)}
+.bg-res{position:absolute;top:calc(100% + 6px);left:0;right:0;margin:0;z-index:9500}
+.bg-erro{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:9500}
+@media(max-width:700px){
+  .bg-barra:not(.exp){width:auto!important}
+  .bg-barra:not(.exp) .bg-bolha{width:36px;height:36px;font-size:15px;box-shadow:none}
+  .bg-barra.exp{position:fixed!important;top:8px!important;left:8px!important;right:8px!important;width:auto!important;z-index:9500!important}
+  .bg-barra.exp .bg-linha{box-shadow:0 6px 20px rgba(0,0,0,.2)}
+}

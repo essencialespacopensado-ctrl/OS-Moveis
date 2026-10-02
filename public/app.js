@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['171', ['📌 A busca/microfone saiu de cima das telas: agora fica no topo, junto dos botões da conta, em todos os aparelhos.']],
   ['170', ['✅ Na visão por cliente, a OS concluída sai da tela automaticamente; o cliente some quando todas as OSs dele terminam. Para achar uma concluída, use a busca.']],
   ['169', ['⏱ A voz agora espera 1 segundo depois que você termina de falar para executar — dá tempo de falar a frase inteira.']],
   ['168', ['📱 No celular a busca/voz virou uma bolinha pequena (🔍, ou 🎙 verde quando está ouvindo) que não cobre mais a tela; toque nela para digitar. Ela também fica atrás das janelas abertas.']],
@@ -6573,6 +6574,7 @@ function Principal({ sessao, toast }) {
             ${sessao.papel === 'admin' && html`<button class="sec-dev" title="Testes: zerar esteiras e tempos" onClick=${() => setTesteZ(true)}>🧪</button>`}
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
+            <${BuscaGlobal} sessao=${sessao} irPara=${irPara} />
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
@@ -6619,7 +6621,6 @@ function Principal({ sessao, toast }) {
       </div>
       ${conta && html`<${MinhaConta} sessao=${sessao} fechar=${() => setConta(false)} toast=${toast} />`}
       <${Assistente} sessao=${sessao} osAberta=${aba === 'os' ? osAberta : null} />
-      <${BuscaGlobal} sessao=${sessao} irPara=${irPara} />
       <${BarraTransferencia} />
       <${Novidades} sessao=${sessao} />
       ${testeZ && html`<${ZerarEsteiras} sessao=${sessao} toast=${toast} fechar=${() => setTesteZ(false)} />`}
