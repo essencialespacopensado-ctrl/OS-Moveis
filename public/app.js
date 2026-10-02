@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['184', ['⛔ Avançar para Produção ou concluir com pendência abre uma janela com o que falta (toque no item para ir resolver). Dá para levar mesmo assim com a senha do gerente/administrador e motivo — fica registrado. O aviso vermelho não fica mais aparecendo à toa.', '📣 Alerta em tela cheia (e notificação do sistema com o app minimizado) quando um orçamento pedido ao parceiro fica sem resposta há mais de 1 dia — para cobrar o parceiro. Dá para adiar 2 h ou para amanhã.']],
   ['183', ['⛔ A OS não conclui se tiver pendência: o último avanço do escritório e a última etapa da produção ficam travados enquanto houver compras, parceiros, peças extras ou pendências do diário. Toque no item que falta para ir direto à aba (Compras, Diário…).']],
   ['182', ['🚚 Nova aba Ordem de entrega na OS: escolha os móveis que vão na entrega e imprima um check-list ☐ de cada móvel com medidas, MDF, ferragens, puxadores, LED e todos os acessórios do conjunto, com assinaturas de expedição, montador e cliente.', '📄 Folha da OS: depois do cliente aparece o endereço de montagem; saiu o número 01 dos conjuntos.']],
   ['181', ['🔧 Corrigido: concluir etapas da esteira da produção fazia a esteira do escritório pular sozinha até "OS concluída". Agora as duas esteiras são independentes — o escritório só avança quando você toca ▶.']],
@@ -3026,13 +3027,14 @@ const ST_PARC = [
   ['recebido', 'Recebido na fábrica', 'Recebido ✓', '#16a34a'],
 ];
 function parceirosDaOS(o) {
-  const P = o.padrao || {}, et = o.execucao?.etapas || {}, salvo = o.parceiros || {};
+  const Ps = [o.padrao || {}, ...(o.ambientes || []).map(a => a.padrao).filter(Boolean)], et = o.execucao?.etapas || {}, salvo = o.parceiros || {};
+  const algum = (f) => Ps.some(P => { try { return !!f(P); } catch { return false; } });
   const auto = {
-    vidros: !!P.vidros?.ativo,
-    pintura: P.acab?.interno?.tipo === 'laca' || P.acab?.externo?.tipo === 'laca' || et.pintura?.onde === 'terceirizada',
-    tapecaria: !!P.tec?.ativo || et.tapecaria?.onde === 'terceirizada',
+    vidros: algum(P => P.vidros?.ativo),
+    pintura: algum(P => P.acab?.interno?.tipo === 'laca' || P.acab?.externo?.tipo === 'laca') || et.pintura?.onde === 'terceirizada',
+    tapecaria: algum(P => P.tec?.ativo) || et.tapecaria?.onde === 'terceirizada',
     corte: et.corte?.onde === 'terceirizada',
-    lamina: P.acab?.interno?.tipo === 'lamina' || P.acab?.externo?.tipo === 'lamina',
+    lamina: algum(P => P.acab?.interno?.tipo === 'lamina' || P.acab?.externo?.tipo === 'lamina'),
   };
   return TIPOS_PARC.filter(([k]) => (auto[k] || salvo[k]) && salvo[k]?.st !== 'nao')
     .map(([k, ic, t]) => ({ k, ic, t, ...(salvo[k] || {}), st: salvo[k]?.st || 'orcar' }));
@@ -4125,8 +4127,36 @@ function CalendarioOS({ sessao, os }) {
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
 const durTxt = (ms) => { if (!(ms > 0)) return ''; const h = ms / 36e5; if (h < 1) return Math.max(1, Math.round(ms / 6e4)) + ' min'; if (h < 24) return Math.round(h) + ' h'; const d = Math.floor(h / 24), r = Math.round(h % 24); return d + 'd' + (r ? ' ' + r + 'h' : ''); };
 /* Andamento da OS dentro da ficha: % + parceiros + execução (etapa 3) editável */
-function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [] }) {
-  const travado = () => { if (!falta.length) return false; toast('Não dá para concluir: falta ' + falta.length + ' ' + (falta.length === 1 ? 'coisa' : 'coisas') + ' (veja a lista em vermelho).', 'erro'); return true; };
+/* Pendências travam o avanço; gerente/admin pode liberar com senha */
+async function hashTxt(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('gp:' + t)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
+  const [modo, setModo] = useState('');
+  const [senha, setSenha] = useState(''), [motivo, setMotivo] = useState(''), [erro, setErro] = useState(''), [rod, setRod] = useState(false);
+  const chefe = ['admin', 'gerente'].includes(sessao.papel);
+  const liberarCodigo = async () => {
+    if (motivo.trim().length < 5) return setErro('Escreva o motivo.'); if (!senha) return setErro('Digite a senha de liberação.');
+    const h = window.__senhaLib; if (!h) return setErro('O administrador ainda não criou a senha de liberação.');
+    setRod(true); if ((await hashTxt(senha)) !== h) { setRod(false); return setErro('Senha incorreta.'); }
+    await onOk(motivo.trim() + ' (senha de liberação)'); fechar(); };
+  const definir = async () => { const t = await pedirTexto('Nova senha de liberação (para a equipe levar com pendência)', 'Mínimo 4 caracteres'); if (!t || t.length < 4) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { senhaLiberacao: await hashTxt(t) }); window.__senhaLib = await hashTxt(t); alert('Senha de liberação salva.'); };
+  if (modo === 'chefe') return html`<${SenhaMotivo} titulo=${titulo + ' com pendência'} texto="Gerente/administrador: confirme com a sua senha e o motivo." botao="Liberar" onOk=${onOk} fechar=${fechar} />`;
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(520px,100%)' }}>
+    <div class="sec-title">⛔ ${titulo}: falta resolver</div>
+    <div class="ficha-falta"><b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => irAba(ab)}>• ${f} <small>→ abrir</small></button>`)}</div>
+    ${modo === 'codigo' ? html`<div class="stack">
+      <input class="inp" placeholder="Motivo (obrigatório)" value=${motivo} onInput=${e => setMotivo(e.target.value)} />
+      <input class="inp" type="password" placeholder="Senha de liberação do gerente" value=${senha} onInput=${e => setSenha(e.target.value)} />
+      ${erro && html`<div class="erro-txt" style=${{ color: 'var(--danger)' }}>${erro}</div>`}
+      <button class="btn btn-primary" disabled=${rod} onClick=${liberarCodigo}>🔓 Liberar</button></div>`
+    : html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+      <button class="btn" onClick=${fechar}>Vou resolver</button>
+      <button class="btn btn-danger" style=${{ flex: 1 }} onClick=${() => setModo(chefe ? 'chefe' : 'codigo')}>🔓 Levar mesmo assim (senha do gerente/adm)</button></div>`}
+    ${sessao.papel === 'admin' && html`<button class="btn btn-ghost btn-sm" style=${{ alignSelf: 'flex-start' }} onClick=${definir}>⚙ ${window.__senhaLib ? 'Trocar' : 'Criar'} senha de liberação para a equipe</button>`}
+  </div></div>`, document.body);
+}
+function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [], irAba }) {
+  const [bloq, setBloq] = useState(null);
+  const exigir = (titulo, acao) => { if (!falta.length) return acao(); setBloq({ titulo, acao }); };
   const alterar = async (fn) => {
     const c = JSON.parse(JSON.stringify(o)); fn(c); const patch = {};
     Object.keys(c).forEach(k => { if (k !== 'id' && JSON.stringify(c[k]) !== JSON.stringify(o[k])) patch[k] = c[k]; });
@@ -4138,6 +4168,7 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [] }) {
   const parar = async () => { const m = await pedirMotivo('Parar esteira'); if (!m) return; await alterar(x => { x.parada = { motivo: m, por: sessao.nome, em: nowIso() }; }); registrar(sessao, o.id, '⏸', 'Esteira parada', m); };
   const retomar = async () => { const pd = o.parada; await alterar(x => { x.paradas = [...(x.paradas || []), { ...pd, fim: nowIso(), fimPor: sessao.nome }]; delete x.parada; x.parada = null; }); registrar(sessao, o.id, '▶', 'Esteira retomada', pd?.motivo || ''); };
   return html`<div class=${'stack' + (o.parada ? ' est-parada' : '')}>
+    ${bloq && html`<${LiberarPendencias} sessao=${sessao} falta=${falta} titulo=${bloq.titulo} irAba=${(ab) => { setBloq(null); irAba && irAba(ab); }} fechar=${() => setBloq(null)} onOk=${async (mot) => { registrar(sessao, o.id, '🔓', bloq.titulo + ' com pendência (liberado)', mot); await bloq.acao(); }} />`}
     ${o.parada ? html`<div class="parada-box"><div><b>⏸ Esteira parada</b> há ${durTxt(Date.now() - new Date(o.parada.em))}<div class="parada-mot">Motivo: ${o.parada.motivo}</div><small>por ${o.parada.por} · ${fmtData(o.parada.em)}</small></div><button class="btn btn-verde btn-anim" onClick=${retomar}>▶ Retomar esteira</button></div>`
       : html`<div class="row" style=${{ justifyContent: 'flex-end' }}><button class="btn btn-sm btn-parar" onClick=${parar}>⏸ Parar esteira</button></div>`}
     ${(o.paradas || []).length > 0 && html`<details class="parada-hist"><summary>⏸ ${o.paradas.length} parada(s) anteriores · ${durTxt(o.paradas.reduce((n, x) => n + (new Date(x.fim) - new Date(x.em)), 0))} paradas no total</summary>${o.paradas.slice().reverse().map((x, i) => html`<div key=${i}><b>${durTxt(new Date(x.fim) - new Date(x.em))}</b> · ${x.motivo} <small class="dim">(${x.por}, ${fmtData(x.em)})</small></div>`)}</details>`}
@@ -4163,12 +4194,13 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [] }) {
           ${t0 ? html`<small class="dim">⏱ Total no escritório: <b>${durTxt(Date.now() - new Date(t0))}</b> · iniciado ${fmtData(t0)}</small>` : ''}`; })()}
         ${!(o.inicioEscritorio || (o.statusHist || []).length) ? html`<button class="btn btn-primary btn-anim" onClick=${() => alterar(x => { x.inicioEscritorio = nowIso(); x.statusHist = [{ st: x.status || STATUS_OS[0].v, em: nowIso(), quem: sessao.nome }]; })}>▶ Iniciar esteira do escritório</button>` : html`<div class="row" style=${{ gap: '8px' }}>
           ${ant && html`<button class="btn btn-anim" onClick=${async () => { const m = await pedirMotivo('Voltar para ' + ant.t.replace(/^\d+\. /, '')); if (m) mudar(ant, m); }}>◀ Voltar etapa</button>`}
-          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => { if (prox === STATUS_OS[STATUS_OS.length - 1] && travado()) return; mudar(prox); }}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
+          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => (prox === STATUS_OS[STATUS_OS.length - 1] || /produ/i.test(prox.t)) ? exigir('Avançar para ' + prox.t.replace(/^\d+\. /, ''), () => mudar(prox)) : mudar(prox)}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
         </div>`}</div>`; })()}
     ${(() => { const et = o.execucao?.etapas || {}; const i = ETAPAS_FAB.findIndex(([k]) => et[k]?.status !== 'pronto'); const atual = i < 0 ? ETAPAS_FAB.length : i;
       const prox = ETAPAS_FAB[atual], ant = ETAPAS_FAB[atual - 1];
       const salvarEt = (fn, log, mot) => alterar(x => { x.execucao = x.execucao || {}; x.execucao.etapas = x.execucao.etapas || {}; fn(x.execucao.etapas, x); if (mot) x.reaberturas = [...(x.reaberturas || []), { oque: log, motivo: mot, quem: sessao.nome, quando: nowIso() }]; registrar(sessao, o.id, mot ? '↺' : '🏭', log, mot || ''); });
-      const concluir = () => (atual === ETAPAS_FAB.length - 1 && travado()) ? null : salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
+      const concluir = () => atual === ETAPAS_FAB.length - 1 ? exigir('Concluir a produção', concluir0) : concluir0();
+      const concluir0 = () => salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
       const voltar = async () => { const m = await pedirMotivo('Reabrir ' + ant[1]); if (!m) return; salvarEt(E => { E[ant[0]] = { ...(E[ant[0]] || {}), status: 'andamento' }; if (prox) E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pendente' }; }, 'Produção: ' + ant[1] + ' reaberta', m); };
       return html`<div class="card stack"><b>🏭 Esteira da produção</b>
         ${(() => { const iniP = ETAPAS_FAB.map(([k]) => et[k]?.iniciadaEm).filter(Boolean).sort()[0];
@@ -4251,14 +4283,14 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
-      ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${falta} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
+      ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
-      ${(fin || falta.length > 0) && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'} — a OS só conclui depois de resolver</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
+      ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
 
@@ -6401,6 +6433,39 @@ function AvisoEtapas({ sessao, toast }) {
     setRodando(false); };
   return html`<div class="warn-box row" style=${{ justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}><span>⚠ As etapas da OS estão com códigos internos trocados (por isso aparece 100% ou a OS some ao avançar). Toque em Corrigir — os nomes e a ordem das etapas não mudam.</span><button class="btn btn-primary btn-sm" disabled=${rodando} onClick=${corrigir}>${rodando ? 'Corrigindo…' : '🔧 Corrigir'}</button></div>`;
 }
+/* Alerta em tela cheia: orçamentos pedidos aos parceiros sem resposta — cobrar */
+function AlertaCobranca({ sessao }) {
+  const [itens, setItens] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  useEffect(() => {
+    const checar = () => {
+      const agora = Date.now(); let ad = 0; try { ad = Number(localStorage.getItem('osm_cobrar_adiar') || 0); } catch {}
+      if (agora < ad) return;
+      const l = [];
+      (window.__listaOS || []).filter(o => !osConcluida(o)).forEach(o => parceirosDaOS(o).forEach(p => {
+        if (p.st !== 'aguard_orc') return;
+        const h = (p.hist || []).slice().reverse().find(x => x.st === p.st); const desde = h?.em ? new Date(h.em).getTime() : 0;
+        if (desde && agora - desde < 864e5) return;
+        l.push({ o, p, desde });
+      }));
+      if (!l.length) return;
+      setItens(l); setAberto(true);
+      try { if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { const n = new Notification('Gestão Pró — cobrar parceiros', { body: l.length + ' orçamento(s) pendente(s): ' + l.slice(0, 3).map(x => x.p.t + ' (' + numOS(x.o) + ')').join(', '), requireInteraction: true, tag: 'cobrar' }); n.onclick = () => { window.focus(); n.close(); }; } } catch {}
+    };
+    try { if ('Notification' in window && Notification.permission === 'default') { const pedir = () => { Notification.requestPermission(); window.removeEventListener('pointerdown', pedir); }; window.addEventListener('pointerdown', pedir); } } catch {}
+    const t1 = setTimeout(checar, 60000), t2 = setInterval(checar, 30 * 60000);
+    return () => { clearTimeout(t1); clearInterval(t2); };
+  }, []);
+  if (!aberto || !itens.length) return null;
+  const adiar = (h) => { try { localStorage.setItem('osm_cobrar_adiar', String(Date.now() + h * 36e5)); } catch {} setAberto(false); };
+  return ReactDOM.createPortal(html`<div class="cobrar-full"><div class="cobrar-caixa">
+    <div class="cobrar-ic">📣</div>
+    <h2>Pendências com parceiros</h2>
+    <p>Tem ${itens.length} orçamento(s) pedido(s) sem resposta há mais de 1 dia — cobre o parceiro. Sem isso a OS não avança.</p>
+    <div class="cobrar-lista">${itens.slice(0, 12).map((x, i) => html`<button key=${i} onClick=${() => { setAberto(false); window.__abrirOS && window.__abrirOS(x.o.id); }}><b>${x.p.ic} ${x.p.t}</b> · ${infoSt(x.p.st)[2]}${x.desde ? ' há ' + durTxt(Date.now() - x.desde) : ''}<small>${numOS(x.o)} · ${nomePadrao(x.o.cliente?.nome)}</small></button>`)}</div>
+    <div class="row" style=${{ gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}><button class="btn" onClick=${() => adiar(2)}>Lembrar em 2 h</button><button class="btn" onClick=${() => adiar(24)}>Amanhã</button></div>
+  </div></div>`, document.body);
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
   const [vozAuto, setVozAuto] = useState(false);
@@ -6656,7 +6721,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
@@ -6728,6 +6793,7 @@ function Principal({ sessao, toast }) {
           </nav>
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <${BuscaGlobal} sessao=${sessao} irPara=${irPara} />
+            <${AlertaCobranca} sessao=${sessao} />
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
