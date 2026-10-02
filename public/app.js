@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['199', ['🎨 Menu lateral com as cores do app (escuro com destaque âmbar).', '✅ Clientes → "Concluir clientes em massa": marque os clientes e conclua todas as OSs em aberto deles de uma vez (pede senha e motivo).']],
   ['198', ['🧭 Botões flutuantes (❓, 🆕, ← Voltar) não ficam mais em cima do menu lateral.']],
   ['197', ['🧭 Novo visual: menu lateral azul à esquerda (como o Conta Azul) com as seções Geral, Clientes, Produção, Compras, Equipe e Financeiro — toque para abrir as telas de cada uma. No celular o menu abre pelo ☰.']],
   ['196', ['💾 No final do preenchimento da OS: salvar em 📄 PDF, 📝 Word ou 📊 Excel (Excel com abas OS, Móveis e Especificações).']],
@@ -5862,6 +5863,26 @@ async function aplicarClienteNasOS(sessao, c, nomeAntigo) {
   alvo.forEach(o => registrar(sessao, o.id, '👤', 'Dados do cliente atualizados pelo cadastro', c.nome));
   return alvo.length;
 }
+function ConcluirMassa({ sessao, oss, fechar }) {
+  const [sel, setSel] = useState([]), [q, setQ] = useState(''), [senha, setSenha] = useState(false), [msg, setMsg] = useState('');
+  const fim = STATUS_OS[STATUS_OS.length - 1];
+  const g = {}; (oss || []).filter(o => !osConcluida(o)).forEach(o => { const k = nomePadrao(baseCli(o.cliente?.nome) || o.cliente?.nome || 'Sem cliente'); (g[k] = g[k] || []).push(o); });
+  const nomes = Object.keys(g).filter(n => !q || norm(n).includes(norm(q))).sort();
+  const tog = (n) => setSel(v => v.includes(n) ? v.filter(x => x !== n) : [...v, n]);
+  const total = sel.reduce((t, n) => t + (g[n] || []).length, 0);
+  const executar = async (motivo) => { const lista = sel.flatMap(n => g[n] || []); const { writeBatch } = F().fsMod;
+    for (let i = 0; i < lista.length; i += 400) { const b = writeBatch(F().db); lista.slice(i, i + 400).forEach(o => b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { status: fim.v, statusHist: [...(o.statusHist || []), { st: fim.v, em: nowIso(), quem: sessao.nome, motivo }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome })); await b.commit(); }
+    lista.forEach(o => registrar(sessao, o.id, '✅', 'Concluída em massa', motivo)); setMsg('✓ ' + lista.length + ' OS concluídas.'); setSel([]); };
+  if (senha) return html`<${SenhaMotivo} titulo=${'Concluir ' + total + ' OS de ' + sel.length + ' cliente(s)'} texto=${'Todas as OSs desses clientes vão para "' + fim.t.replace(/^\d+\. /, '') + '" e saem da tela de produção.'} botao="Concluir" onOk=${executar} fechar=${() => setSenha(false)} />`;
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">✅ Concluir clientes em massa</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    ${msg && html`<div class="ok-box">${msg}</div>`}
+    <input class="inp" placeholder="🔍 Buscar cliente" value=${q} onInput=${e => setQ(e.target.value)} />
+    <div class="os-picker-lista" style=${{ maxHeight: '45vh', overflow: 'auto' }}>${!nomes.length ? html`<div class="vazio dim">Nenhum cliente com OS em aberto.</div>` : nomes.map(n => html`<label key=${n} class="row" style=${{ gap: '8px', padding: '7px 4px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}><input type="checkbox" checked=${sel.includes(n)} onChange=${() => tog(n)} /><b style=${{ flex: 1 }}>${n}</b><small class="dim">${g[n].length} OS em aberto</small></label>`)}</div>
+    <div class="row" style=${{ gap: '6px' }}><button class="btn" onClick=${() => setSel(nomes)}>Marcar todos</button><button class="btn" onClick=${() => setSel([])}>Limpar</button>
+      <button class="btn btn-verde" style=${{ flex: 1 }} disabled=${!sel.length} onClick=${() => setSenha(true)}>✅ Concluir ${sel.length} cliente(s) · ${total} OS</button></div>
+  </div></div>`, document.body);
+}
 function TelaClientes({ sessao, toast, catalogo }) {
   const [lista, setLista] = useState(null), [oss, setOss] = useState([]), [ed, setEd] = useState(null), [q, setQ] = useState(''), [lendo, setLendo] = useState('');
   const E = sessao.empresaId; const inp = useRef(null);
@@ -5886,10 +5907,13 @@ function TelaClientes({ sessao, toast, catalogo }) {
     setLendo('');
   };
   const vis = (lista || []).filter(c => !q || norm(JSON.stringify(c)).includes(norm(q))).sort((a, b) => a.nome.localeCompare(b.nome));
+  const [massa, setMassa] = useState(false);
   return html`<div class="fade-up stack">
     <div class="page-head"><div><h2>👤 Clientes</h2><div class="dim">Cadastre uma vez — os dados vão para todas as OS do cliente (e saem na folha de impressão).</div></div></div>
+    ${massa && html`<${ConcluirMassa} sessao=${sessao} oss=${oss} fechar=${() => setMassa(false)} />`}
     <div class="cli-acoes">
       <button class="cli-acao" onClick=${() => setEd({ nome: '' })}><span>✍️</span><b>Cadastrar digitando</b><small>Nome, telefone, endereço, obra…</small></button>
+      <button class="cli-acao" onClick=${() => setMassa(true)}><span>✅</span><b>Concluir clientes em massa</b><small>Marque os clientes e conclua todas as OSs deles</small></button>
       <button class="cli-acao" disabled=${!!lendo} onClick=${() => inp.current?.click()}><span>📑</span><b>${lendo || 'Cadastrar pelo contrato'}</b><small>A IA lê o contrato e preenche</small></button>
       <button class="cli-acao" onClick=${() => window.__irPara && window.__irPara('projetos')}><span>✨</span><b>Nova reunião / projeto</b><small>Ata com microfone e OS automática</small></button>
     </div>

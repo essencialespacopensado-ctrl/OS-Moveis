@@ -1643,3 +1643,14 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 }
 @media print{.side,.side-fundo,.side-burger{display:none!important}.com-side>header,.com-side>.shell{margin-left:0!important}}
 @media(min-width:901px){.btn-ajuda,.btn-novid,.btn-voltar-pag,.dev-cantinho,.transf-mini{left:calc(var(--side-w) + 14px)!important}}
+/* v199 menu lateral nas cores do app */
+:root{--side-bg:#1c1917;--side-bg2:#292524}
+.side-brand{background:#fffbf5;border-bottom:3px solid #d97706}
+.side-brand b{color:#1c1917}
+.side-it.on{color:#b45309}
+.side-sub.on{box-shadow:inset 4px 0 0 #f59e0b;background:rgba(245,158,11,.16)}
+.side-sub{color:#e7e5e4}
+.side-it:hover,.side-sub:hover{background:rgba(245,158,11,.14)}
+.side-grp.ab>.side-it{background:rgba(255,255,255,.06)}
+.side-subs{background:rgba(0,0,0,.25)}
+.side-burger{color:#1c1917}
