@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['177', ['📋 Lista de OSs por cliente: a barra de etapas começa zerada e só acende quando a esteira avança; a OS não pula mais de lugar quando você toca ▶ (fica na mesma posição, por número).']],
   ['176', ['💾 Corrigido: ao salvar a OS, os acabamentos, puxadores, ferragens e demais especificações de cada conjunto de móveis estavam sendo perdidos. Agora tudo fica salvo.']],
   ['175', ['⏸ Parar esteira: na aba Andamento da OS, botão "Parar esteira" pede o motivo; a OS mostra o aviso vermelho com quanto tempo está parada e o botão ▶ Retomar. Fica o histórico das paradas, e a OS aparece como ⏸ Parada na visão por cliente.', '💡 Sugestões e anotações: marque pessoas da equipe (@nome) e anexe fotos 📷. Novo filtro 🔔 Para mim.', '✕ Corrigido: o botão de fechar o aviso do microfone agora funciona.']],
   ['174', ['✕ O aviso de microfone (sem microfone / bloqueado) agora tem botão para fechar, e não volta mais.']],
@@ -1727,7 +1728,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
         return html`${reab && html`<${SenhaMotivo} titulo=${numOS(reab.o) + ': voltar para ' + reab.volta.t.replace(/^\d+\. /, '')} texto="Voltar uma etapa pede motivo e senha." botao="Voltar" onOk=${(m) => voltar(reab.o, reab.volta, m)} fechar=${() => setReab(null)} />`}<div class="os-clis">${grupos.map(x => html`
           <div key=${x.nome} class=${'os-cli' + (x.ini ? ' ativo' : '')} style=${{ '--cc': corCliente(x.nome) }}>
             <div class="os-cli-top"><b>${nomePadrao(x.nome)}</b><span>${x.oss.length} ${x.oss.length === 1 ? 'OS' : 'OSs'}${x.ini ? html` · <em>▶ ${x.ini} em andamento</em>` : ''}</span></div>
-            ${x.oss.slice().sort((a, b) => STATUS_OS.findIndex(s => s.v === stOf(b)) - STATUS_OS.findIndex(s => s.v === stOf(a))).map(o => {
+            ${x.oss.slice().sort((a, b) => (Number(b.numero) || 0) - (Number(a.numero) || 0)).map(o => {
               const st = stOf(o), i = STATUS_OS.findIndex(y => y.v === st), prox = STATUS_OS[i + 1], x2 = STATUS_OS[i] || { c: 'chip', t: st || '' };
               const iniciada = st !== 'elaboracao' && st !== 'concluida';
               return html`<div key=${o.id} class=${'os-cli-os st-bg-' + st + (iniciada ? ' iniciada' : '') + (atrasada(o) ? ' atras' : '')}>
@@ -1735,7 +1736,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
                   <span class="mono">${numOS(o)}${bolinhas(o)}</span>
                   <span class="nm"><b>${nomePadrao((o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo) || '—'}</b>
                     <small>${o.prazoEntrega ? '🚚 ' + o.prazoEntrega : ''}${atrasada(o) ? ' ⚠ atrasada' : ''}</small></span>
-                  <span class="os-trilho">${STATUS_OS.map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j < i ? 'f' : j === i ? 'a' : ''}></i>`)}</span>
+                  <span class="os-trilho">${STATUS_OS.slice(1).map((s2, j) => html`<i key=${s2.v} title=${s2.t} class=${j + 1 < i ? 'f' : j + 1 === i ? 'a' : ''}></i>`)}</span>
                   <span class=${x2.c + ' mini'}>${x2.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Aguard. liberação')}</span>
                 </button>
                 ${i > 0 && html`<button class="btn-voltar" title=${'Voltar para ' + STATUS_OS[i - 1].t} onClick=${(ev) => { ev.stopPropagation(); setReab({ o, volta: STATUS_OS[i - 1] }); }}>◀</button>`}
