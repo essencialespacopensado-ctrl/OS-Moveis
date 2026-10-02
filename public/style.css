@@ -1690,3 +1690,14 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @keyframes mascAlvo{0%,100%{box-shadow:0 0 0 0 #f59e0b66}50%{box-shadow:0 0 0 10px #f59e0b00}}
 .masc.vira .masc-bal{transform:none}
 @media print{.masc,.masc-volta{display:none!important}}
+/* v201 mascote: foto, nome, sempre por cima, braços/pernas */
+.masc{z-index:10060!important}
+.masc-cab.foto{left:6px;top:-6px;width:58px;height:58px;border-radius:50%;overflow:visible;background:#fbbf24;border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.3)}
+.masc-cab.foto img{width:100%;height:100%;border-radius:50%;object-fit:cover;filter:saturate(1.6) contrast(1.3) brightness(1.05);transform:scale(1.08)}
+.masc-cab.foto .masc-cap{left:2px;top:-14px;width:54px;height:22px}
+.masc-nome{position:absolute;left:50%;top:104px;transform:translateX(-50%);background:#1c1917;color:#fde68a;font:800 10px 'Outfit',sans-serif;padding:1px 7px;border-radius:8px;white-space:nowrap}
+.masc:not(.anda) .masc-perna.e{animation:mascPernaIdle 1.4s ease-in-out infinite alternate}
+.masc:not(.anda) .masc-perna.d{animation:mascPernaIdle 1.4s ease-in-out infinite alternate-reverse}
+.masc:not(.anda) .masc-braco.e{animation:mascBracoIdle 1.2s ease-in-out infinite alternate}
+@keyframes mascPernaIdle{from{transform:rotate(8deg)}to{transform:rotate(-8deg)}}
+@keyframes mascBracoIdle{from{transform:rotate(25deg)}to{transform:rotate(-10deg)}}

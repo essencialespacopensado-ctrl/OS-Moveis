@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['201', ['👷 Ajudante: dá para dar nome a ele e colocar uma foto, que vira o rosto (caricatura, cabeção). Ele mexe braços e pernas o tempo todo, as falas aparecem por cima das janelas e tem o botão 🏠 Voltar para casa.']],
   ['200', ['👷 Novo ajudante: o Zé, um bonequinho animado que anda pela tela. Toque nele: "Me mostra esta tela" (ele vai até cada parte e explica) ou "Onde fica…?" (ele anda até o lugar no menu e destaca). Dá para esconder.', '↙ Botões ❓, 🆕 e ← Voltar de volta bem no canto esquerdo.']],
   ['199', ['🎨 Menu lateral com as cores do app (escuro com destaque âmbar).', '✅ Clientes → "Concluir clientes em massa": marque os clientes e conclua todas as OSs em aberto deles de uma vez (pede senha e motivo).']],
   ['198', ['🧭 Botões flutuantes (❓, 🆕, ← Voltar) não ficam mais em cima do menu lateral.']],
@@ -6672,6 +6673,11 @@ function Mascote() {
   const [pos, setPos] = useState(() => ({ x: window.innerWidth - 120, y: window.innerHeight - 170 }));
   const [fala, setFala] = useState(''), [andando, setAndando] = useState(false), [vira, setVira] = useState(false), [menu, setMenu] = useState(false), [q, setQ] = useState('');
   const [oculto, setOculto] = useState(() => { try { return localStorage.getItem('osm_mascote') === '0'; } catch { return false; } });
+  const ler = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+  const [nome, setNome] = useState(() => ler('osm_masc_nome', 'Zé')), [rosto, setRosto] = useState(() => ler('osm_masc_rosto', ''));
+  const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const trocarRosto = async (f) => { if (!f) return; try { const u = await imagemParaJpeg(f, 260); setRosto(u); gravar('osm_masc_rosto', u); setFala('Ficou bom? 😄'); } catch { setFala('Não consegui ler a foto.'); } };
+  const casa = () => { setMenu(false); setFala(''); destacar(null); irPara(window.innerWidth - 120, window.innerHeight - 170); };
   const alvoRef = useRef(null), posRef = useRef(pos); posRef.current = pos;
   const destacar = (el) => { document.querySelectorAll('.masc-alvo').forEach(x => x.classList.remove('masc-alvo')); if (el) { el.classList.add('masc-alvo'); alvoRef.current = el; setTimeout(() => el.classList.remove('masc-alvo'), 4500); } };
   const irPara = (x, y) => new Promise(res => { const p = posRef.current; const d = Math.hypot(x - p.x, y - p.y); setVira(x < p.x); setAndando(true); setPos({ x, y, t: Math.min(2.2, 0.4 + d / 650) }); setTimeout(() => { setAndando(false); res(); }, Math.min(2200, 400 + d / 0.65)); });
@@ -6691,14 +6697,19 @@ function Mascote() {
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`;
   return html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
-    ${(fala || menu) && html`<div class="masc-bal">${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
-        <b>Oi! Sou o Zé 👷 Posso ajudar?</b>
+    ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
+        <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
         <form class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }} onSubmit=${e => { e.preventDefault(); setMenu(false); onde(q); setQ(''); }}><input class="inp inp-sm" placeholder="Onde fica…? (ex: compras)" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn btn-sm">Ir</button></form>
-        <button class="btn btn-sm btn-ghost" onClick=${() => { setMenu(false); setFala(''); irPara(window.innerWidth - 120, window.innerHeight - 170); }}>🏠 Volta pro canto</button>
-        <button class="btn btn-sm btn-ghost" onClick=${() => { setOculto(true); try { localStorage.setItem('osm_mascote', '0'); } catch {} }}>🙈 Esconder</button></div>` : fala}</div>`}
-    <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title="Zé, o ajudante">
-      <div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>
+        <button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button>
+        <button class="btn btn-sm btn-ghost" onClick=${() => { setMenu(false); window.__irPara && window.__irPara('inicio'); }}>⌂ Ir para o Início</button>
+        <div class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Nome do ajudante" value=${nome} onInput=${e => { setNome(e.target.value); gravar('osm_masc_nome', e.target.value || 'Zé'); }} /></div>
+        <label class="btn btn-sm">📷 ${rosto ? 'Trocar' : 'Usar'} foto (vira caricatura)<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { trocarRosto(e.target.files[0]); e.target.value = ''; }} /></label>
+        ${rosto && html`<button class="btn btn-sm btn-ghost" onClick=${() => { setRosto(''); gravar('osm_masc_rosto', ''); }}>Tirar foto</button>`}
+        <button class="btn btn-sm btn-ghost" onClick=${() => { setOculto(true); try { localStorage.setItem('osm_mascote', '0'); } catch {} }}>🙈 Esconder</button></div>` : ''}</div>`}
+    <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title=${nome + ', o ajudante'}>
+      ${rosto ? html`<div class="masc-cab foto"><img src=${rosto} /><div class="masc-cap"></div></div>` : html`<div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>`}
+      <div class="masc-nome">${nome}</div>
       <div class="masc-tronco"><div class="masc-braco e"></div><div class="masc-braco d"></div></div>
       <div class="masc-perna e"></div><div class="masc-perna d"></div>
       <div class="masc-sombra"></div>
