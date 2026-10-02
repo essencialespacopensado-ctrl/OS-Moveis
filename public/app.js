@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['185', ['✍ Folha da OS e Ordem de entrega: os nomes dos móveis aparecem no mesmo padrão de escrita da OS (ex.: PERFUMEIRO → Perfumeiro).']],
   ['184', ['⛔ Avançar para Produção ou concluir com pendência abre uma janela com o que falta (toque no item para ir resolver). Dá para levar mesmo assim com a senha do gerente/administrador e motivo — fica registrado. O aviso vermelho não fica mais aparecendo à toa.', '📣 Alerta em tela cheia (e notificação do sistema com o app minimizado) quando um orçamento pedido ao parceiro fica sem resposta há mais de 1 dia — para cobrar o parceiro. Dá para adiar 2 h ou para amanhã.']],
   ['183', ['⛔ A OS não conclui se tiver pendência: o último avanço do escritório e a última etapa da produção ficam travados enquanto houver compras, parceiros, peças extras ou pendências do diário. Toque no item que falta para ir direto à aba (Compras, Diário…).']],
   ['182', ['🚚 Nova aba Ordem de entrega na OS: escolha os móveis que vão na entrega e imprima um check-list ☐ de cada móvel com medidas, MDF, ferragens, puxadores, LED e todos os acessórios do conjunto, com assinaturas de expedição, montador e cliente.', '📄 Folha da OS: depois do cliente aparece o endereço de montagem; saiu o número 01 dos conjuntos.']],
@@ -4999,7 +5000,7 @@ function OrdemEntrega({ os, empresa }) {
       <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🚚 Quais móveis vão nesta entrega?</b>
         <span class="row" style=${{ gap: '6px' }}><small>Data:</small><input type="date" class="inp inp-sm" value=${data} onInput=${e => setData(e.target.value)} />
         <button class="btn btn-sm" onClick=${() => setSel(new Set(todos.map(x => x.k)))}>Todos</button><button class="btn btn-sm" onClick=${() => setSel(new Set())}>Nenhum</button></span></div>
-      <div class="oe-chips">${todos.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (sel.has(x.k) ? ' on' : '')} onClick=${() => tog(x.k)}>${sel.has(x.k) ? '✓ ' : ''}${x.m.nome || 'Móvel'}</button>`)}</div>
+      <div class="oe-chips">${todos.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (sel.has(x.k) ? ' on' : '')} onClick=${() => tog(x.k)}>${sel.has(x.k) ? '✓ ' : ''}${nomePadrao(x.m.nome) || 'Móvel'}</button>`)}</div>
     </div>
     <div class="po po2 oe" style=${varsCores(cor)}>
       <div class="po-topo">
@@ -5012,7 +5013,7 @@ function OrdemEntrega({ os, empresa }) {
       </div>
       ${!vai.length ? html`<div class="vazio dim">Marque acima os móveis desta entrega.</div>` : porAmb.map(({ a, l }) => { const g = gruposEspec(a.padrao || os.padrao); return html`<div key=${a.id || a.nome} class="po2-amb">
         ${l.map(({ m, k }, n) => html`<div key=${k} class="oe-movel">
-          <div class="oe-mt"><span class="oe-box"></span><b>${n + 1}. ${m.nome || 'Móvel'}</b><em>Qtd ${m.quantidade || 1}</em></div>
+          <div class="oe-mt"><span class="oe-box"></span><b>${n + 1}. ${nomePadrao(m.nome) || 'Móvel'}</b><em>Qtd ${m.quantidade || 1}</em></div>
           ${m.observacoes && html`<div class="po2-obs-m">${m.observacoes}</div>`}
           <div class="oe-itens">${itensMovel(m).map(([k2, v], i) => html`<div key=${i} class="oe-it"><span class="oe-box p"></span><small>${k2}</small> ${v}</div>`)}</div>
         </div>`)}
@@ -5058,10 +5059,10 @@ function ImpressaoOS({ os, empresa }) {
       ${info.length > 0 && html`<div class="po2-info">${info.map(([i, k, v]) => html`<div key=${k} class="po2-cel"><span>${i}</span><div><small>${k}</small><b>${v}</b></div></div>`)}</div>`}
       ${ambs.map((a, ai) => { const g = gruposEspec(a.padrao || os.padrao); const mv = a.moveis || []; const cols = COLS.filter(([, f]) => mv.some(m => f(m)));
         return html`<div key=${a.id || ai} class="po2-amb">
-          <div class="po2-amb-t"><b>${mv.map(m => m.nome).filter(n => n && norm(n) !== norm(a.nome)).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
+          <div class="po2-amb-t"><b>${mv.map(m => nomePadrao(m.nome)).filter(n => n && norm(n) !== norm(a.nome)).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
           ${g.length > 0 && html`<div class="po2-esp">${g.map(([i, t, c, l]) => html`<div key=${t} class="po2-tile" style=${{ '--k': c }}><div class="po2-tile-t">${i} ${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po2-kv">${k && html`<small>${k}</small>`}<span>${v}</span></div>`)}</div>`)}</div>`}
           ${mv.length > 0 && html`<table class="po2-tab"><thead><tr><th>Móvel</th>${cols.map(([t]) => html`<th key=${t}>${t}</th>`)}</tr></thead><tbody>
-            ${mv.map(m => html`<tr key=${m.id}><td><b>${m.nome}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}
+            ${mv.map(m => html`<tr key=${m.id}><td><b>${nomePadrao(m.nome)}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}
           </tbody></table>`}
         </div>`; })}
       ${os.observacoesGerais && html`<div class="po-obs"><b>📝 Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
