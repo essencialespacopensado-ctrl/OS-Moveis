@@ -1546,3 +1546,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .sug-txt{white-space:pre-wrap;font-size:14.5px;line-height:1.4}
 .sug-rod{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .sug-rod small{color:#78716c}
+.bg-erro{display:flex;align-items:flex-start;gap:6px}
+.bg-erro-x{margin-left:auto;border:0;background:none;color:#991b1b;font-weight:800;cursor:pointer;flex:none}

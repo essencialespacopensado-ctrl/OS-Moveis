@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['174', ['✕ O aviso de microfone (sem microfone / bloqueado) agora tem botão para fechar, e não volta mais.']],
   ['173', ['💡 Nova aba Sugestões & anotações (em Geral): escreva ou fale uma ideia ou anotação, marque como feita, filtre por tipo. Toda a equipe vê.']],
   ['172', ['✅ Corrigido: a OS que chega na última etapa (Conclusão) sai da visão por cliente.']],
   ['171', ['📌 A busca/microfone saiu de cima das telas: agora fica no topo, junto dos botões da conta, em todos os aparelhos.']],
@@ -6253,6 +6254,7 @@ function BuscaGlobal({ sessao, irPara }) {
   const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
   const [aberta, setAberta] = useState(false);
   const [exp, setExp] = useState(false);
+  const [erroOk, setErroOk] = useState(() => { try { return localStorage.getItem('osm_vozErroOk') || ''; } catch { return ''; } });
   useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => { const l = s.docs.map(d => ({ id: d.id, ...d.data() })); setLista(l); if (!window.__listaOS || !window.__listaOS.length || window.__listaOS.length !== l.length) window.__listaOS = l; }, () => {}); }, [sessao.empresaId]);
   const executar = (t) => { const x = String(t || '').replace(/[.?!]$/, '').trim(); if (!x) return; window.__listaOS = lista; if (acaoRapida(x)) { setQ(''); setAberta(false); } else { setQ(x); setAberta(true); } };
@@ -6281,7 +6283,7 @@ function BuscaGlobal({ sessao, irPara }) {
       ${Object.keys(cliMap).length > 0 && html`<div class="bg-chips">${Object.keys(cliMap).map(c => html`<button key=${c} class="bt-chip bt-cli" onClick=${() => { setQ(''); setAberta(false); window.__buscaOS = c; (window.__irPara || irPara)('os'); }}>👤 Todas de ${c}</button>`)}</div>`}
       ${telas.length > 0 && html`<div class="bg-chips">${telas.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setQ(''); setAberta(false); (window.__irPara || irPara)(x.aba); }}>${x.t}</button>`)}</div>`}
     </div>` : null}
-    ${fala.erro && html`<div class="bg-erro">🎤 ${fala.erro}</div>`}
+    ${fala.erro && fala.erro !== erroOk && html`<div class="bg-erro">🎤 ${fala.erro} <button class="bg-erro-x" title="Fechar aviso" onClick=${() => { setErroOk(fala.erro); try { localStorage.setItem('osm_vozErroOk', fala.erro); } catch {} }}>✕</button></div>`}
     <div class="bg-linha">
       <button class=${'bg-mic' + (fala.ouvindo ? ' on' : '')} title=${vozAuto ? 'Voz ligada — toque para desligar' : 'Voz desligada — toque para ligar'} onClick=${tog}>${fala.ouvindo ? '🎙' : '🎤'}</button>
       <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); setExp(false); } }} onBlur=${() => setTimeout(() => { if (!document.activeElement?.closest?.('.bg-barra')) setExp(false); }, 200)} />
