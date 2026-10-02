@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['181', ['🔧 Corrigido: concluir etapas da esteira da produção fazia a esteira do escritório pular sozinha até "OS concluída". Agora as duas esteiras são independentes — o escritório só avança quando você toca ▶.']],
   ['180', ['📄 Folha da OS: no topo, em destaque, o ambiente (ex.: BWC Master); embaixo o nome do cliente; cada conjunto mostra os nomes dos móveis que você digitou.', '⬆ Se a tela atualizar no meio de um envio de arquivo, fica um aviso discreto embaixo mostrando o que parou, com ✕ para fechar.']],
   ['179', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS e mostrava 100%. As etapas estavam com códigos internos trocados — o administrador vê um aviso no Início com o botão 🔧 Corrigir (nomes e ordem não mudam).', '🧱 Tamponamento e prateleiras escolhidos em cada conjunto agora ficam salvos e aparecem na folha de impressão.', '🙈 No Editar OS, o móvel não repete mais o nome do ambiente que já aparece no topo.']],
   ['177', ['📋 Lista de OSs por cliente: a barra de etapas começa zerada e só acende quando a esteira avança; a OS não pula mais de lugar quando você toca ▶ (fica na mesma posição, por número).']],
@@ -277,6 +278,8 @@ const STATUS_OS = [
   { v: 'montagem', t: '5. Montagem', c: 'chip chip-roxo' },
   { v: 'concluida', t: '6. Concluída', c: 'chip chip-ok' },
 ];
+/* Etapas do escritório personalizadas: a esteira da produção não mexe sozinha nelas */
+const etapasPadrao = () => STATUS_OS.map(x => x.v).join() === 'elaboracao,projetos,producao,liberacao,montagem,concluida';
 const osConcluida = (o) => STATUS_OS.length > 1 ? o?.status === STATUS_OS[STATUS_OS.length - 1].v : o?.status === 'concluida';
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
@@ -1716,9 +1719,9 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
           const patch = { execucao: { ...(o.execucao || {}), etapas: et }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome };
           if (motivo) patch.reaberturas = [...(o.reaberturas || []), { oque: 'Etapa ' + (ETAPAS_FAB.find(e => e[0] === k) || [])[1] + ' reaberta', motivo, quem: sessao.nome, quando: nowIso() }];
           const semMont = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => et[x]?.status === 'pronto');
-          if (st === 'pronto' && ['elaboracao', 'projetos'].includes(stOf(o))) { patch.status = 'producao'; patch.statusHist = [...(o.statusHist || []), { st: 'producao', em: nowIso(), quem: sessao.nome }]; }
-          if (st === 'pronto' && semMont && stOf(o) === 'producao') { patch.status = 'liberacao'; patch.statusHist = [...(o.statusHist || []), { st: 'liberacao', em: nowIso(), quem: sessao.nome }]; }
-          if (st === 'pronto' && k === 'montagem' && ETAPAS_FAB.every(([x]) => et[x]?.status === 'pronto')) { patch.status = 'concluida'; patch.statusHist = [...(o.statusHist || []), { st: 'concluida', em: nowIso(), quem: sessao.nome }]; }
+          if (etapasPadrao() && st === 'pronto' && ['elaboracao', 'projetos'].includes(stOf(o))) { patch.status = 'producao'; patch.statusHist = [...(o.statusHist || []), { st: 'producao', em: nowIso(), quem: sessao.nome }]; }
+          if (etapasPadrao() && st === 'pronto' && semMont && stOf(o) === 'producao') { patch.status = 'liberacao'; patch.statusHist = [...(o.statusHist || []), { st: 'liberacao', em: nowIso(), quem: sessao.nome }]; }
+          if (etapasPadrao() && st === 'pronto' && k === 'montagem' && ETAPAS_FAB.every(([x]) => et[x]?.status === 'pronto')) { patch.status = 'concluida'; patch.statusHist = [...(o.statusHist || []), { st: 'concluida', em: nowIso(), quem: sessao.nome }]; }
           try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), patch); toast((ETAPAS_FAB.find(e => e[0] === k) || [])[1] + (st === 'pronto' ? ' concluída' : ' reaberta'), 'ok'); } catch (e) { toast(e.message, 'erro'); }
         };
         const avancar = async (o) => {
@@ -3149,7 +3152,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
     const todas = ETAPAS_FAB.every(([x]) => etapas[x]?.status === 'pronto');
     const semMontagem = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => etapas[x]?.status === 'pronto');
     const status = todas ? 'concluida' : etapas.montagem?.status === 'andamento' ? 'montagem' : semMontagem ? 'liberacao' : 'producao';
-    salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: osConcluida(o) ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
+    salvar(o, { execucao: { ...(o.execucao || {}), etapas }, ...(etapasPadrao() && !osConcluida(o) ? { status } : {}) }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
   };
   const reab = (o, oque, motivo) => [...(o.reaberturas || []), { oque, motivo, quem: sessao.nome, quando: nowIso() }];
   const voltarEtapa = (o, k) => {
@@ -4757,9 +4760,10 @@ function ExecucaoOS({ os, alterar, sessao, toast }) {
       o.execucao.etapas[k] = { ...et(k), ...(o.execucao.etapas[k] || {}), status: 'pronto', concluidaEm: nowIso() };
       const prox = ETAPAS_FAB[i + 1]?.[0];
       if (prox) o.execucao.etapas[prox] = { ...et(prox), ...(o.execucao.etapas[prox] || {}), status: 'andamento' };
+      if (etapasPadrao()) {
       if (o.status === 'elaboracao' || o.status === 'projetos') o.status = 'producao';
       if (prox === 'montagem' && (o.status === 'producao' || o.status === 'projetos' || o.status === 'elaboracao')) o.status = 'liberacao';
-      if (!prox) o.status = 'concluida';
+      if (!prox) o.status = 'concluida'; }
     });
   };
   const setModo = (m) => alterar(o => {
