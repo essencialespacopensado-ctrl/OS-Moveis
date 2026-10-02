@@ -1536,3 +1536,13 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
   .bg-barra.exp{position:fixed!important;top:8px!important;left:8px!important;right:8px!important;width:auto!important;z-index:9500!important}
   .bg-barra.exp .bg-linha{box-shadow:0 6px 20px rgba(0,0,0,.2)}
 }
+/* v173 sugestões */
+.sug-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.sug-item{border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;border:1px solid;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.sug-item.ideia{background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#fcd34d}
+.sug-item.nota{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-color:#93c5fd}
+.sug-item.feita{opacity:.6}
+.sug-item.feita .sug-txt{text-decoration:line-through}
+.sug-txt{white-space:pre-wrap;font-size:14.5px;line-height:1.4}
+.sug-rod{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.sug-rod small{color:#78716c}

@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['173', ['💡 Nova aba Sugestões & anotações (em Geral): escreva ou fale uma ideia ou anotação, marque como feita, filtre por tipo. Toda a equipe vê.']],
   ['172', ['✅ Corrigido: a OS que chega na última etapa (Conclusão) sai da visão por cliente.']],
   ['171', ['📌 A busca/microfone saiu de cima das telas: agora fica no topo, junto dos botões da conta, em todos os aparelhos.']],
   ['170', ['✅ Na visão por cliente, a OS concluída sai da tela automaticamente; o cliente some quando todas as OSs dele terminam. Para achar uma concluída, use a busca.']],
@@ -126,6 +127,44 @@ function CartaoNovidades({ irPara }) {
   return html`<div class="card novid-card"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🆕 O que mudou — versão ${v}</b><button class="btn btn-sm btn-ghost" onClick=${() => irPara('novidades')}>Ver todas →</button></div><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul>
     <button class="btn btn-primary btn-sm" style=${{ alignSelf: 'flex-end' }} onClick=${() => { try { localStorage.setItem('gp-card-novid', v); } catch {} setFechado(true); }}>Entendi</button></div>`;
 }
+/* ---------- Sugestões & anotações ---------- */
+function TelaSugestoes({ sessao }) {
+  const [lista, setLista] = useState(null);
+  const [txt, setTxt] = useState('');
+  const [tipo, setTipo] = useState('sugestao');
+  const [filtro, setFiltro] = useState('abertas');
+  const [interim, setInterim] = useState('');
+  const fala = useFala({ onFinal: t => setTxt(v => (v ? v + ' ' : '') + t), onInterim: setInterim });
+  const C = () => col('empresas', sessao.empresaId, 'sugestoes');
+  useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod; return onSnapshot(query(C(), orderBy('em', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([])); }, [sessao.empresaId]);
+  const salvar = async () => { const t = (txt + ' ' + interim).trim(); if (!t) return; fala.parar(); setTxt(''); setInterim('');
+    await F().fsMod.addDoc(C(), { texto: t, tipo, autor: sessao.nome, uid: sessao.uid || '', em: nowIso(), feita: false }); };
+  const up = (x, p) => F().fsMod.updateDoc(F().fsMod.doc(F().db, 'empresas', sessao.empresaId, 'sugestoes', x.id), p);
+  const apagar = (x) => { if (confirm('Apagar esta ' + (x.tipo === 'nota' ? 'anotação' : 'sugestão') + '?')) F().fsMod.deleteDoc(F().fsMod.doc(F().db, 'empresas', sessao.empresaId, 'sugestoes', x.id)); };
+  const vis = (lista || []).filter(x => filtro === 'todas' || (filtro === 'feitas' ? x.feita : filtro === 'notas' ? x.tipo === 'nota' && !x.feita : filtro === 'sugestoes' ? x.tipo !== 'nota' && !x.feita : !x.feita));
+  const n = (f) => (lista || []).filter(f).length;
+  return html`<div class="fade-up stack sug" style=${{ gap: '12px' }}>
+    <div class="card page-card stack sug-novo">
+      <div class="row" style=${{ justifyContent: 'space-between' }}><b style=${{ fontSize: '17px' }}>💡 Sugestões & anotações</b>
+        <div class="seg-mini">${[['sugestao', '💡 Sugestão'], ['nota', '📝 Anotação']].map(([k, t]) => html`<button key=${k} class=${tipo === k ? 'on' : ''} onClick=${() => setTipo(k)}>${t}</button>`)}</div></div>
+      <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap', alignItems: 'stretch' }}>
+        <textarea class="inp" rows="2" style=${{ flex: 1 }} placeholder=${tipo === 'nota' ? 'Anote algo… (ou toque no 🎤 e fale)' : 'Sua ideia para melhorar a empresa ou o app… (ou fale)'} value=${txt + (interim ? ' ' + interim : '')} onInput=${e => setTxt(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) salvar(); }}></textarea>
+        <div class="stack" style=${{ gap: '6px' }}>
+          <button class=${'btn btn-sm' + (fala.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => fala.ouvindo ? fala.parar() : fala.iniciar()}>${fala.ouvindo ? '■' : '🎤'}</button>
+          <button class="btn btn-primary btn-sm" onClick=${salvar}>Salvar</button></div>
+      </div>
+    </div>
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['abertas', 'Abertas', n(x => !x.feita)], ['sugestoes', '💡 Sugestões', n(x => x.tipo !== 'nota' && !x.feita)], ['notas', '📝 Anotações', n(x => x.tipo === 'nota' && !x.feita)], ['feitas', '✅ Feitas', n(x => x.feita)], ['todas', 'Todas', n(() => true)]].map(([k, t, c]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t} <small>${c}</small></button>`)}</div>
+    ${lista === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nada aqui ainda.</div>` : html`<div class="sug-lista">
+      ${vis.map(x => html`<div key=${x.id} class=${'sug-item ' + (x.tipo === 'nota' ? 'nota' : 'ideia') + (x.feita ? ' feita' : '')}>
+        <div class="sug-txt">${x.texto}</div>
+        <div class="sug-rod"><small>${x.tipo === 'nota' ? '📝' : '💡'} ${x.autor || ''} · ${fmtData(x.em)}${x.feita && x.feitaPor ? ' · ✅ ' + x.feitaPor : ''}</small>
+          <span class="row" style=${{ gap: '4px' }}><button class="btn btn-ghost btn-sm" title=${x.feita ? 'Reabrir' : 'Marcar como feita'} onClick=${() => up(x, x.feita ? { feita: false } : { feita: true, feitaPor: sessao.nome, feitaEm: nowIso() })}>${x.feita ? '↺' : '✅'}</button>
+          <button class="btn btn-ghost btn-sm" title="Apagar" onClick=${() => apagar(x)}>🗑</button></span></div>
+      </div>`)}</div>`}
+  </div>`;
+}
+
 function TelaNovidades() {
   return html`<div class="fade-up stack"><div class="page-head"><div><h2>🆕 Novidades</h2><div class="dim">Tudo o que mudou no app, da versão mais nova para a mais antiga.</div></div></div>
     ${NOVIDADES.map(([v, it], k) => html`<div key=${v} class=${'card novid-card' + (k === 0 ? ' nova' : '')}><b>Versão ${v}${k === 0 ? ' · atual' : ''}</b><ul class="novid">${it.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul></div>`)}</div>`;
@@ -5534,7 +5573,7 @@ const MAPA = {
   contas: [['Nova conta', '＋ A pagar / ＋ A receber → valor, vencimento, forma, conta, parcelas.', 'Cria as parcelas; mostra "X de N pagas" e quanto falta.', ['financeiro']], ['Pagar / receber', 'Marque a parcela como paga/recebida.', 'Atualiza os totais.', ['financeiro']]],
   config: [['Etapas e logo', 'Edite etapas da OS/fábrica e envie a logo.', 'Muda as etapas em todo o app e a logo nas impressões.', ['os', 'quadro']]],
 };
-const NOMES_ABA = { inicio: '⌂ Início', quadro: '📊 Quadro geral', clientes: '👤 Clientes', contratos: '📑 Contratos', projetos: '✨ Reuniões & Projetos', amostras: '📦 Amostras', importar: '🗂️ Importar', os: '📋 Ordens de Serviço', cronograma: '📅 Cronograma', pedidos: '🪵 Peças extras', catalogo: '🎨 Catálogo', excluir: '🗑 Excluir OSs', compras: '🛒 Compras', equipe: '👥 Equipe', financeiro: '💰 Resultado por OS', contas: '📒 Contas', config: '⚙ Configurações' };
+const NOMES_ABA = { inicio: '⌂ Início', sugestoes: '💡 Sugestões & anotações', quadro: '📊 Quadro geral', clientes: '👤 Clientes', contratos: '📑 Contratos', projetos: '✨ Reuniões & Projetos', amostras: '📦 Amostras', importar: '🗂️ Importar', os: '📋 Ordens de Serviço', cronograma: '📅 Cronograma', pedidos: '🪵 Peças extras', catalogo: '🎨 Catálogo', excluir: '🗑 Excluir OSs', compras: '🛒 Compras', equipe: '👥 Equipe', financeiro: '💰 Resultado por OS', contas: '📒 Contas', config: '⚙ Configurações' };
 const MANUAL = Object.fromEntries(Object.keys(MAPA).map(k => [k, [NOMES_ABA[k], '', MAPA[k].map(f => [f[0], f[1]])]]));
 function ManualAba({ aba }) {
   const l = MAPA[aba]; if (!l) return null;
@@ -5796,7 +5835,7 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'quadro', 'amostras', 'importar', 'manual', 'config']],
+  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'sugestoes', 'quadro', 'amostras', 'importar', 'manual', 'config']],
   ['clientes', '👤 Clientes', '#db2777', ['clientes', 'projetos', 'contratos']],
   ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
   ['compras', '🛒 Compras', '#16a34a', ['compras']],
@@ -5805,7 +5844,7 @@ const SECOES = [
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
-const TELAS_VOZ = [[/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/manual|ajuda|instru/, 'manual'], [/configura/, 'config'], [/amostras?/, 'amostras']];
+const TELAS_VOZ = [[/sugest|anota[çc]|notas?\b|ideias?/, 'sugestoes'], [/contas|custos/, 'contas'], [/compras?/, 'compras'], [/financeiro|dinheiro|pagamento/, 'financeiro'], [/\b(tela )?inicial|\bin[ií]cio\b|\bhome\b|p[aá]gina principal/, 'inicio'], [/cronograma|agenda/, 'cronograma'], [/quadro/, 'quadro'], [/pe[çc]as? extras?|pedidos/, 'pedidos'], [/ordens?( de servi[çc]o)?|\blista de os|\bas os\b/, 'os'], [/contratos?/, 'contratos'], [/reuni|projetos?/, 'projetos'], [/importar/, 'importar'], [/cat[aá]logo/, 'catalogo'], [/equipe/, 'equipe'], [/excluir/, 'excluir'], [/manual|ajuda|instru/, 'manual'], [/configura/, 'config'], [/amostras?/, 'amostras']];
 function comandoTela(q) {
   const t = norm(q);
   if (/^(fecha|fechar|sair da os|fecha a os|volta|voltar)\b/.test(t) && !/para|pra|pro/.test(t)) { window.__fecharFicha && window.__fecharFicha(); return 'fechar'; }
@@ -6551,7 +6590,7 @@ function Principal({ sessao, toast }) {
     { v: 'compras', t: 'Compras', i: '🛒' },
     { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
     { v: 'config', t: 'Configurações', i: '⚙' },
-  ].filter(a => pode(sessao, a.v)).concat([{ v: 'manual', t: 'Mapa / Manual', i: '🧠' }, { v: 'novidades', t: 'Novidades', i: '🆕' }]);
+  ].filter(a => pode(sessao, a.v)).concat([{ v: 'sugestoes', t: 'Sugestões & anotações', i: '💡' }, { v: 'manual', t: 'Mapa / Manual', i: '🧠' }, { v: 'novidades', t: 'Novidades', i: '🆕' }]);
   const vis = (v) => abas.some(a => a.v === v);
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
@@ -6601,6 +6640,7 @@ function Principal({ sessao, toast }) {
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
         ${aba === 'inicio' && html`<${CartaoNovidades} irPara=${irPara} />`}
         ${aba === 'novidades' && html`<${TelaNovidades} />`}
+        ${aba === 'sugestoes' && html`<${TelaSugestoes} sessao=${sessao} />`}
         ${aba === 'inicio' && vis('inicio') && html`<${TelaInicio} sessao=${sessao} abrirOS=${abrirOS} irPara=${irPara} />`}
         ${aba === 'projetos' && vis('projetos') && html`<${TelaProjetos} sessao=${sessao} catalogo=${catalogo} toast=${toast} abrirOS=${abrirOS} />`}
         ${aba === 'os' && vis('os') && html`<${TelaOS} sessao=${sessao} catalogo=${catalogo} toast=${toast} osAberta=${osAberta} setOsAberta=${(id) => id ? (osAberta ? setOsAberta(id) : setFicha(id)) : setOsAberta(null)} />`}
