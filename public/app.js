@@ -47,6 +47,8 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['169', ['⏱ A voz agora espera 1 segundo depois que você termina de falar para executar — dá tempo de falar a frase inteira.']],
+  ['168', ['📱 No celular a busca/voz virou uma bolinha pequena (🔍, ou 🎙 verde quando está ouvindo) que não cobre mais a tela; toque nela para digitar. Ela também fica atrás das janelas abertas.']],
   ['167', ['🎤 No PC a voz agora liga sozinha no primeiro clique ou tecla (o Chrome exige isso) e não briga mais com o microfone do assistente/busca do Início. Se o navegador bloquear o microfone, aparece o aviso de como liberar.', '📍 Barra de busca no centro, embaixo, sem ficar atrás de outros botões.']],
   ['166', ['📌 Busca e voz agora ficam fixas e discretas no canto da tela, em TODAS as páginas: fale ou digite e abre na hora (OS, cliente, telas). Toque no 🎤 para ligar/desligar a voz.', '🔧 Corrigido: a busca do Início não apagava mais o que você digita.']],
   ['165', ['🔍 A busca do Início agora acha tudo: OSs, clientes e também telas e funções (compras, financeiro, equipe, amostras, cronograma, catálogo…). Digite ou fale e toque no resultado — ou Enter para ir direto.']],
@@ -6207,10 +6209,14 @@ function BuscaGlobal({ sessao, irPara }) {
   const [lista, setLista] = useState([]);
   const [vozAuto, setVozAuto] = useState(() => { try { return localStorage.getItem('osm_vozAuto') !== '0'; } catch { return true; } });
   const [aberta, setAberta] = useState(false);
+  const [exp, setExp] = useState(false);
   useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod;
     return onSnapshot(query(col('empresas', sessao.empresaId, 'os'), orderBy('numero', 'desc')), s => { const l = s.docs.map(d => ({ id: d.id, ...d.data() })); setLista(l); if (!window.__listaOS || !window.__listaOS.length || window.__listaOS.length !== l.length) window.__listaOS = l; }, () => {}); }, [sessao.empresaId]);
   const executar = (t) => { const x = String(t || '').replace(/[.?!]$/, '').trim(); if (!x) return; window.__listaOS = lista; if (acaoRapida(x)) { setQ(''); setAberta(false); } else { setQ(x); setAberta(true); } };
-  const fala = useFala({ global: true, onInterim: (t) => { if (t && t.trim()) { setQ(t); setAberta(true); } }, onFinal: executar });
+  /* Espera 1 s de silêncio depois da fala para executar */
+  const bufFala = useRef(''); const tFala = useRef(null);
+  const agendar = () => { clearTimeout(tFala.current); tFala.current = setTimeout(() => { const t = bufFala.current.trim(); bufFala.current = ''; if (t) executar(t); }, 1000); };
+  const fala = useFala({ global: true, onInterim: (t) => { if (t && t.trim()) { setQ((bufFala.current + ' ' + t).trim()); setAberta(true); agendar(); } }, onFinal: (t) => { bufFala.current = (bufFala.current + ' ' + t).trim(); setQ(bufFala.current); setAberta(true); agendar(); } });
   const autoRef = useRef(vozAuto); autoRef.current = vozAuto; const ouvRef = useRef(false); ouvRef.current = fala.ouvindo; const pausadaRef = useRef(false);
   useEffect(() => { window.__vozGlobal = { pausar: () => { if (ouvRef.current) { pausadaRef.current = true; fala.parar(); } }, retomar: () => { if (pausadaRef.current && autoRef.current) { pausadaRef.current = false; fala.iniciar(); } } };
     const ligar = () => { if (autoRef.current && !ouvRef.current && !pausadaRef.current) fala.iniciar(); };
@@ -6225,7 +6231,8 @@ function BuscaGlobal({ sessao, irPara }) {
   const oss = nq.length >= 2 ? lista.filter(o => norm(`${numOS(o)} ${o.numeroAntigo || ''} ${o.cliente?.nome} ${o.cliente?.obra || ''} ${(o.ambientes || []).map(a => a.nome).join(' ')}`).includes(nq)).slice(0, 6) : [];
   const voz1 = !oss.length && q ? acharOSFala(lista, q) : null; const ossV = voz1 ? [voz1] : oss;
   const cliMap = {}; ossV.forEach(o => { const c = nomePadrao(o.cliente?.nome || ''); if (c) cliMap[c] = 1; });
-  return html`<div class=${'bg-barra' + (fala.ouvindo ? ' ouv' : '') + (aberta && q ? ' com-res' : '')}>
+  return html`<div class=${'bg-barra' + (fala.ouvindo ? ' ouv' : '') + (aberta && q ? ' com-res' : '') + (exp || q ? ' exp' : '')}>
+    <button class=${'bg-bolha' + (fala.ouvindo ? ' on' : '')} title="Buscar / falar" onClick=${() => { setExp(true); setTimeout(() => document.querySelector('.bg-inp')?.focus(), 60); }}>${fala.ouvindo ? '🎙' : '🔍'}</button>
     ${aberta && q && (telas.length || ossV.length) ? html`<div class="bg-res">
       ${ossV.map(o => html`<button key=${o.id} class="bg-os" onClick=${() => { setQ(''); setAberta(false); window.__abrirOS && window.__abrirOS(o.id); }}><b>${numOS(o)}</b> ${nomePadrao(o.cliente?.nome)} <small>${nomePadrao((o.ambientes || []).map(a => a.nome).join(', '))}</small></button>`)}
       ${Object.keys(cliMap).length > 0 && html`<div class="bg-chips">${Object.keys(cliMap).map(c => html`<button key=${c} class="bt-chip bt-cli" onClick=${() => { setQ(''); setAberta(false); window.__buscaOS = c; (window.__irPara || irPara)('os'); }}>👤 Todas de ${c}</button>`)}</div>`}
@@ -6234,8 +6241,8 @@ function BuscaGlobal({ sessao, irPara }) {
     ${fala.erro && html`<div class="bg-erro">🎤 ${fala.erro}</div>`}
     <div class="bg-linha">
       <button class=${'bg-mic' + (fala.ouvindo ? ' on' : '')} title=${vozAuto ? 'Voz ligada — toque para desligar' : 'Voz desligada — toque para ligar'} onClick=${tog}>${fala.ouvindo ? '🎙' : '🎤'}</button>
-      <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); } }} />
-      ${q && html`<button class="bg-x" onClick=${() => { setQ(''); setAberta(false); }}>✕</button>`}
+      <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); setExp(false); } }} onBlur=${() => setTimeout(() => { if (!document.activeElement?.closest?.('.bg-barra')) setExp(false); }, 200)} />
+      ${q && html`<button class="bg-x" onClick=${() => { setQ(''); setAberta(false); setExp(false); }}>✕</button>`}
     </div>
   </div>`;
 }

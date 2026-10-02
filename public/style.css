@@ -1513,3 +1513,14 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @media print{.bg-barra{display:none!important}}
 .bg-barra{left:50%!important;transform:translateX(-50%)}
 .bg-erro{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;padding:6px 9px;font-size:12px;margin-bottom:5px}
+/* v168 barra de voz não cobre o conteúdo */
+.bg-barra{z-index:800!important}
+.bg-bolha{display:none}
+@media(max-width:700px){
+  .bg-barra:not(.exp){width:auto!important;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));opacity:1}
+  .bg-barra:not(.exp) .bg-linha,.bg-barra:not(.exp) .bg-res,.bg-barra:not(.exp) .bg-erro{display:none}
+  .bg-barra:not(.exp) .bg-bolha{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:0;background:#1f2937;color:#fff;font-size:18px;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer}
+  .bg-barra:not(.exp) .bg-bolha.on{background:linear-gradient(135deg,#16a34a,#0ea5e9);box-shadow:0 0 0 4px #16a34a33}
+  .bg-barra.exp{width:calc(100vw - 24px)!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+}
+.modal-fundo~.bg-barra,body.ficha-aberta .bg-barra{z-index:1!important}
