@@ -1548,3 +1548,19 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .sug-rod small{color:#78716c}
 .bg-erro{display:flex;align-items:flex-start;gap:6px}
 .bg-erro-x{margin-left:auto;border:0;background:none;color:#991b1b;font-weight:800;cursor:pointer;flex:none}
+/* v175 */
+.parada-box{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:2px solid #f87171;border-radius:14px;padding:12px 14px;color:#7f1d1d}
+.parada-mot{font-weight:700;margin:2px 0}
+.btn-parar{background:#fff1f2;color:#be123c;border:1px solid #fda4af;font-weight:700}
+.est-parada>.card{opacity:.55;filter:grayscale(.4)}
+.parada-hist{font-size:13px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:6px 10px}
+.parada-hist summary{cursor:pointer;font-weight:700;color:#9a3412}
+.chip-parada{background:#fee2e2!important;color:#b91c1c!important;border-color:#fca5a5!important}
+.sug-marcar{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.sug-pessoa{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:3px 10px;font-size:12.5px;cursor:pointer}
+.sug-pessoa.on{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.sug-fotos{display:flex;gap:6px;flex-wrap:wrap}
+.sug-fotos img{width:72px;height:72px;object-fit:cover;border-radius:9px;cursor:zoom-in;border:1px solid #e7e5e4}
+.sug-marcados{display:flex;gap:4px;flex-wrap:wrap}
+.sug-marcados span{font-size:12px;background:#ede9fe;color:#5b21b6;border-radius:999px;padding:1px 8px}
+.sug-marcados span.eu{background:#7c3aed;color:#fff}

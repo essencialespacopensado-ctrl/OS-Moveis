@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['175', ['⏸ Parar esteira: na aba Andamento da OS, botão "Parar esteira" pede o motivo; a OS mostra o aviso vermelho com quanto tempo está parada e o botão ▶ Retomar. Fica o histórico das paradas, e a OS aparece como ⏸ Parada na visão por cliente.', '💡 Sugestões e anotações: marque pessoas da equipe (@nome) e anexe fotos 📷. Novo filtro 🔔 Para mim.', '✕ Corrigido: o botão de fechar o aviso do microfone agora funciona.']],
   ['174', ['✕ O aviso de microfone (sem microfone / bloqueado) agora tem botão para fechar, e não volta mais.']],
   ['173', ['💡 Nova aba Sugestões & anotações (em Geral): escreva ou fale uma ideia ou anotação, marque como feita, filtre por tipo. Toda a equipe vê.']],
   ['172', ['✅ Corrigido: a OS que chega na última etapa (Conclusão) sai da visão por cliente.']],
@@ -136,13 +137,19 @@ function TelaSugestoes({ sessao }) {
   const [filtro, setFiltro] = useState('abertas');
   const [interim, setInterim] = useState('');
   const fala = useFala({ onFinal: t => setTxt(v => (v ? v + ' ' : '') + t), onInterim: setInterim });
+  const [equipe, setEquipe] = useState([]); const [marc, setMarc] = useState([]); const [fotos, setFotos] = useState([]); const [salvando, setSalvando] = useState(false);
+  const [verFoto, setVerFoto] = useState(null);
+  useEffect(() => { const { onSnapshot } = F().fsMod; return onSnapshot(col('empresas', sessao.empresaId, 'usuarios'), s => setEquipe(s.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.ativo !== false && u.nome))); }, [sessao.empresaId]);
+  const addFotos = async (files) => { const n = []; for (const f of [...files].slice(0, 6 - fotos.length)) { try { n.push(await fotoCompacta(f)); } catch {} } setFotos(v => [...v, ...n]); };
   const C = () => col('empresas', sessao.empresaId, 'sugestoes');
   useEffect(() => { const { onSnapshot, query, orderBy } = F().fsMod; return onSnapshot(query(C(), orderBy('em', 'desc')), s => setLista(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setLista([])); }, [sessao.empresaId]);
-  const salvar = async () => { const t = (txt + ' ' + interim).trim(); if (!t) return; fala.parar(); setTxt(''); setInterim('');
-    await F().fsMod.addDoc(C(), { texto: t, tipo, autor: sessao.nome, uid: sessao.uid || '', em: nowIso(), feita: false }); };
+  const salvar = async () => { const t = (txt + ' ' + interim).trim(); if (!t && !fotos.length) return; if (salvando) return; setSalvando(true); fala.parar();
+    try { await F().fsMod.addDoc(C(), { texto: t, tipo, autor: sessao.nome, uid: sessao.uid || '', em: nowIso(), feita: false, marcados: marc, fotos }); setTxt(''); setInterim(''); setMarc([]); setFotos([]); } catch (e) { alert('Não salvou: ' + e.message); }
+    setSalvando(false); };
+  const souEu = (x) => (x.marcados || []).some(n => norm(n) === norm(sessao.nome));
   const up = (x, p) => F().fsMod.updateDoc(F().fsMod.doc(F().db, 'empresas', sessao.empresaId, 'sugestoes', x.id), p);
   const apagar = (x) => { if (confirm('Apagar esta ' + (x.tipo === 'nota' ? 'anotação' : 'sugestão') + '?')) F().fsMod.deleteDoc(F().fsMod.doc(F().db, 'empresas', sessao.empresaId, 'sugestoes', x.id)); };
-  const vis = (lista || []).filter(x => filtro === 'todas' || (filtro === 'feitas' ? x.feita : filtro === 'notas' ? x.tipo === 'nota' && !x.feita : filtro === 'sugestoes' ? x.tipo !== 'nota' && !x.feita : !x.feita));
+  const vis = (lista || []).filter(x => filtro === 'todas' || (filtro === 'feitas' ? x.feita : filtro === 'notas' ? x.tipo === 'nota' && !x.feita : filtro === 'sugestoes' ? x.tipo !== 'nota' && !x.feita : filtro === 'minhas' ? souEu(x) && !x.feita : !x.feita));
   const n = (f) => (lista || []).filter(f).length;
   return html`<div class="fade-up stack sug" style=${{ gap: '12px' }}>
     <div class="card page-card stack sug-novo">
@@ -152,17 +159,23 @@ function TelaSugestoes({ sessao }) {
         <textarea class="inp" rows="2" style=${{ flex: 1 }} placeholder=${tipo === 'nota' ? 'Anote algo… (ou toque no 🎤 e fale)' : 'Sua ideia para melhorar a empresa ou o app… (ou fale)'} value=${txt + (interim ? ' ' + interim : '')} onInput=${e => setTxt(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) salvar(); }}></textarea>
         <div class="stack" style=${{ gap: '6px' }}>
           <button class=${'btn btn-sm' + (fala.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => fala.ouvindo ? fala.parar() : fala.iniciar()}>${fala.ouvindo ? '■' : '🎤'}</button>
-          <button class="btn btn-primary btn-sm" onClick=${salvar}>Salvar</button></div>
+          <label class="btn btn-sm" title="Anexar fotos">📷<input type="file" accept="image/*" multiple capture="environment" style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
+          <button class="btn btn-primary btn-sm" disabled=${salvando} onClick=${salvar}>${salvando ? '…' : 'Salvar'}</button></div>
       </div>
+      ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}
+      ${equipe.length > 0 && html`<div class="sug-marcar"><small class="dim">Marcar:</small>${equipe.map(u => { const on = marc.includes(u.nome); return html`<button key=${u.uid} class=${'sug-pessoa' + (on ? ' on' : '')} onClick=${() => setMarc(on ? marc.filter(n => n !== u.nome) : [...marc, u.nome])}>@${u.nome.split(' ')[0]}</button>`; })}</div>`}
     </div>
-    <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['abertas', 'Abertas', n(x => !x.feita)], ['sugestoes', '💡 Sugestões', n(x => x.tipo !== 'nota' && !x.feita)], ['notas', '📝 Anotações', n(x => x.tipo === 'nota' && !x.feita)], ['feitas', '✅ Feitas', n(x => x.feita)], ['todas', 'Todas', n(() => true)]].map(([k, t, c]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t} <small>${c}</small></button>`)}</div>
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['abertas', 'Abertas', n(x => !x.feita)], ['minhas', '🔔 Para mim', n(x => souEu(x) && !x.feita)], ['sugestoes', '💡 Sugestões', n(x => x.tipo !== 'nota' && !x.feita)], ['notas', '📝 Anotações', n(x => x.tipo === 'nota' && !x.feita)], ['feitas', '✅ Feitas', n(x => x.feita)], ['todas', 'Todas', n(() => true)]].map(([k, t, c]) => html`<button key=${k} class=${filtro === k ? 'on' : ''} onClick=${() => setFiltro(k)}>${t} <small>${c}</small></button>`)}</div>
     ${lista === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nada aqui ainda.</div>` : html`<div class="sug-lista">
       ${vis.map(x => html`<div key=${x.id} class=${'sug-item ' + (x.tipo === 'nota' ? 'nota' : 'ideia') + (x.feita ? ' feita' : '')}>
-        <div class="sug-txt">${x.texto}</div>
+        ${x.texto && html`<div class="sug-txt">${x.texto}</div>`}
+        ${(x.fotos || []).length > 0 && html`<div class="sug-fotos">${x.fotos.map((f, i) => html`<img key=${i} src=${f} onClick=${() => setVerFoto(f)} />`)}</div>`}
+        ${(x.marcados || []).length > 0 && html`<div class="sug-marcados">${x.marcados.map(n => html`<span key=${n} class=${norm(n) === norm(sessao.nome) ? 'eu' : ''}>@${n.split(' ')[0]}</span>`)}</div>`}
         <div class="sug-rod"><small>${x.tipo === 'nota' ? '📝' : '💡'} ${x.autor || ''} · ${fmtData(x.em)}${x.feita && x.feitaPor ? ' · ✅ ' + x.feitaPor : ''}</small>
           <span class="row" style=${{ gap: '4px' }}><button class="btn btn-ghost btn-sm" title=${x.feita ? 'Reabrir' : 'Marcar como feita'} onClick=${() => up(x, x.feita ? { feita: false } : { feita: true, feitaPor: sessao.nome, feitaEm: nowIso() })}>${x.feita ? '↺' : '✅'}</button>
           <button class="btn btn-ghost btn-sm" title="Apagar" onClick=${() => apagar(x)}>🗑</button></span></div>
       </div>`)}</div>`}
+    ${verFoto && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${() => setVerFoto(null)}><img src=${verFoto} style=${{ maxWidth: '94vw', maxHeight: '90vh', borderRadius: '12px', margin: 'auto' }} /></div>`, document.body)}
   </div>`;
 }
 
@@ -4106,7 +4119,12 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ...patch, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); } catch (e) { toast('Não salvou: ' + e.message, 'erro'); }
   };
   const p = pctObra(o), parc = parceirosDaOS(o), rec = compras.filter(i => i.recebido).length;
-  return html`<div class="stack">
+  const parar = async () => { const m = await pedirMotivo('Parar esteira'); if (!m) return; await alterar(x => { x.parada = { motivo: m, por: sessao.nome, em: nowIso() }; }); registrar(sessao, o.id, '⏸', 'Esteira parada', m); };
+  const retomar = async () => { const pd = o.parada; await alterar(x => { x.paradas = [...(x.paradas || []), { ...pd, fim: nowIso(), fimPor: sessao.nome }]; delete x.parada; x.parada = null; }); registrar(sessao, o.id, '▶', 'Esteira retomada', pd?.motivo || ''); };
+  return html`<div class=${'stack' + (o.parada ? ' est-parada' : '')}>
+    ${o.parada ? html`<div class="parada-box"><div><b>⏸ Esteira parada</b> há ${durTxt(Date.now() - new Date(o.parada.em))}<div class="parada-mot">Motivo: ${o.parada.motivo}</div><small>por ${o.parada.por} · ${fmtData(o.parada.em)}</small></div><button class="btn btn-verde btn-anim" onClick=${retomar}>▶ Retomar esteira</button></div>`
+      : html`<div class="row" style=${{ justifyContent: 'flex-end' }}><button class="btn btn-sm btn-parar" onClick=${parar}>⏸ Parar esteira</button></div>`}
+    ${(o.paradas || []).length > 0 && html`<details class="parada-hist"><summary>⏸ ${o.paradas.length} parada(s) anteriores · ${durTxt(o.paradas.reduce((n, x) => n + (new Date(x.fim) - new Date(x.em)), 0))} paradas no total</summary>${o.paradas.slice().reverse().map((x, i) => html`<div key=${i}><b>${durTxt(new Date(x.fim) - new Date(x.em))}</b> · ${x.motivo} <small class="dim">(${x.por}, ${fmtData(x.em)})</small></div>`)}</details>`}
     <div class="card stack"><div class="row" style=${{ justifyContent: 'space-between' }}><b>📈 Conclusão da obra</b><small class="dim">${(STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]).t}</small></div><${BarraPct} p=${p} grande=${true} />
       <div class="fo-kpis">
         <div><small>🛒 Compras recebidas</small><b>${rec}/${compras.length}</b></div>
@@ -6267,7 +6285,7 @@ function BuscaGlobal({ sessao, irPara }) {
     const ligar = () => { if (autoRef.current && !ouvRef.current && !pausadaRef.current) fala.iniciar(); };
     const t = setTimeout(ligar, 600);
     /* O Chrome no PC só libera o microfone depois de um clique/tecla: liga no primeiro toque */
-    const g = (e) => { if (e.target && e.target.closest && e.target.closest('.bg-mic')) return; ligar(); };
+    const g = (e) => { if (e.target && e.target.closest && e.target.closest('.bg-barra')) return; ligar(); };
     window.addEventListener('pointerdown', g, true); window.addEventListener('keydown', g, true);
     return () => { clearTimeout(t); window.removeEventListener('pointerdown', g, true); window.removeEventListener('keydown', g, true); }; }, []);
   const tog = () => { const v = !(vozAuto && fala.ouvindo); setVozAuto(v); autoRef.current = v; try { localStorage.setItem('osm_vozAuto', v ? '1' : '0'); } catch {} if (v) fala.iniciar(); else fala.parar(); };
@@ -6283,7 +6301,7 @@ function BuscaGlobal({ sessao, irPara }) {
       ${Object.keys(cliMap).length > 0 && html`<div class="bg-chips">${Object.keys(cliMap).map(c => html`<button key=${c} class="bt-chip bt-cli" onClick=${() => { setQ(''); setAberta(false); window.__buscaOS = c; (window.__irPara || irPara)('os'); }}>👤 Todas de ${c}</button>`)}</div>`}
       ${telas.length > 0 && html`<div class="bg-chips">${telas.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setQ(''); setAberta(false); (window.__irPara || irPara)(x.aba); }}>${x.t}</button>`)}</div>`}
     </div>` : null}
-    ${fala.erro && fala.erro !== erroOk && html`<div class="bg-erro">🎤 ${fala.erro} <button class="bg-erro-x" title="Fechar aviso" onClick=${() => { setErroOk(fala.erro); try { localStorage.setItem('osm_vozErroOk', fala.erro); } catch {} }}>✕</button></div>`}
+    ${fala.erro && fala.erro !== erroOk && html`<div class="bg-erro">🎤 ${fala.erro} <button class="bg-erro-x" title="Fechar aviso" onPointerDown=${e => e.stopPropagation()} onClick=${() => { setErroOk(fala.erro); try { localStorage.setItem('osm_vozErroOk', fala.erro); } catch {} }}>✕</button></div>`}
     <div class="bg-linha">
       <button class=${'bg-mic' + (fala.ouvindo ? ' on' : '')} title=${vozAuto ? 'Voz ligada — toque para desligar' : 'Voz desligada — toque para ligar'} onClick=${tog}>${fala.ouvindo ? '🎙' : '🎤'}</button>
       <input class="bg-inp" placeholder=${fala.ouvindo ? 'Ouvindo… fale o que quer abrir' : 'Buscar OS, cliente, tela…'} value=${q} onFocus=${() => setAberta(true)} onInput=${e => { setQ(e.target.value); setAberta(true); }} onKeyDown=${e => { if (e.key === 'Enter') executar(q); if (e.key === 'Escape') { setQ(''); setAberta(false); setExp(false); } }} onBlur=${() => setTimeout(() => { if (!document.activeElement?.closest?.('.bg-barra')) setExp(false); }, 200)} />
@@ -6355,7 +6373,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
                 <button key=${o.id} class=${'ini-cli-os' + (atrasada(o) ? ' atras' : '')} onClick=${() => abrirOS(o.id)}>
                   <span class="mono">${numOS(o)}</span>
                   <span class="nm">${(o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo || '—'}</span>
-                  <span class=${x.c + ' mini'}>${x.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</span>
+                  ${o.parada ? html`<span class="chip mini chip-parada" title=${'Parada: ' + o.parada.motivo}>⏸ Parada</span>` : html`<span class=${x.c + ' mini'}>${x.t.replace(/^\d\. /, '').replace('Aguard. liberação p/ entrega', 'Liberação')}</span>`}
                   ${o.prazoEntrega && html`<small>🚚 ${o.prazoEntrega.slice(0, 5)}</small>`}
                 </button>`; })}
             </div>
