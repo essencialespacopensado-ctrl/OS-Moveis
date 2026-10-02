@@ -1642,7 +1642,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
   .side-burger{display:block}
 }
 @media print{.side,.side-fundo,.side-burger{display:none!important}.com-side>header,.com-side>.shell{margin-left:0!important}}
-@media(min-width:901px){.btn-ajuda,.btn-novid,.btn-voltar-pag,.dev-cantinho,.transf-mini{left:calc(var(--side-w) + 14px)!important}}
 /* v199 menu lateral nas cores do app */
 :root{--side-bg:#1c1917;--side-bg2:#292524}
 .side-brand{background:#fffbf5;border-bottom:3px solid #d97706}
@@ -1654,3 +1653,40 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .side-grp.ab>.side-it{background:rgba(255,255,255,.06)}
 .side-subs{background:rgba(0,0,0,.25)}
 .side-burger{color:#1c1917}
+
+/* v200 botões no canto + mascote Zé */
+.btn-ajuda,.btn-novid,.btn-voltar-pag{z-index:760!important}
+.masc{position:fixed;z-index:9200;width:70px;height:120px;transition-property:left,top;transition-timing-function:cubic-bezier(.45,.05,.4,1);pointer-events:none}
+.masc-corpo{position:absolute;left:0;top:20px;width:70px;height:100px;cursor:pointer;pointer-events:auto;animation:mascFlut 2.6s ease-in-out infinite;transform-style:preserve-3d}
+.masc.vira .masc-corpo{transform:scaleX(-1)}
+.masc-cab{position:absolute;left:12px;top:0;width:46px;height:44px;border-radius:50% 50% 46% 46%;background:radial-gradient(circle at 35% 30%,#ffe2c4,#f4b98a 55%,#d38b5a);box-shadow:inset -4px -6px 10px rgba(0,0,0,.18),0 3px 6px rgba(0,0,0,.2)}
+.masc-cap{position:absolute;left:-4px;top:-8px;width:54px;height:26px;border-radius:28px 28px 6px 6px;background:radial-gradient(circle at 35% 25%,#fde68a,#f59e0b 60%,#b45309);box-shadow:inset -3px -4px 6px rgba(0,0,0,.2)}
+.masc-cap::after{content:'';position:absolute;left:30px;top:20px;width:26px;height:7px;border-radius:4px;background:#d97706}
+.masc-olho{position:absolute;top:22px;width:7px;height:9px;border-radius:50%;background:#1c1917;animation:mascPisca 4s infinite}
+.masc-olho.e{left:13px}.masc-olho.d{left:27px}
+.masc-boca{position:absolute;left:16px;top:33px;width:14px;height:6px;border-radius:0 0 10px 10px;background:#7f1d1d}
+.masc-tronco{position:absolute;left:16px;top:42px;width:38px;height:34px;border-radius:12px 12px 8px 8px;background:radial-gradient(circle at 35% 25%,#60a5fa,#2563eb 60%,#1e3a8a);box-shadow:inset -4px -5px 8px rgba(0,0,0,.25)}
+.masc-braco{position:absolute;top:4px;width:10px;height:26px;border-radius:6px;background:linear-gradient(90deg,#3b82f6,#1d4ed8);transform-origin:top center}
+.masc-braco.e{left:-8px;transform:rotate(14deg)}.masc-braco.d{right:-8px;transform:rotate(-14deg)}
+.masc-perna{position:absolute;top:74px;width:11px;height:20px;border-radius:5px;background:linear-gradient(90deg,#44403c,#1c1917);transform-origin:top center}
+.masc-perna.e{left:22px}.masc-perna.d{left:37px}
+.masc-sombra{position:absolute;left:14px;top:94px;width:42px;height:8px;border-radius:50%;background:rgba(0,0,0,.22);filter:blur(1px)}
+.masc.anda .masc-perna.e{animation:mascPerna .35s ease-in-out infinite alternate}
+.masc.anda .masc-perna.d{animation:mascPerna .35s ease-in-out infinite alternate-reverse}
+.masc.anda .masc-braco.e{animation:mascBraco .35s ease-in-out infinite alternate-reverse}
+.masc.anda .masc-braco.d{animation:mascBraco .35s ease-in-out infinite alternate}
+.masc.anda .masc-corpo{animation:mascPulo .35s ease-in-out infinite alternate}
+.masc:not(.anda) .masc-braco.d{animation:mascAceno 1.6s ease-in-out infinite}
+.masc-bal{position:absolute;bottom:108px;right:-10px;width:230px;background:#fff;border:2px solid #f59e0b;border-radius:14px;padding:9px 11px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:auto;animation:fadeIn .2s}
+.masc-bal::after{content:'';position:absolute;bottom:-9px;right:34px;width:14px;height:14px;background:#fff;border-right:2px solid #f59e0b;border-bottom:2px solid #f59e0b;transform:rotate(45deg)}
+.masc-alvo{outline:3px solid #f59e0b!important;outline-offset:3px;border-radius:10px;animation:mascAlvo 1s ease-in-out 4;position:relative;z-index:5}
+.masc-volta{position:fixed;right:14px;bottom:90px;z-index:9200;width:42px;height:42px;border-radius:50%;border:2px solid #f59e0b;background:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+@keyframes mascFlut{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes mascPerna{from{transform:rotate(28deg)}to{transform:rotate(-28deg)}}
+@keyframes mascBraco{from{transform:rotate(35deg)}to{transform:rotate(-35deg)}}
+@keyframes mascPulo{from{transform:translateY(0)}to{transform:translateY(-5px)}}
+@keyframes mascAceno{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(-150deg)}}
+@keyframes mascPisca{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+@keyframes mascAlvo{0%,100%{box-shadow:0 0 0 0 #f59e0b66}50%{box-shadow:0 0 0 10px #f59e0b00}}
+.masc.vira .masc-bal{transform:none}
+@media print{.masc,.masc-volta{display:none!important}}

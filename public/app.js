@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['200', ['👷 Novo ajudante: o Zé, um bonequinho animado que anda pela tela. Toque nele: "Me mostra esta tela" (ele vai até cada parte e explica) ou "Onde fica…?" (ele anda até o lugar no menu e destaca). Dá para esconder.', '↙ Botões ❓, 🆕 e ← Voltar de volta bem no canto esquerdo.']],
   ['199', ['🎨 Menu lateral com as cores do app (escuro com destaque âmbar).', '✅ Clientes → "Concluir clientes em massa": marque os clientes e conclua todas as OSs em aberto deles de uma vez (pede senha e motivo).']],
   ['198', ['🧭 Botões flutuantes (❓, 🆕, ← Voltar) não ficam mais em cima do menu lateral.']],
   ['197', ['🧭 Novo visual: menu lateral azul à esquerda (como o Conta Azul) com as seções Geral, Clientes, Produção, Compras, Equipe e Financeiro — toque para abrir as telas de cada uma. No celular o menu abre pelo ☰.']],
@@ -6649,6 +6650,7 @@ function exportarOS(os, tipo, empresa) {
 function MenuLateral({ abas, aba, irPara, logo, empresa, aberto, setAberto }) {
   const [exp, setExp] = useState(() => secaoDe(aba)[0]);
   useEffect(() => { setExp(secaoDe(aba)[0]); }, [aba]);
+  useEffect(() => { window.__abrirSecao = (k) => { setExp(k); if (window.innerWidth <= 900) setAberto(true); }; }, []);
   const secs = SECOES.map(([k, t, cor, vs]) => [k, t, cor, vs.map(v => abas.find(a => a.v === v)).filter(Boolean)]).filter(x => x[3].length);
   const ir = (v) => { irPara(v); setAberto(false); };
   return html`${aberto && html`<div class="side-fundo" onClick=${() => setAberto(false)}></div>`}
@@ -6656,14 +6658,52 @@ function MenuLateral({ abas, aba, irPara, logo, empresa, aberto, setAberto }) {
     <div class="side-brand">${logo ? html`<img src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}<div><b>Gestão Pró</b><small>${empresa}</small></div></div>
     <nav class="side-nav">
       ${secs.map(([k, t, cor, subs]) => { const ativo = secaoDe(aba)[0] === k; const ic = t.split(' ')[0], nome = t.replace(/^\S+\s/, '');
-        if (subs.length === 1) return html`<button key=${k} class=${'side-it' + (ativo ? ' on' : '')} onClick=${() => ir(subs[0].v)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span></button>`;
+        if (subs.length === 1) return html`<button key=${k} data-aba=${subs[0].v} data-sec=${k} class=${'side-it' + (ativo ? ' on' : '')} onClick=${() => ir(subs[0].v)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span></button>`;
         const ab = exp === k;
         return html`<div key=${k} class=${'side-grp' + (ab ? ' ab' : '')}>
-          <button class=${'side-it' + (ativo && !ab ? ' on' : '')} onClick=${() => setExp(ab ? '' : k)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span><span class="side-chev">›</span></button>
-          ${ab && html`<div class="side-subs">${subs.map((a, i) => html`<button key=${a.v} style=${{ animationDelay: i * 35 + 'ms' }} class=${'side-sub' + (aba === a.v ? ' on' : '')} onClick=${() => ir(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>`}
+          <button data-sec=${k} class=${'side-it' + (ativo && !ab ? ' on' : '')} onClick=${() => setExp(ab ? '' : k)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span><span class="side-chev">›</span></button>
+          ${ab && html`<div class="side-subs">${subs.map((a, i) => html`<button key=${a.v} data-aba=${a.v} style=${{ animationDelay: i * 35 + 'ms' }} class=${'side-sub' + (aba === a.v ? ' on' : '')} onClick=${() => ir(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>`}
         </div>`; })}
     </nav>
   </aside>`;
+}
+/* ---------- Mascote guia (bonequinho 3D que anda e mostra onde ficam as coisas) ---------- */
+function Mascote() {
+  const [pos, setPos] = useState(() => ({ x: window.innerWidth - 120, y: window.innerHeight - 170 }));
+  const [fala, setFala] = useState(''), [andando, setAndando] = useState(false), [vira, setVira] = useState(false), [menu, setMenu] = useState(false), [q, setQ] = useState('');
+  const [oculto, setOculto] = useState(() => { try { return localStorage.getItem('osm_mascote') === '0'; } catch { return false; } });
+  const alvoRef = useRef(null), posRef = useRef(pos); posRef.current = pos;
+  const destacar = (el) => { document.querySelectorAll('.masc-alvo').forEach(x => x.classList.remove('masc-alvo')); if (el) { el.classList.add('masc-alvo'); alvoRef.current = el; setTimeout(() => el.classList.remove('masc-alvo'), 4500); } };
+  const irPara = (x, y) => new Promise(res => { const p = posRef.current; const d = Math.hypot(x - p.x, y - p.y); setVira(x < p.x); setAndando(true); setPos({ x, y, t: Math.min(2.2, 0.4 + d / 650) }); setTimeout(() => { setAndando(false); res(); }, Math.min(2200, 400 + d / 0.65)); });
+  const mostrar = async (el, texto) => { if (!el) { setFala(texto); return; } el.scrollIntoView({ block: 'center', behavior: 'smooth' }); await new Promise(r => setTimeout(r, 350)); const r = el.getBoundingClientRect();
+    let x = r.right + 8, y = r.top + r.height / 2 - 60; if (x > window.innerWidth - 90) x = Math.max(8, r.left - 90); y = Math.max(8, Math.min(window.innerHeight - 150, y));
+    setFala(''); await irPara(x, y); destacar(el); setFala(texto); };
+  const onde = async (txt) => { const t = acharTelas(txt); if (!t.length) return setFala('Não achei "' + txt + '". Tente outra palavra 🙂');
+    const aba = t[0].aba; const sec = secaoDe(aba)[0]; window.__abrirSecao && window.__abrirSecao(sec); await new Promise(r => setTimeout(r, 300));
+    const el = document.querySelector('.side [data-aba="' + aba + '"]') || document.querySelector('.side [data-sec="' + sec + '"]');
+    await mostrar(el, '👉 ' + t[0].t + ' fica aqui! Toque para abrir.'); };
+  const tour = async () => { setMenu(false);
+    const passos = [['.side-nav', 'Este é o menu: todas as telas, separadas por seção.'], ['.bg-barra', 'Aqui você busca ou fala: OS, cliente, tela…'], ['.ini-c .btn-primary, .page-head, .card', 'Este é o conteúdo da tela atual.'], ['.ficha-acoes, .rodape-escuro', 'Aqui ficam as ações principais.']];
+    for (const [sel, txt] of passos) { const el = document.querySelector(sel); if (!el || !el.getBoundingClientRect().width) continue; await mostrar(el, txt); await new Promise(r => setTimeout(r, 2600)); }
+    setFala('Pronto! Me toque quando precisar. 😉'); };
+  useEffect(() => { window.__mascote = { mostrar: (sel, t) => mostrar(typeof sel === 'string' ? document.querySelector(sel) : sel, t), onde };
+    const h = () => setPos(p => ({ x: Math.min(p.x, window.innerWidth - 90), y: Math.min(p.y, window.innerHeight - 150) })); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
+  useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
+  if (oculto) return html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`;
+  return html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+    ${(fala || menu) && html`<div class="masc-bal">${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
+        <b>Oi! Sou o Zé 👷 Posso ajudar?</b>
+        <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
+        <form class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }} onSubmit=${e => { e.preventDefault(); setMenu(false); onde(q); setQ(''); }}><input class="inp inp-sm" placeholder="Onde fica…? (ex: compras)" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn btn-sm">Ir</button></form>
+        <button class="btn btn-sm btn-ghost" onClick=${() => { setMenu(false); setFala(''); irPara(window.innerWidth - 120, window.innerHeight - 170); }}>🏠 Volta pro canto</button>
+        <button class="btn btn-sm btn-ghost" onClick=${() => { setOculto(true); try { localStorage.setItem('osm_mascote', '0'); } catch {} }}>🙈 Esconder</button></div>` : fala}</div>`}
+    <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title="Zé, o ajudante">
+      <div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>
+      <div class="masc-tronco"><div class="masc-braco e"></div><div class="masc-braco d"></div></div>
+      <div class="masc-perna e"></div><div class="masc-perna d"></div>
+      <div class="masc-sombra"></div>
+    </div>
+  </div>`;
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
@@ -7005,6 +7045,7 @@ function Principal({ sessao, toast }) {
           <div class="row topo-acoes" style=${{ gap: '8px' }}>
             <${BuscaGlobal} sessao=${sessao} irPara=${irPara} />
             <${AlertaCobranca} sessao=${sessao} />
+            <${Mascote} />
             <button class="user-box" onClick=${() => setConta(true)} title="Minha conta">
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
