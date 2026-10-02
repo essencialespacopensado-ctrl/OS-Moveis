@@ -1607,3 +1607,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .foto-btns{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
 .end-final{border:2px solid #fca5a5;background:#fff7f7}
 .end-final.ok{border-color:#86efac;background:#f0fdf4}
+.po-dots,.bolinhas{display:none!important}

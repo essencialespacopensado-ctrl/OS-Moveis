@@ -45,9 +45,11 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['195', ['🔑 Palavras-chave (vidro, pintura, serralheria…) aparecem destacadas só 1 vez em cada móvel e nunca nos títulos.']],
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['194', ['⚪ Bolinhas de cor ocultas na OS e na folha de impressão por enquanto.']],
   ['193', ['🎯 Ordens a terceiros: se o móvel marcado não fala nada da categoria (ex.: espelho), não aparece nada dele — só entra o que está especificado para aquela categoria.']],
   ['192', ['📍 Endereço de montagem obrigatório no final do preenchimento da OS (campo em vermelho até preencher). Sem ele a OS não pode ser revisada nem avançar para produção.']],
   ['191', ['🎯 Ordens a terceiros: as especificações trazem só o que é da categoria escolhida e dos móveis marcados (ex.: Vidros não puxa mais couro, puxador ou box).', '📷 Em todas as fotos dá para escolher Câmera ou Galeria.']],
@@ -4566,7 +4568,8 @@ const PALETAS = [
 const temCores = (o) => Array.isArray(o?.cores) && o.cores.length === 3;
 const varsCores = (c) => ({ '--c1': c[0], '--c2': c[1], '--c3': c[2] });
 const pinta = (o) => { const c = corOS(o); return { borderLeft: '5px solid ' + c, background: 'linear-gradient(90deg,' + c + '14,#fff 60%)' }; };
-const bolinhas = (o) => temCores(o) ? html`<span class="bolinhas">${o.cores.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</span>` : null;
+const MOSTRAR_CORES = false; /* bolinhas de cor ocultas por enquanto */
+const bolinhas = (o) => MOSTRAR_CORES && temCores(o) ? html`<span class="bolinhas">${o.cores.map((c, i) => html`<i key=${i} style=${{ background: c }}></i>`)}</span>` : null;
 
 function PaletaOS({ os, alterar, sessao, toast, travada }) {
   const [aberto, setAberto] = useState(false);
@@ -5039,8 +5042,15 @@ const PALAVRAS_CHAVE = ['vidros?', 'espelhos?', 'serralheria', 'serralheiro', 'p
 const RE_CHAVE = new RegExp('\\b(' + PALAVRAS_CHAVE.join('|') + ')\\b', 'gi');
 function destacarChaves(raiz) {
   if (!raiz) return; const w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT); const nos = [];
-  while (w.nextNode()) { const n = w.currentNode; if (n.parentElement?.closest('.kw')) continue; RE_CHAVE.lastIndex = 0; if (RE_CHAVE.test(n.nodeValue)) nos.push(n); }
-  nos.forEach(n => { const f = document.createDocumentFragment(); let last = 0; const t = n.nodeValue; t.replace(RE_CHAVE, (m, _g, off) => { f.append(t.slice(last, off)); const b = document.createElement('b'); b.className = 'kw'; b.textContent = m.toUpperCase(); f.append(b); last = off + m.length; return m; }); f.append(t.slice(last)); n.replaceWith(f); });
+  const TIT = 'h1,h2,h3,h4,h5,th,.po-topo,.po2-amb-t,.po-amb-t,.oe-mt,.po2-tile-t,.po-card-t,.sec-title,.po-sec,td>b:first-child';
+  while (w.nextNode()) { const n = w.currentNode; const p = n.parentElement; if (!p || p.closest('.kw') || p.closest(TIT)) continue; RE_CHAVE.lastIndex = 0; if (RE_CHAVE.test(n.nodeValue)) nos.push(n); }
+  /* cada palavra-chave só aparece destacada 1 vez por móvel (linha) */
+  const vistos = new Map(); const raizKey = (r) => { const k = vistos.get(r) || new Set(); vistos.set(r, k); return k; };
+  const chave = (m) => norm(m).replace(/s$/, '').replace(/(ad|ari)a?o?$/, '');
+  nos.forEach(n => { const escopo = n.parentElement.closest('tr, .oe-movel, .movel-card, .po2-tile, .po-card') || raiz; const ja = raizKey(escopo);
+    const f = document.createDocumentFragment(); let last = 0; const t = n.nodeValue;
+    t.replace(RE_CHAVE, (m, _g, off) => { const k = chave(m); if (ja.has(k)) return m; ja.add(k); f.append(t.slice(last, off)); const b = document.createElement('b'); b.className = 'kw'; b.textContent = m.toUpperCase(); f.append(b); last = off + m.length; return m; });
+    f.append(t.slice(last)); n.replaceWith(f); });
 }
 function ComChaves({ children, dep }) { const r = useRef(null); useEffect(() => { const id = setTimeout(() => destacarChaves(r.current), 50); return () => clearTimeout(id); }, [dep]); return html`<div ref=${r} key=${dep}>${children}</div>`; }
 async function padronizarNomesTudo(sessao, toast) {
