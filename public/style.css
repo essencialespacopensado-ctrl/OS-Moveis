@@ -1703,3 +1703,29 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @keyframes mascBracoIdle{from{transform:rotate(25deg)}to{transform:rotate(-10deg)}}
 .masc.bal-dir .masc-bal{right:auto;left:-6px}
 .masc.bal-dir .masc-bal::after{right:auto;left:30px}
+/* v203 andar de lado + pegadas */
+.masc.anda .masc-corpo{animation:mascPulo .17s ease-in-out infinite alternate}
+.masc.anda .masc-cab{transform:scaleX(.82) translateX(4px)}
+.masc.anda .masc-tronco{transform:scaleX(.62);left:20px}
+.masc.anda .masc-olho.e{opacity:0}
+.masc.anda .masc-braco.e{left:12px;z-index:-1}.masc.anda .masc-braco.d{right:12px}
+.masc.anda .masc-perna.e,.masc.anda .masc-perna.d{left:29px}
+.masc.anda .masc-perna.e{animation:mascPasso .34s ease-in-out infinite alternate}
+.masc.anda .masc-perna.d{animation:mascPasso .34s ease-in-out infinite alternate-reverse}
+.masc.anda .masc-braco.e{animation:mascPasso .34s ease-in-out infinite alternate-reverse}
+.masc.anda .masc-braco.d{animation:mascPasso .34s ease-in-out infinite alternate}
+@keyframes mascPasso{from{transform:rotate(35deg)}to{transform:rotate(-35deg)}}
+.pegada{position:fixed;z-index:10050;font-size:11px;pointer-events:none;opacity:.7;animation:pegadaSome 1.8s ease-out forwards}
+@keyframes pegadaSome{to{opacity:0;transform:scale(.6)}}
+.masc.bal-baixo .masc-bal{bottom:auto;top:128px}
+.masc.bal-baixo .masc-bal::after{bottom:auto;top:-9px;transform:rotate(225deg)}
+.masc-bal{max-height:70vh;overflow:auto}
+.masc-casa{position:absolute;left:-30px;top:52px;pointer-events:auto;width:28px;height:28px;border-radius:50%;border:2px solid #f59e0b;background:#fff;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2);animation:fadeIn .3s}
+.masc.bal-dir .masc-casa{left:auto;right:-30px}
+/* v203 usar melhor a tela */
+.com-side>.shell{max-width:none!important;padding-inline:clamp(10px,2vw,28px)}
+.com-side>header .topo-in{max-width:none;padding-inline:clamp(10px,2vw,28px)}
+.page-card,.card{max-width:100%}
+@media(min-width:1500px){.ini-clis,.os-clis{column-width:320px}.tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important}}
+.sug-lista{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.po{max-width:1100px;margin-inline:auto}

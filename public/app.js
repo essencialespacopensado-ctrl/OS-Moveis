@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['203', ['🖥 As telas agora usam toda a largura do monitor e se ajustam sozinhas no celular e tablet.', '👣 O ajudante anda de lado, dando passinhos, e deixa pegadas pelo caminho. Quando está longe do canto aparece um 🏠 ao lado dele para voltar ao ponto de partida. O menu dele não fica mais cortado no topo da tela.']],
   ['202', ['👷 A fala do ajudante não fica mais atrás do menu lateral: ele aparece por cima de tudo e o balão abre para o lado que tem espaço.']],
   ['201', ['👷 Ajudante: dá para dar nome a ele e colocar uma foto, que vira o rosto (caricatura, cabeção). Ele mexe braços e pernas o tempo todo, as falas aparecem por cima das janelas e tem o botão 🏠 Voltar para casa.']],
   ['200', ['👷 Novo ajudante: o Zé, um bonequinho animado que anda pela tela. Toque nele: "Me mostra esta tela" (ele vai até cada parte e explica) ou "Onde fica…?" (ele anda até o lugar no menu e destaca). Dá para esconder.', '↙ Botões ❓, 🆕 e ← Voltar de volta bem no canto esquerdo.']],
@@ -6681,7 +6682,8 @@ function Mascote() {
   const casa = () => { setMenu(false); setFala(''); destacar(null); irPara(window.innerWidth - 120, window.innerHeight - 170); };
   const alvoRef = useRef(null), posRef = useRef(pos); posRef.current = pos;
   const destacar = (el) => { document.querySelectorAll('.masc-alvo').forEach(x => x.classList.remove('masc-alvo')); if (el) { el.classList.add('masc-alvo'); alvoRef.current = el; setTimeout(() => el.classList.remove('masc-alvo'), 4500); } };
-  const irPara = (x, y) => new Promise(res => { const p = posRef.current; const d = Math.hypot(x - p.x, y - p.y); setVira(x < p.x); setAndando(true); setPos({ x, y, t: Math.min(2.2, 0.4 + d / 650) }); setTimeout(() => { setAndando(false); res(); }, Math.min(2200, 400 + d / 0.65)); });
+  const pegadas = (ms) => { let n = 0; const id = setInterval(() => { const el = document.querySelector('.masc .masc-corpo'); if (!el) return; const r = el.getBoundingClientRect(); const p = document.createElement('div'); p.className = 'pegada'; p.textContent = '👣'; p.style.left = (r.left + r.width / 2 + (n % 2 ? 5 : -9)) + 'px'; p.style.top = (r.bottom - 6 + (n % 2 ? 3 : 0)) + 'px'; document.body.appendChild(p); n++; setTimeout(() => p.remove(), 1800); }, 170); setTimeout(() => clearInterval(id), ms); };
+  const irPara = (x, y) => new Promise(res => { pegadas(Math.min(2200, 400 + Math.hypot(x - posRef.current.x, y - posRef.current.y) / 0.65)); const p = posRef.current; const d = Math.hypot(x - p.x, y - p.y); setVira(x < p.x); setAndando(true); setPos({ x, y, t: Math.min(2.2, 0.4 + d / 650) }); setTimeout(() => { setAndando(false); res(); }, Math.min(2200, 400 + d / 0.65)); });
   const mostrar = async (el, texto) => { if (!el) { setFala(texto); return; } el.scrollIntoView({ block: 'center', behavior: 'smooth' }); await new Promise(r => setTimeout(r, 350)); const r = el.getBoundingClientRect();
     let x = r.right + 8, y = r.top + r.height / 2 - 60; if (x > window.innerWidth - 90) x = Math.max(8, r.left - 90); y = Math.max(8, Math.min(window.innerHeight - 150, y));
     setFala(''); await irPara(x, y); destacar(el); setFala(texto); };
@@ -6697,7 +6699,8 @@ function Mascote() {
     const h = () => setPos(p => ({ x: Math.min(p.x, window.innerWidth - 90), y: Math.min(p.y, window.innerHeight - 150) })); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
-  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+  const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
+  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
@@ -6708,6 +6711,7 @@ function Mascote() {
         <label class="btn btn-sm">📷 ${rosto ? 'Trocar' : 'Usar'} foto (vira caricatura)<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { trocarRosto(e.target.files[0]); e.target.value = ''; }} /></label>
         ${rosto && html`<button class="btn btn-sm btn-ghost" onClick=${() => { setRosto(''); gravar('osm_masc_rosto', ''); }}>Tirar foto</button>`}
         <button class="btn btn-sm btn-ghost" onClick=${() => { setOculto(true); try { localStorage.setItem('osm_mascote', '0'); } catch {} }}>🙈 Esconder</button></div>` : ''}</div>`}
+    ${longe && !andando && html`<button class="masc-casa" title="Voltar ao ponto de partida" onClick=${casa}>🏠</button>`}
     <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title=${nome + ', o ajudante'}>
       ${rosto ? html`<div class="masc-cab foto"><img src=${rosto} /><div class="masc-cap"></div></div>` : html`<div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>`}
       <div class="masc-nome">${nome}</div>
