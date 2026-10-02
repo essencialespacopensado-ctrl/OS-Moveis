@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['196', ['💾 No final do preenchimento da OS: salvar em 📄 PDF, 📝 Word ou 📊 Excel (Excel com abas OS, Móveis e Especificações).']],
   ['195', ['🔑 Palavras-chave (vidro, pintura, serralheria…) aparecem destacadas só 1 vez em cada móvel e nunca nos títulos.']],
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
@@ -2089,7 +2090,10 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       <div class="rodape-escuro">
         <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
         <div class="row">
-          <button class="btn btn-sm" onClick=${pdf}>📄 PDF da OS</button>
+          <span class="exp-lbl">Salvar em:</span>
+          <button class="btn btn-sm" title="Abre a impressão — escolha Salvar como PDF" onClick=${pdf}>📄 PDF</button>
+          <button class="btn btn-sm" onClick=${() => exportarOS(os, 'word', sessao.empresaNome)}>📝 Word</button>
+          <button class="btn btn-sm" onClick=${() => exportarOS(os, 'excel', sessao.empresaNome)}>📊 Excel</button>
           <button class="btn btn-amarelo" onClick=${voltar}>✓ Salvar e voltar para a lista</button>
         </div>
       </div>
@@ -6583,6 +6587,37 @@ function AlertaCobranca({ sessao }) {
     <div class="cobrar-lista">${itens.slice(0, 12).map((x, i) => html`<button key=${i} onClick=${() => { setAberto(false); window.__abrirOS && window.__abrirOS(x.o.id); }}><b>${x.p.ic} ${x.p.t}</b> · ${infoSt(x.p.st)[2]}${x.desde ? ' há ' + durTxt(Date.now() - x.desde) : ''}<small>${numOS(x.o)} · ${nomePadrao(x.o.cliente?.nome)}</small></button>`)}</div>
     <div class="row" style=${{ gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}><button class="btn" onClick=${() => adiar(2)}>Lembrar em 2 h</button><button class="btn" onClick=${() => adiar(24)}>Amanhã</button></div>
   </div></div>`, document.body);
+}
+/* ---------- Exportar OS: Word (.doc) e Excel (.xlsx) ---------- */
+function linhasExportOS(os) {
+  const mdf = (x) => [x?.fabricante, x?.cor, x?.espessura ? x.espessura + ' mm' : ''].filter(Boolean).join(' · ');
+  const R = [];
+  (os.ambientes || []).forEach(a => (a.moveis || []).forEach(m => R.push({ Ambiente: nomePadrao(a.nome), Móvel: nomePadrao(m.nome), Qtd: Number(m.quantidade) || 1, Largura: m.largura || '', Altura: m.altura || '', Profundidade: m.profundidade || '', Caixa: mdf(m.mdfCaixa), Frente: mdf(m.mdfFrente), Fita: m.fitaBorda || '', Portas: m.portas || '', Gavetas: m.gavetas || '', Puxador: m.puxador || '', Iluminação: m.iluminacao || '', Ferragens: (m.ferragens || []).map(f => (f.quantidade ? f.quantidade + '× ' : '') + [f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' ')).join('; '), Observações: m.observacoes || '' })));
+  return R;
+}
+function baixar(nome, blob) { const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
+function exportarOS(os, tipo, empresa) {
+  const base = (numOS(os) + ' ' + (nomePadrao(os.cliente?.nome) || '')).trim().replace(/[\\/:*?"<>|]/g, '');
+  const R = linhasExportOS(os);
+  const esp = (os.ambientes || []).map(a => ({ amb: nomePadrao(a.nome), g: gruposEspec(a.padrao || os.padrao) }));
+  if (tipo === 'excel') {
+    const wb = XLSX.utils.book_new();
+    const cab = [['Ordem de Serviço', numOS(os)], ['Cliente', nomePadrao(os.cliente?.nome) || ''], ['Telefone', os.cliente?.telefone || ''], ['Endereço de montagem', os.cliente?.enderecoMontagem || os.cliente?.endereco || ''], ['Entrega', os.prazoEntrega || ''], ['Observações gerais', os.observacoesGerais || '']];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cab), 'OS');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.length ? R : [{ Móvel: '' }]), 'Móveis');
+    const E = []; esp.forEach(({ amb, g }) => g.forEach(([, t, , l]) => l.forEach(([k, v]) => E.push({ Ambiente: amb, Categoria: t, Item: k, Especificação: v }))));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(E.length ? E : [{ Categoria: '' }]), 'Especificações');
+    XLSX.writeFile(wb, base + '.xlsx'); return;
+  }
+  const e = (t) => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const cols = ['Móvel', 'Qtd', 'Largura', 'Altura', 'Profundidade', 'Caixa', 'Frente', 'Puxador', 'Ferragens', 'Observações'];
+  const doc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${e(base)}</title><style>body{font-family:Calibri,Arial;font-size:11pt}h1{font-size:18pt;margin:0;color:#1f2937}h2{font-size:13pt;color:#b45309;border-bottom:2px solid #b45309;margin-top:16pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:3pt 5pt;font-size:9.5pt;vertical-align:top}th{background:#1f2937;color:#fff}.k{color:#78716c}</style></head><body>
+    <p class="k">${e(empresa || '')} · Ordem de Serviço</p><h1>${e(nomePadrao((os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'OS')} — ${e(numOS(os))}</h1>
+    <p><b>Cliente:</b> ${e(nomePadrao(os.cliente?.nome))} &nbsp; <b>Telefone:</b> ${e(os.cliente?.telefone)}<br><b>Endereço de montagem:</b> ${e(os.cliente?.enderecoMontagem || os.cliente?.endereco)}<br><b>Entrega:</b> ${e(os.prazoEntrega)}</p>
+    ${esp.map(({ amb, g }) => `<h2>${e(amb || 'Conjunto')}</h2>${g.length ? `<table><tr><th>Categoria</th><th>Especificação</th></tr>${g.map(([, t, , l]) => l.map(([k, v]) => `<tr><td><b>${e(t)}</b>${k ? ' · ' + e(k) : ''}</td><td>${e(v)}</td></tr>`).join('')).join('')}</table><br>` : ''}
+      <table><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>${R.filter(r => r.Ambiente === amb).map(r => `<tr>${cols.map(c => `<td>${e(c === 'Móvel' ? r[c] : r[c])}</td>`).join('')}</tr>`).join('')}</table>`).join('')}
+    ${os.observacoesGerais ? `<h2>Observações gerais</h2><p>${e(os.observacoesGerais)}</p>` : ''}</body></html>`;
+  baixar(base + '.doc', new Blob(['﻿' + doc], { type: 'application/msword' }));
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
