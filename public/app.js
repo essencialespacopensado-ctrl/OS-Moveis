@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['170', ['✅ Na visão por cliente, a OS concluída sai da tela automaticamente; o cliente some quando todas as OSs dele terminam. Para achar uma concluída, use a busca.']],
   ['169', ['⏱ A voz agora espera 1 segundo depois que você termina de falar para executar — dá tempo de falar a frase inteira.']],
   ['168', ['📱 No celular a busca/voz virou uma bolinha pequena (🔍, ou 🎙 verde quando está ouvindo) que não cobre mais a tela; toque nela para digitar. Ela também fica atrás das janelas abertas.']],
   ['167', ['🎤 No PC a voz agora liga sozinha no primeiro clique ou tecla (o Chrome exige isso) e não briga mais com o microfone do assistente/busca do Início. Se o navegador bloquear o microfone, aparece o aviso de como liberar.', '📍 Barra de busca no centro, embaixo, sem ficar atrás de outros botões.']],
@@ -1643,7 +1644,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
       ${filtradas.length === 0 ? html`<div class="vazio"><div style=${{ fontSize: '24px' }}>📄</div><b>Nenhuma ordem de serviço encontrada</b><div class="dim">${lista.length ? 'Nenhuma OS corresponde aos filtros.' : 'Crie a primeira OS, gere a partir de uma reunião ou importe as antigas.'}</div></div>`
       : vista === 'cliente' ? (() => {
         const g = {};
-        filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (g[k] = g[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
+        filtradas.filter(o => busca || o.status !== 'concluida').forEach(o => { const k = norm(o.cliente?.nome) || '—'; (g[k] = g[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
         const salvarEt = async (o, k, st, motivo) => {
           const et = { ...(o.execucao?.etapas || {}) }; et[k] = { ...(et[k] || {}), status: st, ...(st === 'pronto' ? { concluidaEm: nowIso(), concluidaPor: sessao.nome } : {}), ...(st === 'andamento' && !et[k]?.iniciadaEm ? { iniciadaEm: nowIso(), iniciadaPor: sessao.nome } : {}) };
           const patch = { execucao: { ...(o.execucao || {}), etapas: et }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome };
@@ -6297,7 +6298,7 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
         <button class=${'btn btn-sm' + (falaB.ouvindo ? ' btn-mic-on pulse' : ' btn-teal')} onClick=${() => falaB.ouvindo ? falaB.parar() : (setBusca(''), falaB.iniciar())}>${falaB.ouvindo ? '■' : '🎤'}</button></div>${resTelas}`;
   if (vista === 'cliente') {
     const grupos = {};
-    filtradas.forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
+    filtradas.filter(o => busca || status || o.status !== 'concluida').forEach(o => { const k = norm(o.cliente?.nome) || '—'; (grupos[k] = grupos[k] || { nome: o.cliente?.nome || 'Sem cliente', oss: [] }).oss.push(o); });
     return html`
     <div class="fade-up stack ini-c" style=${{ gap: '8px' }}>
       ${cabecalho}
