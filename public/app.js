@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['187', ['🧾 Botão "Ordem de pintura, serralheria…" na OS: escolha o tipo e o parceiro, prazo, fotos; as especificações já vêm da OS (pode editar). Salva na OS e imprime.', '📍 Endereço de montagem obrigatório para mandar para produção ou concluir.', '🔓 A senha para avançar com pendência agora é cadastrada pelo administrador em Configurações. "Vou resolver" leva direto para Compras.']],
   ['186', ['🔓 OS liberada com pendência mostra um aviso chamativo (pequeno) no topo da OS com o motivo, quem liberou e quando — some quando as pendências forem resolvidas.']],
   ['185', ['✍ Folha da OS e Ordem de entrega: os nomes dos móveis aparecem no mesmo padrão de escrita da OS (ex.: PERFUMEIRO → Perfumeiro).']],
   ['184', ['⛔ Avançar para Produção ou concluir com pendência abre uma janela com o que falta (toque no item para ir resolver). Dá para levar mesmo assim com a senha do gerente/administrador e motivo — fica registrado. O aviso vermelho não fica mais aparecendo à toa.', '📣 Alerta em tela cheia (e notificação do sistema com o app minimizado) quando um orçamento pedido ao parceiro fica sem resposta há mais de 1 dia — para cobrar o parceiro. Dá para adiar 2 h ou para amanhã.']],
@@ -4137,7 +4138,7 @@ function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
   const chefe = ['admin', 'gerente'].includes(sessao.papel);
   const liberarCodigo = async () => {
     if (motivo.trim().length < 5) return setErro('Escreva o motivo.'); if (!senha) return setErro('Digite a senha de liberação.');
-    const h = window.__senhaLib; if (!h) return setErro('O administrador ainda não criou a senha de liberação.');
+    const h = window.__senhaLib; if (!h) return setErro('O administrador ainda não cadastrou a senha de liberação (Configurações).');
     setRod(true); if ((await hashTxt(senha)) !== h) { setRod(false); return setErro('Senha incorreta.'); }
     await onOk(motivo.trim() + ' (senha de liberação)'); fechar(); };
   const definir = async () => { const t = await pedirTexto('Nova senha de liberação (para a equipe levar com pendência)', 'Mínimo 4 caracteres'); if (!t || t.length < 4) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { senhaLiberacao: await hashTxt(t) }); window.__senhaLib = await hashTxt(t); alert('Senha de liberação salva.'); };
@@ -4151,14 +4152,59 @@ function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
       ${erro && html`<div class="erro-txt" style=${{ color: 'var(--danger)' }}>${erro}</div>`}
       <button class="btn btn-primary" disabled=${rod} onClick=${liberarCodigo}>🔓 Liberar</button></div>`
     : html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
-      <button class="btn" onClick=${fechar}>Vou resolver</button>
+      <button class="btn" onClick=${() => irAba('compras')}>Vou resolver → Compras</button>
       <button class="btn btn-danger" style=${{ flex: 1 }} onClick=${() => setModo(chefe ? 'chefe' : 'codigo')}>🔓 Levar mesmo assim (senha do gerente/adm)</button></div>`}
-    ${sessao.papel === 'admin' && html`<button class="btn btn-ghost btn-sm" style=${{ alignSelf: 'flex-start' }} onClick=${definir}>⚙ ${window.__senhaLib ? 'Trocar' : 'Criar'} senha de liberação para a equipe</button>`}
+  </div></div>`, document.body);
+}
+/* ---------- Ordem para parceiro (pintura, serralheria, vidros…) ---------- */
+const GRUPOS_TIPO = { pintura: ['Acabamentos', 'Portas'], vidros: ['Vidros'], tapecaria: ['Tecidos'], serralheria: ['Puxadores & perfis', 'Ferragens'], lamina: ['Acabamentos'], corte: ['Acabamentos'] };
+function specsParceiro(o, tipo) {
+  const L = [];
+  (o.ambientes || []).forEach(a => {
+    const g = gruposEspec(a.padrao || o.padrao).filter(([, t]) => !GRUPOS_TIPO[tipo] || GRUPOS_TIPO[tipo].includes(t));
+    const mv = (a.moveis || []).map(m => '• ' + nomePadrao(m.nome) + (m.quantidade > 1 ? ' (' + m.quantidade + 'x)' : '') + ([m.largura, m.altura, m.profundidade].some(Boolean) ? ' — ' + [m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ') + ' mm' : '') + (m.observacoes ? ' — ' + m.observacoes : ''));
+    if (!g.length && !mv.length) return;
+    L.push('▸ ' + (nomePadrao(a.nome) || 'Conjunto')); mv.forEach(x => L.push(x));
+    g.forEach(([, t, , li]) => li.forEach(([k, v]) => L.push('   ' + t + (k ? ' · ' + k : '') + ': ' + v)));
+  });
+  return L.join('\n');
+}
+function OrdemParceiro({ sessao, o, fechar, toast }) {
+  const [tipo, setTipo] = useState('pintura');
+  const [parc, setParc] = useState(''), [prazo, setPrazo] = useState(''), [fotos, setFotos] = useState([]);
+  const [texto, setTexto] = useState(() => specsParceiro(o, 'pintura'));
+  const [salv, setSalv] = useState(false);
+  const lista = (window.__parcLista || []).map(p => p.nome).filter(Boolean).sort();
+  const mudaTipo = (t) => { setTipo(t); setTexto(specsParceiro(o, t)); };
+  const T = TIPOS_PARC.find(x => x[0] === tipo) || TIPOS_PARC[0];
+  const addFotos = async (files) => { const n = []; for (const f of [...files].slice(0, 8 - fotos.length)) { try { n.push(await fotoCompacta(f)); } catch {} } setFotos(v => [...v, ...n]); };
+  const imprimir = (x) => { const w = window.open('', '_blank'); if (!w) return toast('Permita pop-ups para imprimir.', 'erro');
+    const esc = (t) => String(t || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    w.document.write(`<html><head><meta charset="utf-8"><title>Ordem de ${esc(x.titulo)} — ${numOS(o)}</title><style>body{font:14px Arial,sans-serif;margin:24px;color:#1c1917}h1{margin:0;font-size:22px}.top{display:flex;justify-content:space-between;border-bottom:4px solid #b45309;padding-bottom:10px;margin-bottom:12px}.cod{font:800 22px monospace}.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.kv div{background:#f5f5f4;border-radius:8px;padding:6px 9px}.kv small{display:block;color:#78716c;font-size:10px;text-transform:uppercase}pre{white-space:pre-wrap;font:13px/1.5 Arial;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px}.fotos img{width:31%;margin:1%;border-radius:8px}.ass{display:flex;gap:30px;margin-top:40px}.ass div{flex:1;border-top:1px solid #333;text-align:center;font-size:11px;padding-top:4px}</style></head><body>
+      <div class="top"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">${esc(sessao.empresaNome || '')}</div><h1>${esc(x.ic)} Ordem de ${esc(x.titulo)}</h1><div>${esc(nomePadrao(o.cliente?.nome))}</div></div><div class="cod">${numOS(o)}</div></div>
+      <div class="kv"><div><small>Parceiro</small><b>${esc(x.parceiro || '—')}</b></div><div><small>Prazo</small><b>${esc(x.prazo ? x.prazo.split('-').reverse().join('/') : '—')}</b></div><div><small>Emitida</small><b>${esc(fmtData(x.em))} · ${esc(x.por)}</b></div></div>
+      <pre>${esc(x.texto)}</pre><div class="fotos">${(x.fotos || []).map(f => `<img src="${f}">`).join('')}</div>
+      <div class="ass"><div>Emitido por</div><div>Parceiro — recebi</div></div><script>setTimeout(()=>print(),400)<\/script></body></html>`); w.document.close(); };
+  const salvar = async (imp) => { if (!parc.trim()) return toast('Escolha o parceiro.'); setSalv(true);
+    const x = { tipo, titulo: T[2], ic: T[1], parceiro: parc.trim(), prazo, texto, fotos, em: nowIso(), por: sessao.nome };
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ordensParceiro: [...(o.ordensParceiro || []), x] }); registrar(sessao, o.id, T[1], 'Ordem de ' + T[2] + ' para ' + x.parceiro, ''); toast('Ordem salva.', 'ok'); if (imp) imprimir(x); fechar(); }
+    catch (e) { toast('Não salvou: ' + e.message, 'erro'); } setSalv(false); };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(640px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧾 Ordem para parceiro · ${numOS(o)}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    <div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${TIPOS_PARC.map(([k, ic, t]) => html`<button key=${k} class=${'sug-pessoa' + (tipo === k ? ' on' : '')} onClick=${() => mudaTipo(k)}>${ic} ${t}</button>`)}</div>
+    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+      <div class="field" style=${{ flex: 2, minWidth: '180px' }}><span class="lbl">Parceiro</span><input class="inp" list="op-parc" placeholder="Escolha ou digite" value=${parc} onInput=${e => setParc(e.target.value)} /><datalist id="op-parc">${lista.map(n => html`<option key=${n} value=${n} />`)}</datalist></div>
+      <div class="field" style=${{ flex: 1, minWidth: '140px' }}><span class="lbl">Prazo</span><input class="inp" type="date" value=${prazo} onInput=${e => setPrazo(e.target.value)} /></div></div>
+    <div class="field"><span class="lbl">Especificações (puxadas da OS — pode editar)</span><textarea class="inp" rows="9" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></div>
+    <div class="row" style=${{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}><label class="btn btn-sm">📷 Fotos<input type="file" accept="image/*" multiple style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
+      ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}</div>
+    <div class="row" style=${{ gap: '8px', justifyContent: 'flex-end' }}><button class="btn" disabled=${salv} onClick=${() => salvar(false)}>💾 Salvar</button><button class="btn btn-primary" disabled=${salv} onClick=${() => salvar(true)}>🖨 Salvar e imprimir</button></div>
+    ${(o.ordensParceiro || []).length > 0 && html`<details><summary>📁 ${o.ordensParceiro.length} ordem(ns) já emitida(s)</summary>${o.ordensParceiro.slice().reverse().map((x, i) => html`<div key=${i} class="row" style=${{ justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #e7e5e4' }}><span>${x.ic} ${x.titulo} · <b>${x.parceiro}</b> <small class="dim">${fmtData(x.em)}</small></span><button class="btn btn-ghost btn-sm" onClick=${() => imprimir(x)}>🖨</button></div>`)}</details>`}
   </div></div>`, document.body);
 }
 function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [], irAba }) {
   const [bloq, setBloq] = useState(null);
-  const exigir = (titulo, acao) => { if (!falta.length) return acao(); setBloq({ titulo, acao }); };
+  const exigir = (titulo, acao) => { if (!String(o.cliente?.enderecoMontagem || '').trim()) return toast('📍 Preencha o endereço de montagem na OS (Editar OS → dados do cliente) antes de liberar.', 'erro'); if (!falta.length) return acao(); setBloq({ titulo, acao }); };
   const alterar = async (fn) => {
     const c = JSON.parse(JSON.stringify(o)); fn(c); const patch = {};
     Object.keys(c).forEach(k => { if (k !== 'id' && JSON.stringify(c[k]) !== JSON.stringify(o[k])) patch[k] = c[k]; });
@@ -4233,6 +4279,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
+  const [ordP, setOrdP] = useState(false);
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'andamento'; });
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
@@ -4282,7 +4329,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📅 Ver no cronograma</button>`
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
         <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'andamento' : 'cal')}>📆 Ver no calendário</button>
+        <button class="btn btn-grande btn-ordem-parc" onClick=${() => setOrdP(true)}>🧾 Ordem de pintura, serralheria…</button>
       </div>
+      ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
       ${(o.liberacoes || []).length > 0 && falta.length > 0 && (() => { const L = o.liberacoes[o.liberacoes.length - 1]; return html`<div class="lib-aviso" title=${'Pendências na liberação: ' + (L.falta || []).join('; ')}>🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> <small>(${L.por}, ${fmtData(L.em)})</small></div>`; })()}
       <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
@@ -6666,6 +6715,14 @@ function aplicarEtapas(cfg) {
   const fab = Array.isArray(cfg?.etapasFab) && cfg.etapasFab.length ? cfg.etapasFab.map(x => [x.k, x.nome, x.desc || '']) : FAB_PADRAO;
   ETAPAS_FAB.splice(0, ETAPAS_FAB.length, ...fab);
 }
+function SenhaLiberacaoCfg({ sessao, toast }) {
+  const [a, setA] = useState(''), [b, setB] = useState('');
+  const salvar = async () => { if (a.length < 4) return toast('Mínimo 4 caracteres.'); if (a !== b) return toast('As senhas não conferem.');
+    try { const h = await hashTxt(a); await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { senhaLiberacao: h }); window.__senhaLib = h; setA(''); setB(''); toast('Senha de liberação salva.', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
+  return html`<div class="card page-card stack"><div class="sec-title">🔓 Senha para avançar com pendência</div>
+    <small class="dim">Usada pela equipe quando precisar mandar uma OS para produção ou concluir com algo faltando. Gerente e administrador também podem liberar com a própria senha. ${window.__senhaLib ? '✓ Já existe uma senha cadastrada.' : '⚠ Nenhuma senha cadastrada ainda.'}</small>
+    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}><input class="inp" type="password" style=${{ flex: 1, minWidth: '140px' }} placeholder="Nova senha" value=${a} onInput=${e => setA(e.target.value)} /><input class="inp" type="password" style=${{ flex: 1, minWidth: '140px' }} placeholder="Repita a senha" value=${b} onInput=${e => setB(e.target.value)} /><button class="btn btn-primary" onClick=${salvar}>Salvar</button></div></div>`;
+}
 function TelaConfig({ sessao, toast }) {
   const [zerar, setZerar] = useState(false);
   const [os, setOs] = useState(() => STATUS_OS.map(x => ({ v: x.v, nome: x.t.replace(/^\d+\. /, ''), cor: COR_ST[x.v] || '#78716c' })));
@@ -6688,6 +6745,7 @@ function TelaConfig({ sessao, toast }) {
     <button class="x-btn" title="Remover" onClick=${() => arr.length > 2 ? set(arr.filter((_, j) => j !== i)) : toast('Precisa de pelo menos 2 etapas.')}>✕</button>
   </div>`;
   return html`<div class="fade-up stack">
+    ${sessao.papel === 'admin' && html`<${SenhaLiberacaoCfg} sessao=${sessao} toast=${toast} />`}
     <div><h2>⚙ Configurações</h2><div class="dim">Etapas do processo da sua empresa. Renomeie, reordene, mude a cor, acrescente ou tire etapas.</div></div>
     <div class="card page-card stack">
       <div class="sec-title">📋 Etapas da OS (andamento geral)</div>
@@ -6724,7 +6782,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
