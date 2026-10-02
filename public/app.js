@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['176', ['💾 Corrigido: ao salvar a OS, os acabamentos, puxadores, ferragens e demais especificações de cada conjunto de móveis estavam sendo perdidos. Agora tudo fica salvo.']],
   ['175', ['⏸ Parar esteira: na aba Andamento da OS, botão "Parar esteira" pede o motivo; a OS mostra o aviso vermelho com quanto tempo está parada e o botão ▶ Retomar. Fica o histórico das paradas, e a OS aparece como ⏸ Parada na visão por cliente.', '💡 Sugestões e anotações: marque pessoas da equipe (@nome) e anexe fotos 📷. Novo filtro 🔔 Para mim.', '✕ Corrigido: o botão de fechar o aviso do microfone agora funciona.']],
   ['174', ['✕ O aviso de microfone (sem microfone / bloqueado) agora tem botão para fechar, e não volta mais.']],
   ['173', ['💡 Nova aba Sugestões & anotações (em Geral): escreva ou fale uma ideia ou anotação, marque como feita, filtre por tipo. Toda a equipe vê.']],
@@ -331,6 +332,7 @@ function sanearOS(o) {
     ...(o.arquiteto ? { arquiteto: s(o.arquiteto) } : {}),
     ...(o.ambienteResumo ? { ambienteResumo: s(o.ambienteResumo) } : {}),
     ambientes: (Array.isArray(o.ambientes) ? o.ambientes : []).map(a => ({
+      ...JSON.parse(JSON.stringify(a || {})),
       id: a.id || rand(8),
       nome: s(a.nome),
       moveis: (Array.isArray(a.moveis) ? a.moveis : []).map(m => ({
