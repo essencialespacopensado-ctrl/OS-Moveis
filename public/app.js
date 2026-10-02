@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['188', ['🧪 Zerar (testes) agora limpa toda a atividade da OS — esteiras, tempos, paradas, liberações, parceiros, compras, peças extras, diário e cronograma — deixando só a OS.', '🔓 O aviso de liberado com pendência também sai na folha de impressão.']],
   ['187', ['🧾 Botão "Ordem de pintura, serralheria…" na OS: escolha o tipo e o parceiro, prazo, fotos; as especificações já vêm da OS (pode editar). Salva na OS e imprime.', '📍 Endereço de montagem obrigatório para mandar para produção ou concluir.', '🔓 A senha para avançar com pendência agora é cadastrada pelo administrador em Configurações. "Vou resolver" leva direto para Compras.']],
   ['186', ['🔓 OS liberada com pendência mostra um aviso chamativo (pequeno) no topo da OS com o motivo, quem liberou e quando — some quando as pendências forem resolvidas.']],
   ['185', ['✍ Folha da OS e Ordem de entrega: os nomes dos móveis aparecem no mesmo padrão de escrita da OS (ex.: PERFUMEIRO → Perfumeiro).']],
@@ -5107,6 +5108,7 @@ function ImpressaoOS({ os, empresa }) {
           <div class="po-meta">${st} · ${new Date().toLocaleDateString('pt-BR')}${os.numeroAntigo ? ' · antiga ' + os.numeroAntigo : ''}</div>
         </div>
       </div>
+      ${(os.liberacoes || []).length > 0 && (() => { const L = os.liberacoes[os.liberacoes.length - 1]; return html`<div class="po-lib">🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> (${L.por}, ${fmtData(L.em)})${(L.falta || []).length ? html`<div><small>Pendente na liberação: ${L.falta.join(' · ')}</small></div>` : ''}</div>`; })()}
       ${info.length > 0 && html`<div class="po2-info">${info.map(([i, k, v]) => html`<div key=${k} class="po2-cel"><span>${i}</span><div><small>${k}</small><b>${v}</b></div></div>`)}</div>`}
       ${ambs.map((a, ai) => { const g = gruposEspec(a.padrao || os.padrao); const mv = a.moveis || []; const cols = COLS.filter(([, f]) => mv.some(m => f(m)));
         return html`<div key=${a.id || ai} class="po2-amb">
@@ -6329,10 +6331,16 @@ function ZerarEsteiras({ sessao, toast, fechar }) {
   const vis = oss.filter(o => !q || norm(numOS(o) + ' ' + o.cliente?.nome + ' ' + (o.ambientes || []).map(a => a.nome).join(' ')).includes(norm(q))).sort((a, b) => numOS(b).localeCompare(numOS(a)));
   const zerar = async (lista) => {
     if (!lista.length) return toast('Escolha ao menos uma OS.');
-    const r = await escolher('Zerar esteiras', 'Volta ' + lista.length + ' OS para o início: etapa do escritório, esteira da produção e tempos.', [{ v: 'ok', t: 'Zerar ' + lista.length + ' OS', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }]); if (r !== 'ok') return;
-    const { writeBatch, deleteField } = F().fsMod; const b = writeBatch(F().db);
-    lista.forEach(o => b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { status: STATUS_OS[0]?.v || 'elaboracao', statusHist: [], inicioEscritorio: deleteField(), execucao: { ...(o.execucao || {}), etapas: {} }, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }));
-    try { await b.commit(); lista.forEach(o => registrar(sessao, o.id, '🧪', 'Esteiras zeradas (teste)', '')); toast(lista.length + ' OS zerada(s).', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
+    const r = await escolher('Zerar esteiras', 'Volta ' + lista.length + ' OS para o início: apaga TODA a atividade (esteiras, tempos, paradas, liberações, parceiros, compras, peças extras, diário e cronograma). Fica só o conteúdo da OS.', [{ v: 'ok', t: 'Zerar ' + lista.length + ' OS', cls: 'btn-danger' }, { v: 'n', t: 'Cancelar' }]); if (r !== 'ok') return;
+    const { writeBatch, deleteField, getDocs, query, where } = F().fsMod; const E = sessao.empresaId;
+    const ops = [];
+    lista.forEach(o => ops.push(['u', docRef('empresas', E, 'os', o.id), { status: STATUS_OS[0]?.v || 'elaboracao', statusHist: [], inicioEscritorio: deleteField(), execucao: { ...(o.execucao || {}), etapas: {} }, parada: deleteField(), paradas: deleteField(), liberacoes: deleteField(), parceiros: deleteField(), ordensParceiro: deleteField(), reaberturas: deleteField(), revisao: deleteField(), ultimoFinal: deleteField(), atualizadoEm: nowIso(), atualizadoPor: sessao.nome }]));
+    try {
+      const ids = lista.map(o => o.id);
+      for (let i = 0; i < ids.length; i += 10) { const pa = ids.slice(i, i + 10);
+        for (const c of ['tarefas', 'pedidos']) (await getDocs(query(col('empresas', E, c), where('osId', 'in', pa)))).docs.forEach(d => ops.push(['d', d.ref])); }
+      for (const id of ids) { ops.push(['d', docRef('empresas', E, 'compras', id)]); (await getDocs(col('empresas', E, 'os', id, 'diario'))).docs.forEach(d => ops.push(['d', d.ref])); }
+      for (let i = 0; i < ops.length; i += 400) { const b = writeBatch(F().db); ops.slice(i, i + 400).forEach(([t, r, p]) => t === 'u' ? b.update(r, p) : b.delete(r)); await b.commit(); } lista.forEach(o => registrar(sessao, o.id, '🧪', 'Esteiras zeradas (teste)', '')); toast(lista.length + ' OS zerada(s).', 'ok'); fechar(); } catch (e) { toast(e.message, 'erro'); }
   };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
     <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">🧪 Testes · zerar esteiras e tempos</div><button class="x-btn" onClick=${fechar}>✕</button></div>

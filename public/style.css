@@ -1598,3 +1598,4 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .lib-aviso small{opacity:.7}
 @keyframes libPulse{0%,100%{box-shadow:0 0 0 0 #fb923c55}50%{box-shadow:0 0 0 5px #fb923c22}}
 .btn-ordem-parc{background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#f59e0b;color:#78350f;font-weight:700}
+.po-lib{margin:8px 0;border:1.5px solid #fb923c;border-left:6px solid #ea580c;background:#fff7ed;color:#7c2d12;border-radius:9px;padding:6px 10px;font-size:9pt}
