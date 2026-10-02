@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['192', ['📍 Endereço de montagem obrigatório no final do preenchimento da OS (campo em vermelho até preencher). Sem ele a OS não pode ser revisada nem avançar para produção.']],
   ['191', ['🎯 Ordens a terceiros: as especificações trazem só o que é da categoria escolhida e dos móveis marcados (ex.: Vidros não puxa mais couro, puxador ou box).', '📷 Em todas as fotos dá para escolher Câmera ou Galeria.']],
   ['190', ['🧾 Botão renomeado para "Ordens a terceiros". Agora você marca para quais móveis da OS é a ordem (A, B, C…) e as especificações se ajustam; as fotos já vêm ligadas ao móvel quando só um está marcado.']],
   ['189', ['🧾 Ordem para parceiro: as especificações agora vêm só do que é ligado ao tipo escolhido (ex.: Pintura puxa laca, cores, verniz; Vidros puxa vidros e espelhos…). Cada foto pede de qual móvel é (A, B, C…), e isso sai na impressão.', '📐 Serralheria exige o PDF do desenho técnico (fica salvo na ordem, botão 📐 para abrir).']],
@@ -1994,7 +1995,7 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
           <span class="os-num num-badge">${numOS(os)}</span>
           <div class="grow os-cab-cli" title="Dados do cliente" onClick=${() => setPainelCA('cliente')}><b>${nomePadrao(os.cliente?.nome) || 'Cliente não informado'} <span class="dim" style=${{ fontSize: '12px' }}>👤 ✏️</span></b><small>${nomePadrao((os.ambientes || []).map(x => x.nome).join(', ') || os.ambienteResumo) || '—'}${os.prazoEntrega ? ' · 🚚 ' + os.prazoEntrega : ''}</small></div>
           <span class=${stx.c}>${stx.t.replace(/^\d+\. /, '')}</span>
-          ${ok ? html`<span class="rev-ok" title=${'Revisada por ' + rev.por}>✅ Revisada</span>` : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Revisar</button>`}
+          ${ok ? html`<span class="rev-ok" title=${'Revisada por ' + rev.por}>✅ Revisada</span>` : html`<button class="btn btn-sm rev-btn" disabled=${sujo || salvando} onClick=${async () => { if (!String(os.cliente?.enderecoMontagem || '').trim()) { toast('📍 Preencha o endereço de montagem (no fim da OS) antes de revisar.', 'erro'); document.getElementById('os-endm2')?.scrollIntoView({ block: 'center' }); document.getElementById('os-endm2')?.focus(); return; } try { await F().fsMod.updateDoc(ref, { revisao: { por: sessao.nome, em: new Date(Date.now() + 1000).toISOString() }, revisoes: [...(os.revisoes || []), { por: sessao.nome, em: nowIso() }] }); toast('OS marcada como revisada.', 'ok'); } catch (e) { toast(e.message, 'erro'); } }}>☐ Revisar</button>`}
           ${os.id && html`<button class=${'btn btn-sm ver-os-btn' + (ok ? ' pronta' : '')} title="Ver a OS pronta" onClick=${() => { if (sujo && !confirm('Há mudanças não salvas. Ver a OS mesmo assim?')) return; window.__modoFicha = 'folha'; window.__abrirOS && window.__abrirOS(os.id); }}>👁 Ver OS</button>`}
           <button class="btn btn-sm" title="Exportar PDF" onClick=${pdf}>📄</button>
         </div>`; })()}
@@ -2077,6 +2078,11 @@ function EditorOS({ osId, sessao, catalogo, toast, voltar }) {
       ${pedirLib && html`<${SenhaMotivo} titulo=${'Editar a OS ' + numOS(os) + ' (já pronta)'} texto="Diga o que vai ser alterado e por quê." botao="Desbloquear"
         onOk=${async (motivo) => { setSnapLib(JSON.parse(JSON.stringify(os))); setMotivoLib(motivo); alterar(o => { o.historico = [...(o.historico || []), { motivo, quem: sessao.nome, quando: nowIso() }]; }); setLiberada(true); toast('OS desbloqueada. Tudo o que você mudar vai para o pedido de alteração.', 'ok'); }} fechar=${() => setPedirLib(false)} />`}
 
+      <div class=${'card page-card end-final' + (String(os.cliente?.enderecoMontagem || '').trim() ? ' ok' : '')}>
+        <label class="lbl" for="os-endm2">📍 Endereço de montagem <b style=${{ color: 'var(--danger)' }}>*obrigatório</b></label>
+        <input id="os-endm2" class="inp" placeholder="Rua, número, bairro, cidade — onde o móvel vai ser montado" value=${os.cliente?.enderecoMontagem || ''} onInput=${setCli('enderecoMontagem')} />
+        ${!String(os.cliente?.enderecoMontagem || '').trim() && html`<small style=${{ color: 'var(--danger)' }}>Sem o endereço de montagem a OS não pode ser revisada nem avançar para produção.</small>`}
+      </div>
       <div class="rodape-escuro">
         <button class="btn btn-ghost" style=${{ color: '#e7e5e4' }} onClick=${() => etapa > 1 ? ir(etapa - 1) : voltar()}>← ${etapa > 1 ? 'Etapa ' + (etapa - 1) : 'Voltar para lista de OSs'}</button>
         <div class="row">
@@ -4246,7 +4252,7 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
 }
 function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [], irAba }) {
   const [bloq, setBloq] = useState(null);
-  const exigir = (titulo, acao) => { if (!String(o.cliente?.enderecoMontagem || '').trim()) return toast('📍 Preencha o endereço de montagem na OS (Editar OS → dados do cliente) antes de liberar.', 'erro'); if (!falta.length) return acao(); setBloq({ titulo, acao }); };
+  const exigir = (titulo, acao) => { if (!String(o.cliente?.enderecoMontagem || '').trim()) return toast('📍 Falta o endereço de montagem: abra Editar OS e preencha no final da OS.', 'erro'); if (!falta.length) return acao(); setBloq({ titulo, acao }); };
   const alterar = async (fn) => {
     const c = JSON.parse(JSON.stringify(o)); fn(c); const patch = {};
     Object.keys(c).forEach(k => { if (k !== 'id' && JSON.stringify(c[k]) !== JSON.stringify(o[k])) patch[k] = c[k]; });
