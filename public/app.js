@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['180', ['📄 Folha da OS: no topo, em destaque, o ambiente (ex.: BWC Master); embaixo o nome do cliente; cada conjunto mostra os nomes dos móveis que você digitou.', '⬆ Se a tela atualizar no meio de um envio de arquivo, fica um aviso discreto embaixo mostrando o que parou, com ✕ para fechar.']],
   ['179', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS e mostrava 100%. As etapas estavam com códigos internos trocados — o administrador vê um aviso no Início com o botão 🔧 Corrigir (nomes e ordem não mudam).', '🧱 Tamponamento e prateleiras escolhidos em cada conjunto agora ficam salvos e aparecem na folha de impressão.', '🙈 No Editar OS, o móvel não repete mais o nome do ambiente que já aparece no topo.']],
   ['177', ['📋 Lista de OSs por cliente: a barra de etapas começa zerada e só acende quando a esteira avança; a OS não pula mais de lugar quando você toca ▶ (fica na mesma posição, por número).']],
   ['176', ['💾 Corrigido: ao salvar a OS, os acabamentos, puxadores, ferragens e demais especificações de cada conjunto de móveis estavam sendo perdidos. Agora tudo fica salvo.']],
@@ -619,14 +620,18 @@ const CTRL = { pausado: false, cancelado: false, xhr: null,
   async ponto() { while (this.pausado && !this.cancelado) await new Promise(r => setTimeout(r, 300)); if (this.cancelado) throw new Error('Cancelado por você.'); },
 };
 const PROG = { st: null, t: null,
-  set(p) { clearTimeout(this.t); this.st = { ...(this.st || {}), ...p }; window.dispatchEvent(new Event('prog')); },
-  fim(ok = true) { if (!this.st) return; this.set({ pct: 100, label: ok ? '✓ Pronto' : '⚠ Não deu certo', erro: !ok }); this.t = setTimeout(() => { this.st = null; window.dispatchEvent(new Event('prog')); }, ok ? 900 : 2500); },
+  set(p) { clearTimeout(this.t); this.st = { ...(this.st || {}), ...p }; try { if (!this.st.interrompido) localStorage.setItem('osm_prog', JSON.stringify({ ...this.st, em: Date.now() })); } catch {} window.dispatchEvent(new Event('prog')); },
+  fim(ok = true) { if (!this.st) return; this.set({ pct: 100, label: ok ? '✓ Pronto' : '⚠ Não deu certo', erro: !ok }); try { localStorage.removeItem('osm_prog'); } catch {} this.t = setTimeout(() => { this.st = null; window.dispatchEvent(new Event('prog')); }, ok ? 900 : 2500); },
+  fechar() { this.st = null; try { localStorage.removeItem('osm_prog'); } catch {} window.dispatchEvent(new Event('prog')); },
 };
+/* Se a tela atualizou no meio de um envio, mostra discretamente o que ficou pela metade */
+try { const v = JSON.parse(localStorage.getItem('osm_prog') || 'null'); if (v && (v.pct || 0) < 100 && Date.now() - (v.em || 0) < 864e5) PROG.st = { ...v, interrompido: true }; else localStorage.removeItem('osm_prog'); } catch {}
 function BarraTransferencia() {
   const [, f] = useState(0);
   useEffect(() => { const h = () => f(x => x + 1); window.addEventListener('prog', h); return () => window.removeEventListener('prog', h); }, []);
   const st = PROG.st; if (!st) return null;
   const pct = Math.max(2, Math.min(100, Math.round(st.pct || 0)));
+  if (st.interrompido) return html`<div class="transf-mini"><span>⚠ Envio interrompido (a tela atualizou)${st.arquivo ? ': ' + st.arquivo.split(' · ')[0] : ''} — parou em ${pct}%. Envie de novo.</span><button onClick=${() => PROG.fechar()}>✕</button></div>`;
   return html`<div class="transf-top"><i style=${{ width: pct + '%' }}></i></div>
     <div class=${'transf-card' + (st.erro ? ' erro' : pct >= 100 ? ' ok' : '')}>
       <div class="row" style=${{ justifyContent: 'space-between', gap: '10px', flexWrap: 'nowrap' }}><b>${st.label || 'Carregando…'}</b><span>${pct}%</span></div>
@@ -4938,7 +4943,7 @@ function ImpressaoOS({ os, empresa }) {
   const st = (STATUS_OS.find(s => s.v === os.status) || STATUS_OS[0]).t.replace(/^\d\. /, '');
   const tamp = os.tamponamento?.tipo && os.tamponamento.tipo !== 'sem' ? (os.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (os.tamponamento.espessura ? ' · ' + os.tamponamento.espessura : '') : '';
   const info = [
-    ['👤', 'Cliente', nomePadrao(os.cliente?.nome)], ['📞', 'Telefone', os.cliente?.telefone], ['🚚', 'Entrega', os.prazoEntrega], ['🏗', 'Obra', os.cliente?.obra],
+    ['📞', 'Telefone', os.cliente?.telefone], ['🚚', 'Entrega', os.prazoEntrega], ['🏗', 'Obra', os.cliente?.obra],
     ['📍', 'Montagem', os.cliente?.enderecoMontagem || os.cliente?.endereco], ['📐', 'Arquiteto', os.arquiteto], ['🧑‍🔧', 'Responsável', os.responsavel], ['🧱', 'Tamponamento', tamp],
   ].filter(([, , v]) => v);
   const ambs = os.ambientes || [];
@@ -4949,8 +4954,8 @@ function ImpressaoOS({ os, empresa }) {
       <div class="po-topo">
         <div class="row" style=${{ gap: '12px', flexWrap: 'nowrap', alignItems: 'center' }}><${LogoImp} empresa=${empresa} /><div>
           <div class="po-emp">${empresa || 'Gestão Pró'}</div>
-          <div class="po-tit">${nomePadrao(os.cliente?.nome) || 'Ordem de Serviço'}</div>
-          <div class="po-sub">Ordem de Serviço · ${ambs.length} conjunto(s) · ${totalMov} móvel(is)</div>
+          <div class="po-tit">${nomePadrao(ambs.map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Ordem de Serviço'}</div>
+          <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b> · ${ambs.length} conjunto(s) · ${totalMov} móvel(is)</div>
         </div></div>
         <div class="po-num">
           <div class="po-cod">${numOS(os)}</div>
@@ -4961,7 +4966,7 @@ function ImpressaoOS({ os, empresa }) {
       ${info.length > 0 && html`<div class="po2-info">${info.map(([i, k, v]) => html`<div key=${k} class="po2-cel"><span>${i}</span><div><small>${k}</small><b>${v}</b></div></div>`)}</div>`}
       ${ambs.map((a, ai) => { const g = gruposEspec(a.padrao || os.padrao); const mv = a.moveis || []; const cols = COLS.filter(([, f]) => mv.some(m => f(m)));
         return html`<div key=${a.id || ai} class="po2-amb">
-          <div class="po2-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span><b>${a.nome || mv.map(m => m.nome).filter(Boolean).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
+          <div class="po2-amb-t"><span>${String(ai + 1).padStart(2, '0')}</span><b>${mv.map(m => m.nome).filter(n => n && norm(n) !== norm(a.nome)).join(' · ') || 'Conjunto ' + (ai + 1)}</b><em>${mv.length} móvel(is)</em></div>
           ${g.length > 0 && html`<div class="po2-esp">${g.map(([i, t, c, l]) => html`<div key=${t} class="po2-tile" style=${{ '--k': c }}><div class="po2-tile-t">${i} ${t}</div>${l.map(([k, v]) => html`<div key=${k} class="po2-kv">${k && html`<small>${k}</small>`}<span>${v}</span></div>`)}</div>`)}</div>`}
           ${mv.length > 0 && html`<table class="po2-tab"><thead><tr><th>Móvel</th>${cols.map(([t]) => html`<th key=${t}>${t}</th>`)}</tr></thead><tbody>
             ${mv.map(m => html`<tr key=${m.id}><td><b>${m.nome}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}

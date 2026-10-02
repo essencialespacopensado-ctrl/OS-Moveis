@@ -1564,3 +1564,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .sug-marcados{display:flex;gap:4px;flex-wrap:wrap}
 .sug-marcados span{font-size:12px;background:#ede9fe;color:#5b21b6;border-radius:999px;padding:1px 8px}
 .sug-marcados span.eu{background:#7c3aed;color:#fff}
+.transf-mini{position:fixed;left:12px;bottom:12px;z-index:850;display:flex;gap:8px;align-items:center;max-width:min(420px,calc(100vw - 24px));background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:6px 10px;font-size:12.5px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.transf-mini button{border:0;background:none;cursor:pointer;color:#92400e;font-weight:800}
