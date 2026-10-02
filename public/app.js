@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['183', ['⛔ A OS não conclui se tiver pendência: o último avanço do escritório e a última etapa da produção ficam travados enquanto houver compras, parceiros, peças extras ou pendências do diário. Toque no item que falta para ir direto à aba (Compras, Diário…).']],
   ['182', ['🚚 Nova aba Ordem de entrega na OS: escolha os móveis que vão na entrega e imprima um check-list ☐ de cada móvel com medidas, MDF, ferragens, puxadores, LED e todos os acessórios do conjunto, com assinaturas de expedição, montador e cliente.', '📄 Folha da OS: depois do cliente aparece o endereço de montagem; saiu o número 01 dos conjuntos.']],
   ['181', ['🔧 Corrigido: concluir etapas da esteira da produção fazia a esteira do escritório pular sozinha até "OS concluída". Agora as duas esteiras são independentes — o escritório só avança quando você toca ▶.']],
   ['180', ['📄 Folha da OS: no topo, em destaque, o ambiente (ex.: BWC Master); embaixo o nome do cliente; cada conjunto mostra os nomes dos móveis que você digitou.', '⬆ Se a tela atualizar no meio de um envio de arquivo, fica um aviso discreto embaixo mostrando o que parou, com ✕ para fechar.']],
@@ -4124,7 +4125,8 @@ function CalendarioOS({ sessao, os }) {
 /* ---------- Ficha da OS finalizada (abre de qualquer lugar) ---------- */
 const durTxt = (ms) => { if (!(ms > 0)) return ''; const h = ms / 36e5; if (h < 1) return Math.max(1, Math.round(ms / 6e4)) + ' min'; if (h < 24) return Math.round(h) + ' h'; const d = Math.floor(h / 24), r = Math.round(h % 24); return d + 'd' + (r ? ' ' + r + 'h' : ''); };
 /* Andamento da OS dentro da ficha: % + parceiros + execução (etapa 3) editável */
-function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
+function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [] }) {
+  const travado = () => { if (!falta.length) return false; toast('Não dá para concluir: falta ' + falta.length + ' ' + (falta.length === 1 ? 'coisa' : 'coisas') + ' (veja a lista em vermelho).', 'erro'); return true; };
   const alterar = async (fn) => {
     const c = JSON.parse(JSON.stringify(o)); fn(c); const patch = {};
     Object.keys(c).forEach(k => { if (k !== 'id' && JSON.stringify(c[k]) !== JSON.stringify(o[k])) patch[k] = c[k]; });
@@ -4161,12 +4163,12 @@ function AndamentoFicha({ sessao, o, toast, pend, compras, peds }) {
           ${t0 ? html`<small class="dim">⏱ Total no escritório: <b>${durTxt(Date.now() - new Date(t0))}</b> · iniciado ${fmtData(t0)}</small>` : ''}`; })()}
         ${!(o.inicioEscritorio || (o.statusHist || []).length) ? html`<button class="btn btn-primary btn-anim" onClick=${() => alterar(x => { x.inicioEscritorio = nowIso(); x.statusHist = [{ st: x.status || STATUS_OS[0].v, em: nowIso(), quem: sessao.nome }]; })}>▶ Iniciar esteira do escritório</button>` : html`<div class="row" style=${{ gap: '8px' }}>
           ${ant && html`<button class="btn btn-anim" onClick=${async () => { const m = await pedirMotivo('Voltar para ' + ant.t.replace(/^\d+\. /, '')); if (m) mudar(ant, m); }}>◀ Voltar etapa</button>`}
-          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => mudar(prox)}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
+          ${prox ? html`<button class="btn btn-verde btn-anim" style=${{ flex: 1 }} onClick=${() => { if (prox === STATUS_OS[STATUS_OS.length - 1] && travado()) return; mudar(prox); }}>▶ Avançar para ${prox.t.replace(/^\d+\. /, '')}</button>` : html`<div class="ok-box" style=${{ flex: 1 }}>✅ OS concluída</div>`}
         </div>`}</div>`; })()}
     ${(() => { const et = o.execucao?.etapas || {}; const i = ETAPAS_FAB.findIndex(([k]) => et[k]?.status !== 'pronto'); const atual = i < 0 ? ETAPAS_FAB.length : i;
       const prox = ETAPAS_FAB[atual], ant = ETAPAS_FAB[atual - 1];
       const salvarEt = (fn, log, mot) => alterar(x => { x.execucao = x.execucao || {}; x.execucao.etapas = x.execucao.etapas || {}; fn(x.execucao.etapas, x); if (mot) x.reaberturas = [...(x.reaberturas || []), { oque: log, motivo: mot, quem: sessao.nome, quando: nowIso() }]; registrar(sessao, o.id, mot ? '↺' : '🏭', log, mot || ''); });
-      const concluir = () => salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
+      const concluir = () => (atual === ETAPAS_FAB.length - 1 && travado()) ? null : salvarEt((E, x) => { E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pronto', concluidaEm: nowIso(), concluidaPor: sessao.nome }; const n = ETAPAS_FAB[atual + 1]; if (n) E[n[0]] = { ...(E[n[0]] || {}), status: 'andamento', iniciadaEm: nowIso() }; }, 'Produção: ' + prox[1] + ' concluída');
       const voltar = async () => { const m = await pedirMotivo('Reabrir ' + ant[1]); if (!m) return; salvarEt(E => { E[ant[0]] = { ...(E[ant[0]] || {}), status: 'andamento' }; if (prox) E[prox[0]] = { ...(E[prox[0]] || {}), status: 'pendente' }; }, 'Produção: ' + ant[1] + ' reaberta', m); };
       return html`<div class="card stack"><b>🏭 Esteira da produção</b>
         ${(() => { const iniP = ETAPAS_FAB.map(([k]) => et[k]?.iniciadaEm).filter(Boolean).sort()[0];
@@ -4221,12 +4223,13 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const pedAb = peds.filter(pedAberto);
   const parcAb = parc.filter(p => p.st !== 'recebido');
   const etAb = ETAPAS_FAB.filter(([k]) => et[k] && et[k].status !== 'pronto' && et[k].onde !== 'nao');
-  const falta = [
-    ...parcAb.map(p => p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2]),
-    ...faltaCompra.map(i => '🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : '')),
-    ...pedAb.map(p => '🪵 Peça extra: ' + resumoPed(p)),
-    ...pend.map(p => '⚠️ Pendência: ' + String(p.texto || '').slice(0, 90)),
+  const faltaI = [
+    ...parcAb.map(p => [p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2], 'compras']),
+    ...faltaCompra.map(i => ['🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : ''), 'compras']),
+    ...pedAb.map(p => ['🪵 Peça extra: ' + resumoPed(p), 'andamento']),
+    ...pend.map(p => ['⚠️ Pendência: ' + String(p.texto || '').slice(0, 90), 'diario']),
   ];
+  const falta = faltaI.map(x => x[0]);
   const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
@@ -4248,14 +4251,14 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
-      ${modoV === 'andamento' && html`<${AndamentoFicha} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
+      ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${falta} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
-      ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${falta.map((f, i) => html`<div key=${i}>• ${f}</div>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
+      ${(fin || falta.length > 0) && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'} — a OS só conclui depois de resolver</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
 
