@@ -47,6 +47,7 @@ const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
+  ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
   ['177', ['📋 Lista de OSs por cliente: a barra de etapas começa zerada e só acende quando a esteira avança; a OS não pula mais de lugar quando você toca ▶ (fica na mesma posição, por número).']],
   ['176', ['💾 Corrigido: ao salvar a OS, os acabamentos, puxadores, ferragens e demais especificações de cada conjunto de móveis estavam sendo perdidos. Agora tudo fica salvo.']],
   ['175', ['⏸ Parar esteira: na aba Andamento da OS, botão "Parar esteira" pede o motivo; a OS mostra o aviso vermelho com quanto tempo está parada e o botão ▶ Retomar. Fica o histórico das paradas, e a OS aparece como ⏸ Parada na visão por cliente.', '💡 Sugestões e anotações: marque pessoas da equipe (@nome) e anexe fotos 📷. Novo filtro 🔔 Para mim.', '✕ Corrigido: o botão de fechar o aviso do microfone agora funciona.']],
@@ -274,7 +275,7 @@ const STATUS_OS = [
   { v: 'montagem', t: '5. Montagem', c: 'chip chip-roxo' },
   { v: 'concluida', t: '6. Concluída', c: 'chip chip-ok' },
 ];
-const osConcluida = (o) => o.status === 'concluida' || (STATUS_OS.length > 1 && o.status === STATUS_OS[STATUS_OS.length - 1].v);
+const osConcluida = (o) => STATUS_OS.length > 1 ? o.status === STATUS_OS[STATUS_OS.length - 1].v : o.status === 'concluida';
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
   ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
