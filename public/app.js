@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['193', ['🎯 Ordens a terceiros: se o móvel marcado não fala nada da categoria (ex.: espelho), não aparece nada dele — só entra o que está especificado para aquela categoria.']],
   ['192', ['📍 Endereço de montagem obrigatório no final do preenchimento da OS (campo em vermelho até preencher). Sem ele a OS não pode ser revisada nem avançar para produção.']],
   ['191', ['🎯 Ordens a terceiros: as especificações trazem só o que é da categoria escolhida e dos móveis marcados (ex.: Vidros não puxa mais couro, puxador ou box).', '📷 Em todas as fotos dá para escolher Câmera ou Galeria.']],
   ['190', ['🧾 Botão renomeado para "Ordens a terceiros". Agora você marca para quais móveis da OS é a ordem (A, B, C…) e as especificações se ajustam; as fotos já vêm ligadas ao móvel quando só um está marcado.']],
@@ -4195,7 +4196,7 @@ function specsParceiro(o, tipo, sel) {
       if (temSel && !sel.has(ai + '-' + mi)) return;
       const campos = [m.observacoes, m.puxador, m.iluminacao, [m.mdfCaixa?.fabricante, m.mdfCaixa?.cor].filter(Boolean).join(' '), [m.mdfFrente?.fabricante, m.mdfFrente?.cor].filter(Boolean).join(' ')].flatMap(pedacos);
       const rel = re ? campos.filter(x => re.test(x)) : campos;
-      if (!rel.length && re && !temSel) return;
+      if (!rel.length && re) return;
       const med = [m.largura, m.altura, m.profundidade].some(Boolean) ? ' — ' + [m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ') + ' mm' : '';
       linhas.push('• ' + String.fromCharCode(65 + mi) + ') ' + nomePadrao(m.nome) + (m.quantidade > 1 ? ' (' + m.quantidade + 'x)' : '') + med);
       rel.forEach(x => linhas.push('     ' + x));
@@ -4205,7 +4206,7 @@ function specsParceiro(o, tipo, sel) {
     if (temSel && !linhas.some(l => l.startsWith('•'))) return;
     if (linhas.length) { L.push('▸ ' + (nomePadrao(a.nome) || 'Conjunto')); L.push(...linhas); }
   });
-  return L.length ? L.join('\n') : '(Nada na OS relacionado a este tipo — descreva aqui o que vai para o parceiro.)';
+  return L.length ? L.join('\n') : '';
 }
 function OrdemParceiro({ sessao, o, fechar, toast }) {
   const [tipo, setTipo] = useState('pintura');
@@ -4240,7 +4241,7 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
       <div class="field" style=${{ flex: 2, minWidth: '180px' }}><span class="lbl">Parceiro</span><input class="inp" list="op-parc" placeholder="Escolha ou digite" value=${parc} onInput=${e => setParc(e.target.value)} /><datalist id="op-parc">${lista.map(n => html`<option key=${n} value=${n} />`)}</datalist></div>
       <div class="field" style=${{ flex: 1, minWidth: '140px' }}><span class="lbl">Prazo</span><input class="inp" type="date" value=${prazo} onInput=${e => setPrazo(e.target.value)} /></div></div>
     <div class="field"><span class="lbl">Para quais móveis da OS? <small class="dim">(nenhum marcado = todos os relacionados)</small></span><div class="row" style=${{ gap: '5px', flexWrap: 'wrap' }}>${movChips.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (selM.has(x.k) ? ' on' : '')} onClick=${() => togM(x.k)}>${selM.has(x.k) ? '✓ ' : ''}${x.t}</button>`)}</div></div>
-    <div class="field"><span class="lbl">Especificações (puxadas da OS — pode editar)</span><textarea class="inp" rows="9" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></div>
+    <div class="field"><span class="lbl">Especificações (puxadas da OS — pode editar)</span><textarea class="inp" rows="9" placeholder="Nada na OS especificado para esta categoria nos móveis marcados. Descreva aqui o que vai para o parceiro." value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></div>
     <div class="row" style=${{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>${tipo === 'serralheria' && html`<label class=${'btn btn-sm' + (pdf ? ' btn-verde' : ' op-falta')}>📐 ${pdf ? pdf.nome : 'PDF do desenho técnico (obrigatório)'}<input type="file" accept="application/pdf" style=${{ display: 'none' }} onChange=${e => { lerPdf(e.target.files[0]); e.target.value = ''; }} /></label>`}
       <${FotoBtns} onFiles=${addFotos} rotulo="Fotos (escolha o móvel de cada uma):" />
     </div>
