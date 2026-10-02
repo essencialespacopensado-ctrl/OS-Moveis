@@ -1701,3 +1701,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .masc:not(.anda) .masc-braco.e{animation:mascBracoIdle 1.2s ease-in-out infinite alternate}
 @keyframes mascPernaIdle{from{transform:rotate(8deg)}to{transform:rotate(-8deg)}}
 @keyframes mascBracoIdle{from{transform:rotate(25deg)}to{transform:rotate(-10deg)}}
+.masc.bal-dir .masc-bal{right:auto;left:-6px}
+.masc.bal-dir .masc-bal::after{right:auto;left:30px}

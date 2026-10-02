@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['202', ['👷 A fala do ajudante não fica mais atrás do menu lateral: ele aparece por cima de tudo e o balão abre para o lado que tem espaço.']],
   ['201', ['👷 Ajudante: dá para dar nome a ele e colocar uma foto, que vira o rosto (caricatura, cabeção). Ele mexe braços e pernas o tempo todo, as falas aparecem por cima das janelas e tem o botão 🏠 Voltar para casa.']],
   ['200', ['👷 Novo ajudante: o Zé, um bonequinho animado que anda pela tela. Toque nele: "Me mostra esta tela" (ele vai até cada parte e explica) ou "Onde fica…?" (ele anda até o lugar no menu e destaca). Dá para esconder.', '↙ Botões ❓, 🆕 e ← Voltar de volta bem no canto esquerdo.']],
   ['199', ['🎨 Menu lateral com as cores do app (escuro com destaque âmbar).', '✅ Clientes → "Concluir clientes em massa": marque os clientes e conclua todas as OSs em aberto deles de uma vez (pede senha e motivo).']],
@@ -6695,8 +6696,8 @@ function Mascote() {
   useEffect(() => { window.__mascote = { mostrar: (sel, t) => mostrar(typeof sel === 'string' ? document.querySelector(sel) : sel, t), onde };
     const h = () => setPos(p => ({ x: Math.min(p.x, window.innerWidth - 90), y: Math.min(p.y, window.innerHeight - 150) })); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
-  if (oculto) return html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`;
-  return html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+  if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
+  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
@@ -6714,7 +6715,7 @@ function Mascote() {
       <div class="masc-perna e"></div><div class="masc-perna d"></div>
       <div class="masc-sombra"></div>
     </div>
-  </div>`;
+  </div>`, document.body);
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
