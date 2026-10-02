@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['179', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS e mostrava 100%. As etapas estavam com códigos internos trocados — o administrador vê um aviso no Início com o botão 🔧 Corrigir (nomes e ordem não mudam).', '🧱 Tamponamento e prateleiras escolhidos em cada conjunto agora ficam salvos e aparecem na folha de impressão.', '🙈 No Editar OS, o móvel não repete mais o nome do ambiente que já aparece no topo.']],
   ['177', ['📋 Lista de OSs por cliente: a barra de etapas começa zerada e só acende quando a esteira avança; a OS não pula mais de lugar quando você toca ▶ (fica na mesma posição, por número).']],
   ['176', ['💾 Corrigido: ao salvar a OS, os acabamentos, puxadores, ferragens e demais especificações de cada conjunto de móveis estavam sendo perdidos. Agora tudo fica salvo.']],
   ['175', ['⏸ Parar esteira: na aba Andamento da OS, botão "Parar esteira" pede o motivo; a OS mostra o aviso vermelho com quanto tempo está parada e o botão ▶ Retomar. Fica o histórico das paradas, e a OS aparece como ⏸ Parada na visão por cliente.', '💡 Sugestões e anotações: marque pessoas da equipe (@nome) e anexe fotos 📷. Novo filtro 🔔 Para mim.', '✕ Corrigido: o botão de fechar o aviso do microfone agora funciona.']],
@@ -275,7 +276,7 @@ const STATUS_OS = [
   { v: 'montagem', t: '5. Montagem', c: 'chip chip-roxo' },
   { v: 'concluida', t: '6. Concluída', c: 'chip chip-ok' },
 ];
-const osConcluida = (o) => STATUS_OS.length > 1 ? o.status === STATUS_OS[STATUS_OS.length - 1].v : o.status === 'concluida';
+const osConcluida = (o) => STATUS_OS.length > 1 ? o?.status === STATUS_OS[STATUS_OS.length - 1].v : o?.status === 'concluida';
 /* ---------- Grupos de acesso (quem vê o quê) ---------- */
 const TELAS_ACESSO = [
   ['Geral', [['inicio', 'Início'], ['quadro', 'Quadro geral'], ['importar', 'Importar (IA)'], ['amostras', 'Amostras']]],
@@ -1617,7 +1618,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
 
   // Métricas
   const agora = Date.now(), dia = 86400000;
-  const ativas = lista.filter(o => stOf(o) !== 'concluida');
+  const ativas = lista.filter(o => !osConcluida(o));
   const prox7 = ativas.filter(o => { const d = lerPrazo(o.prazoEntrega); return d && d.getTime() >= agora && d.getTime() - agora <= 7 * dia; }).length;
   const hoje = new Date();
   const noMes = ativas.filter(o => { const d = lerPrazo(o.prazoEntrega); return d && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear(); }).length;
@@ -1720,7 +1721,7 @@ function TelaOS({ sessao, catalogo, toast, osAberta, setOsAberta }) {
           try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { status: prox.v, statusHist: [...(o.statusHist || []), { st: prox.v, em: nowIso(), quem: sessao.nome }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); toast(numOS(o) + ' → ' + prox.t.replace(/^\d\. /, ''), 'ok'); }
           catch (e) { toast(e.message, 'erro'); }
         };
-        const grupos = Object.values(g).map(x => ({ ...x, ini: x.oss.filter(o => stOf(o) !== 'elaboracao' && stOf(o) !== 'concluida').length }))
+        const grupos = Object.values(g).map(x => ({ ...x, ini: x.oss.filter(o => stOf(o) !== 'elaboracao' && !osConcluida(o)).length }))
           .sort((a, b) => (b.ini > 0) - (a.ini > 0) || a.nome.localeCompare(b.nome));
         const voltar = async (o, alvo, motivo) => {
           try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { status: alvo.v, statusHist: [...(o.statusHist || []), { st: alvo.v, em: nowIso(), quem: sessao.nome }], reaberturas: [...(o.reaberturas || []), { oque: 'Status: ' + (STATUS_OS.find(x => x.v === stOf(o)) || {}).t + ' → ' + alvo.t, motivo, quem: sessao.nome, quando: nowIso() }], atualizadoEm: nowIso(), atualizadoPor: sessao.nome }); toast(numOS(o) + ' voltou para ' + alvo.t.replace(/^\d+\. /, ''), 'ok'); }
@@ -2680,7 +2681,7 @@ function TelaPedidos({ sessao, toast, abrirOS }) {
 function temposOS(o) {
   const ini = o.contrato?.dataAssinatura && lerPrazo(o.contrato.dataAssinatura) ? lerPrazo(o.contrato.dataAssinatura).getTime() : Date.parse(o.criadoEm || '') || null;
   if (!ini) return null;
-  const fim = o.status === 'concluida' ? (Date.parse((o.statusHist || []).slice().reverse().find(h => h.st === 'concluida')?.em || '') || Date.parse(o.atualizadoEm || '') || Date.now()) : Date.now();
+  const fim = osConcluida(o) ? (Date.parse((o.statusHist || []).slice().reverse().find(h => h.st === 'concluida')?.em || '') || Date.parse(o.atualizadoEm || '') || Date.now()) : Date.now();
   const hist = (o.statusHist || []).filter(h => h.em).map(h => ({ st: h.st, t: Date.parse(h.em) })).sort((a, b) => a.t - b.t);
   const seg = [];
   let atual = 'elaboracao', t0 = ini;
@@ -3036,7 +3037,7 @@ function AgoraAndamento({ sessao, lista, abrirOS }) {
   const hoje = isoD(new Date());
   const ativ = [];
   tar.filter(t => t.status !== 'concluida' && t.inicio <= hoje && t.fim >= hoje).forEach(t => ativ.push({ osId: t.osId, quem: t.pessoa, oque: t.texto || (GRADES.find(g => g[0] === t.grade) || [])[1] || 'Tarefa', cor: corGrade(t.grade), ic: '👷', ate: t.fim, interno: true }));
-  (lista || []).filter(o => o.status !== 'concluida').forEach(o => {
+  (lista || []).filter(o => !osConcluida(o)).forEach(o => {
     parceirosDaOS(o).filter(p => p.st === 'pedido').forEach(p => ativ.push({ osId: o.id, quem: p.parceiro || p.fornecedor || p.nome || p.t, oque: p.t, cor: '#7c3aed', ic: p.ic, ate: p.previsao || p.prazo || '' }));
     const et = o.execucao?.etapas || {}; ETAPAS_FAB.forEach(([k, t]) => { if (et[k]?.status === 'andamento' && !ativ.some(a => a.osId === o.id && norm(a.oque).includes(norm(t).split(' ')[0]))) ativ.push({ osId: o.id, quem: et[k].onde === 'terceirizada' ? 'Terceirizado' : 'Fábrica', oque: t, cor: '#d97706', ic: '🏭', ate: '' }); });
   });
@@ -3059,7 +3060,7 @@ function AgoraAndamento({ sessao, lista, abrirOS }) {
 
 /* % de conclusão da obra: etapa da OS (40%) + produção na fábrica (40%) + parceiros recebidos (20%) */
 function pctObra(o) {
-  if (o.status === 'concluida') return 100;
+  if (osConcluida(o)) return 100;
   const i = Math.max(0, STATUS_OS.findIndex(x => x.v === o.status)), nS = Math.max(1, STATUS_OS.length - 1);
   const et = o.execucao?.etapas || {}; const fab = ETAPAS_FAB.reduce((n, [k]) => n + (et[k]?.status === 'pronto' ? 1 : et[k]?.status === 'andamento' ? 0.5 : 0), 0) / ETAPAS_FAB.length;
   const pr = parceirosDaOS(o);
@@ -3075,7 +3076,7 @@ function PrevisaoEntregas({ sessao, lista, abrirOS }) {
   useEffect(() => { const a = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'tarefas'), s => setTar(s.docs.map(d => d.data())), () => {});
     const b = F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'compras'), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setComp(m); }, () => {}); return () => { a(); b(); }; }, []);
   const hoje = isoD(new Date());
-  const prev = (lista || []).filter(o => o.status !== 'concluida').map(o => {
+  const prev = (lista || []).filter(o => !osConcluida(o)).map(o => {
     const ts = tar.filter(t => t.osId === o.id); const abertas = ts.filter(t => t.status !== 'concluida');
     const fimCron = abertas.map(t => t.fim).sort().pop() || '';
     const itens = (comp[o.id]?.itens || []).filter(i => !i.recebido && i.origem !== 'estoque');
@@ -3143,7 +3144,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
     const todas = ETAPAS_FAB.every(([x]) => etapas[x]?.status === 'pronto');
     const semMontagem = ETAPAS_FAB.filter(([x]) => x !== 'montagem').every(([x]) => etapas[x]?.status === 'pronto');
     const status = todas ? 'concluida' : etapas.montagem?.status === 'andamento' ? 'montagem' : semMontagem ? 'liberacao' : 'producao';
-    salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: o.status === 'concluida' ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
+    salvar(o, { execucao: { ...(o.execucao || {}), etapas }, status: osConcluida(o) ? o.status : status }, '✓ ' + ETAPAS_FAB[i][1] + ' concluída');
   };
   const reab = (o, oque, motivo) => [...(o.reaberturas || []), { oque, motivo, quem: sessao.nome, quando: nowIso() }];
   const voltarEtapa = (o, k) => {
@@ -3160,7 +3161,7 @@ function QuadroGeral({ sessao, abrirOS, toast, catalogo }) {
       await salvar(o, { parceiros: { ...(o.parceiros || {}), [p.k]: { ...atual, st: v, hist: [...(atual.hist || []), { st: v, quem: sessao.nome, em: nowIso(), motivo }] } }, reaberturas: reab(o, p.t + ': ' + infoSt(atual.st || 'orcar')[2] + ' → ' + infoSt(v)[2], motivo) }, 'Situação voltada');
     } });
   };
-  const ativas = (lista || []).filter(o => o.status !== 'concluida');
+  const ativas = (lista || []).filter(o => !osConcluida(o));
   const cards = ativas.map(o => {
     const parc = parceirosDaOS(o);
     const et = o.execucao?.etapas || {};
@@ -3359,7 +3360,7 @@ const linhaOS = (o) => `OS:${numOS(o)} – ${o.cliente?.nome || ''}${(o.ambiente
 function eventosOS(lista, dia) {
   const ev = [];
   for (const o of lista || []) {
-    if (mesmoDia(lerPrazo(o.prazoEntrega), dia) && o.status !== 'concluida') ev.push({ o, t: 'entrega', txt: '🚚 Entrega' });
+    if (mesmoDia(lerPrazo(o.prazoEntrega), dia) && !osConcluida(o)) ev.push({ o, t: 'entrega', txt: '🚚 Entrega' });
     const et = o.execucao?.etapas || {};
     for (const [k, t] of ETAPAS_FAB) if (et[k]?.prazo && mesmoDia(lerPrazo(et[k].prazo), dia) && et[k].status !== 'pronto') ev.push({ o, t: k, txt: t });
   }
@@ -3495,7 +3496,7 @@ function NovaTarefa({ sessao, lista, pessoa: pessoa0, grade: grade0, inicio: ini
   const [ini, setIni] = useState(inicio);
   const [fim, setFim] = useState(inicio);
   const [texto, setTexto] = useState('');
-  const res = (lista || []).filter(o => o.status !== 'concluida' && (!q || norm(linhaOS(o) + ' ' + (o.numeroAntigo || '')).includes(norm(q)))).slice(0, 30);
+  const res = (lista || []).filter(o => !osConcluida(o) && (!q || norm(linhaOS(o) + ' ' + (o.numeroAntigo || '')).includes(norm(q)))).slice(0, 30);
   const salvar = async () => {
     if (!pessoa.trim()) return avisar('Escolha quem vai executar.');
     if (!osSel && !texto.trim()) return avisar('Escolha a OS ou escreva a tarefa.');
@@ -3931,12 +3932,12 @@ function TelaCronograma({ sessao, abrirOS, toast }) {
   const ini = new Date(hoje); ini.setDate(ini.getDate() - ((ini.getDay() + 6) % 7));
   const dias = semanas * 7;
   const pos = (d) => d ? Math.max(0, Math.min(100, (d - ini) / 86400000 / dias * 100)) : null;
-  const ativas = (lista || []).filter(o => o.status !== 'concluida');
+  const ativas = (lista || []).filter(o => !osConcluida(o));
   const cores = { corte: '#6B7280', fita: '#A16207', cavas: '#0E7490', pintura: '#BE185D', tapecaria: '#7C3AED', montagem: '#15803D' };
   const entregas = (lista || []).filter(o => lerPrazo(o.prazoEntrega)).sort((a, b) => lerPrazo(a.prazoEntrega) - lerPrazo(b.prazoEntrega));
   const semanaDe = (d) => { const s = new Date(d); s.setDate(s.getDate() - ((s.getDay() + 6) % 7)); return s; };
   const grupos = {};
-  entregas.forEach(o => { const d = lerPrazo(o.prazoEntrega); const k = d < hoje && o.status !== 'concluida' ? 'Atrasadas' : 'Semana de ' + semanaDe(d).toLocaleDateString('pt-BR'); (grupos[k] = grupos[k] || []).push(o); });
+  entregas.forEach(o => { const d = lerPrazo(o.prazoEntrega); const k = d < hoje && !osConcluida(o) ? 'Atrasadas' : 'Semana de ' + semanaDe(d).toLocaleDateString('pt-BR'); (grupos[k] = grupos[k] || []).push(o); });
   return html`
     <div class="fade-up stack">
       <div class="row" style=${{ justifyContent: 'space-between' }}>
@@ -4194,7 +4195,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => setTodas(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}), []);
   useEffect(() => { if (o === null) fechar(); }, [o]);
   if (!o) return null;
-  const fin = o.status === 'concluida';
+  const fin = osConcluida(o);
   const editarMot = async () => {
     const revisada = o.revisao?.em && (!o.atualizadoEm || o.revisao.em >= o.atualizadoEm);
     if (!revisada) return editar(osId);
@@ -4812,7 +4813,7 @@ function AmbienteOS({ amb, ai, alterar, catalogo, sessao, padraoGeral }) {
       ${!fechado && html`
         <div class="amb-body">
           ${!(amb.moveis || []).length && html`<div class="movel-card"><div class="movel-top"><input class="inp" placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onBlur=${e => e.target.value.trim() && up(a => { a.moveis = [novoMovel(nomePadrao(e.target.value))]; })} /></div></div>`}
-          ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
+          ${(amb.moveis || []).map((m, mi) => html`<${MovelOS} key=${m.id || mi} m=${m} ambNome=${amb.nome} upMovel=${(fn) => up(a => fn(a.moveis[mi]))} remover=${() => up(a => { a.moveis.splice(mi, 1); })} duplicar=${() => up(a => { const c = clone(a.moveis[mi]); c.id = rand(8); c.nome += ' (cópia)'; a.moveis.splice(mi + 1, 0, c); })} catalogo=${catalogo} sessao=${sessao} />`)}
           <div class="amb-esp">
             ${esp && html`<div class="stack" style=${{ marginTop: '8px' }}>
               <${EspecificacoesOS} P=${amb.padrao || padraoGeral || {}} setP=${fn => up(a => { a.padrao = a.padrao || JSON.parse(JSON.stringify(padraoGeral || {})); fn(a.padrao); })} catalogo=${catalogo} sessao=${sessao} /></div>`}</div>
@@ -4839,7 +4840,7 @@ function MDFCampos({ label, valor, onChange, catalogo, sessao, rev }) {
     </div>`;
 }
 
-function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
+function MovelOS({ m, ambNome, upMovel, remover, duplicar, catalogo, sessao }) {
   const [confirmar, setConfirmar] = useState(false);
   const rev = new Set((m.revisar || []).map(norm));
   const r = (k) => [...rev].some(x => x.includes(norm(k)));
@@ -4851,7 +4852,7 @@ function MovelOS({ m, upMovel, remover, duplicar, catalogo, sessao }) {
   return html`
     <div class="movel-card">
       <div class="movel-top">
-        <input class="inp" value=${m.nome} placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
+        <input class="inp" value=${ambNome && norm(m.nome) === norm(ambNome) ? '' : m.nome} placeholder="Nome do móvel (ex: Balcão, Guarda-roupa…)" onInput=${campo('nome')} onBlur=${e => upMovel(x => { x.nome = nomePadrao(e.target.value); })} />
         <input class="inp inp-sm" style=${{ width: '64px' }} type="number" min="1" value=${m.quantidade} title="Quantidade" onInput=${e => upMovel(x => { x.quantidade = Number(e.target.value) || 1; })} />
         <button class="btn btn-sm btn-ghost" onClick=${duplicar} title="Duplicar">⧉</button>
         ${confirmar
@@ -4921,7 +4922,7 @@ function gruposEspec(P) {
   P = P || {}; const F = P.ferragens || {};
   const fl = (k) => Object.values(F[k] || {}).filter(Boolean).join(' · ');
   return [
-    ['🎨', 'Acabamentos', '#d97706', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Lâminas', (P.laminas || []).join('; ')], ['Outras', P.outras]]],
+    ['🎨', 'Acabamentos', '#d97706', [['Interno', textoAcab(P.acab?.interno)], ['Externo', textoAcab(P.acab?.externo)], ['Lâminas', (P.laminas || []).join('; ')], ['Tamponamento', P.tamponamento?.tipo && P.tamponamento.tipo !== 'sem' ? (P.tamponamento.tipo === 'aparente' ? 'Aparente' : 'Não aparente') + (P.tamponamento.espessura ? ' · ' + P.tamponamento.espessura + ' mm' : '') : ''], ['Prateleiras', P.prateleira ? P.prateleira + ' mm' : ''], ['Outras', P.outras]]],
     ['🚪', 'Portas', '#7c3aed', [['Modelo', P.portas?.modelo], ['Usinagem', P.portas?.obs]]],
     ['✋', 'Puxadores & perfis', '#0d9488', [['Itens', [...(P.puxadores || []), ...(P.perfis || [])].join('; ')]]],
     ['💡', 'Iluminação', '#ca8a04', [['LED', P.led?.ativo !== false ? [P.led?.fita, P.led?.temp, P.led?.perfil, P.led?.fonte, P.led?.locais].filter(Boolean).join(' · ') : '']]],
@@ -6161,7 +6162,7 @@ function lerPrazo(t) {
   const d = new Date(a, Number(m[2]) - 1, Number(m[1]), 23, 59);
   return isNaN(d) ? null : d;
 }
-const atrasada = (o) => o.status !== 'concluida' && (lerPrazo(o.prazoEntrega)?.getTime() || Infinity) < Date.now();
+const atrasada = (o) => !osConcluida(o) && (lerPrazo(o.prazoEntrega)?.getTime() || Infinity) < Date.now();
 const CATEG_AMB = [
   { t: 'Cozinha', k: ['cozinha', 'gourmet', 'copa', 'lavanderia', 'area de servico'] },
   { t: 'Dormitório', k: ['dormitorio', 'quarto', 'suite', 'closet', 'roupeiro'] },
@@ -6253,7 +6254,7 @@ function acharOSFala(lista, q) {
     if (dig.length >= 2 && (cod.replace(/\D/g, '').endsWith(dig.slice(-3)) || String(o.numeroAntigo || '') === dig)) sc += 5;
     const cli = norm(o.cliente?.nome || ''), amb = norm(((o.ambientes || []).map(a => a.nome).join(' ')) + ' ' + (o.ambienteResumo || ''));
     toks.forEach(w => { if (/^\d+$/.test(w)) return; if (w.length < 3) return; if (cli.split(/\s+/).some(x => x.startsWith(w) || (w.length > 4 && lev(x, w) <= 1))) sc += 2; if (amb.split(/\s+/).some(x => x.startsWith(w) || (w.length > 4 && lev(x, w) <= 1))) sc += 2.5; });
-    if (o.status !== 'concluida') sc += 0.1;
+    if (!osConcluida(o)) sc += 0.1;
     if (sc > bs) { bs = sc; best = o; } });
   return bs >= 2 ? best : null;
 }
@@ -6312,6 +6313,28 @@ function BuscaGlobal({ sessao, irPara }) {
       ${q && html`<button class="bg-x" onClick=${() => { setQ(''); setAberta(false); setExp(false); }}>✕</button>`}
     </div>
   </div>`;
+}
+/* Etapas com códigos trocados (ex.: "Projeto" gravado como concluída) quebram % e avanços. Corrige com 1 toque. */
+const SEMANT = ['elaboracao', 'projetos', 'producao', 'liberacao', 'montagem', 'concluida'];
+function etapasTrocadas(et) {
+  if (!Array.isArray(et) || et.length < 2) return null;
+  const novoV = (x, i) => i === 0 ? 'elaboracao' : i === et.length - 1 ? 'concluida' : /projet/i.test(x.nome) ? 'projetos' : /produ/i.test(x.nome) ? 'producao' : /libera/i.test(x.nome) ? 'liberacao' : /montag/i.test(x.nome) ? 'montagem' : (SEMANT.includes(x.v) ? 'et_' + rand(5) : x.v);
+  const usados = new Set(); const map = {}; let troca = false;
+  et.forEach((x, i) => { let v = novoV(x, i); if (usados.has(v)) v = 'et_' + rand(5); usados.add(v); map[x.v] = v; if (v !== x.v) troca = true; });
+  return troca ? map : null;
+}
+function AvisoEtapas({ sessao, toast }) {
+  const [rodando, setRodando] = useState(false);
+  const map = etapasTrocadas(window.__etapasCfg);
+  if (!map || sessao.papel !== 'admin') return null;
+  const corrigir = async () => { setRodando(true);
+    try { const M = F().fsMod; const novo = window.__etapasCfg.map(x => ({ ...x, v: map[x.v] || x.v }));
+      const oss = (await M.getDocs(col('empresas', sessao.empresaId, 'os'))).docs;
+      for (let i = 0; i < oss.length; i += 400) { const b = M.writeBatch(F().db); oss.slice(i, i + 400).forEach(d => { const o = d.data(); if (map[o.status] && map[o.status] !== o.status) b.update(d.ref, { status: map[o.status], statusHist: (o.statusHist || []).map(h => ({ ...h, st: map[h.st] || h.st })) }); }); await b.commit(); }
+      await M.updateDoc(docRef('empresas', sessao.empresaId), { etapasOS: novo }); toast('Etapas corrigidas.', 'ok');
+    } catch (e) { toast('Não corrigiu: ' + e.message, 'erro'); }
+    setRodando(false); };
+  return html`<div class="warn-box row" style=${{ justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}><span>⚠ As etapas da OS estão com códigos internos trocados (por isso aparece 100% ou a OS some ao avançar). Toque em Corrigir — os nomes e a ordem das etapas não mudam.</span><button class="btn btn-primary btn-sm" disabled=${rodando} onClick=${corrigir}>${rodando ? 'Corrigindo…' : '🔧 Corrigir'}</button></div>`;
 }
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
@@ -6568,7 +6591,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
@@ -6661,6 +6684,7 @@ function Principal({ sessao, toast }) {
       ${(() => { const [k, t, cor, vs] = secaoDe(aba); const subs = vs.map(v => abas.find(a => a.v === v)).filter(Boolean); return subs.length > 1 ? html`<div class="subabas" style=${{ '--sc': cor }}>${subs.map(a => html`<button key=${a.v} class=${aba === a.v ? 'on' : ''} onClick=${() => irPara(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>` : null; })()}
       ${novaVersao && html`<button class="faixa-versao" onClick=${recarregarApp}>🔄 <b>Nova atualização disponível.</b> Toque aqui para atualizar.</button>`}
       <div class="shell" style=${{ paddingTop: '20px' }}>
+        <${AvisoEtapas} sessao=${sessao} toast=${toast} />
         ${statusIA && !statusIA.ia && html`<div class="warn-box" style=${{ marginBottom: '12px' }}>A IA ainda não está ligada no servidor. Dá pra usar tudo à mão.</div>`}
         ${aba === 'inicio' && html`<${CartaoNovidades} irPara=${irPara} />`}
         ${aba === 'novidades' && html`<${TelaNovidades} />`}
