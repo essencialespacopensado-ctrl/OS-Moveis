@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['197', ['🧭 Novo visual: menu lateral azul à esquerda (como o Conta Azul) com as seções Geral, Clientes, Produção, Compras, Equipe e Financeiro — toque para abrir as telas de cada uma. No celular o menu abre pelo ☰.']],
   ['196', ['💾 No final do preenchimento da OS: salvar em 📄 PDF, 📝 Word ou 📊 Excel (Excel com abas OS, Móveis e Especificações).']],
   ['195', ['🔑 Palavras-chave (vidro, pintura, serralheria…) aparecem destacadas só 1 vez em cada móvel e nunca nos títulos.']],
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
@@ -6619,6 +6620,26 @@ function exportarOS(os, tipo, empresa) {
     ${os.observacoesGerais ? `<h2>Observações gerais</h2><p>${e(os.observacoesGerais)}</p>` : ''}</body></html>`;
   baixar(base + '.doc', new Blob(['﻿' + doc], { type: 'application/msword' }));
 }
+/* ---------- Menu lateral (estilo Conta Azul) ---------- */
+function MenuLateral({ abas, aba, irPara, logo, empresa, aberto, setAberto }) {
+  const [exp, setExp] = useState(() => secaoDe(aba)[0]);
+  useEffect(() => { setExp(secaoDe(aba)[0]); }, [aba]);
+  const secs = SECOES.map(([k, t, cor, vs]) => [k, t, cor, vs.map(v => abas.find(a => a.v === v)).filter(Boolean)]).filter(x => x[3].length);
+  const ir = (v) => { irPara(v); setAberto(false); };
+  return html`${aberto && html`<div class="side-fundo" onClick=${() => setAberto(false)}></div>`}
+  <aside class=${'side' + (aberto ? ' aberto' : '')}>
+    <div class="side-brand">${logo ? html`<img src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}<div><b>Gestão Pró</b><small>${empresa}</small></div></div>
+    <nav class="side-nav">
+      ${secs.map(([k, t, cor, subs]) => { const ativo = secaoDe(aba)[0] === k; const ic = t.split(' ')[0], nome = t.replace(/^\S+\s/, '');
+        if (subs.length === 1) return html`<button key=${k} class=${'side-it' + (ativo ? ' on' : '')} onClick=${() => ir(subs[0].v)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span></button>`;
+        const ab = exp === k;
+        return html`<div key=${k} class=${'side-grp' + (ab ? ' ab' : '')}>
+          <button class=${'side-it' + (ativo && !ab ? ' on' : '')} onClick=${() => setExp(ab ? '' : k)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span><span class="side-chev">›</span></button>
+          ${ab && html`<div class="side-subs">${subs.map((a, i) => html`<button key=${a.v} style=${{ animationDelay: i * 35 + 'ms' }} class=${'side-sub' + (aba === a.v ? ' on' : '')} onClick=${() => ir(a.v)}><span>${a.i}</span>${a.t}</button>`)}</div>`}
+        </div>`; })}
+    </nav>
+  </aside>`;
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
   const [vozAuto, setVozAuto] = useState(false);
@@ -6930,6 +6951,7 @@ function Principal({ sessao, toast }) {
     { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
     { v: 'config', t: 'Configurações', i: '⚙' },
   ].filter(a => pode(sessao, a.v)).concat([{ v: 'sugestoes', t: 'Sugestões & anotações', i: '💡' }, { v: 'manual', t: 'Mapa / Manual', i: '🧠' }, { v: 'novidades', t: 'Novidades', i: '🆕' }]);
+  const [menuAb, setMenuAb] = useState(false);
   const vis = (v) => abas.some(a => a.v === v);
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
@@ -6938,9 +6960,11 @@ function Principal({ sessao, toast }) {
   const iniciais = (sessao.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return html`
-    <div>
+    <div class="com-side">
+      <${MenuLateral} abas=${abas} aba=${aba} irPara=${irPara} logo=${logo} empresa=${sessao.empresaNome} aberto=${menuAb} setAberto=${setMenuAb} />
       <header class="topo">
         <div class="topo-in">
+          <button class="side-burger" title="Menu" onClick=${() => setMenuAb(true)}>☰</button>
           <div class="brand-mini">
             ${logo ? html`<img class="brand-logo" src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}
             <div>
