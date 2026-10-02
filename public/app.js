@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['204', ['👷 Nome e foto do ajudante agora ficam em Configurações (administrador) e aparecem iguais em todos os aparelhos. No bonequinho ficam só: Me mostra esta tela, Fazer uma pergunta, Onde fica…? e Voltar para casa.', '✦ Saiu o botão "Peça qualquer coisa" — as perguntas agora são pelo bonequinho.']],
   ['203', ['🖥 As telas agora usam toda a largura do monitor e se ajustam sozinhas no celular e tablet.', '👣 O ajudante anda de lado, dando passinhos, e deixa pegadas pelo caminho. Quando está longe do canto aparece um 🏠 ao lado dele para voltar ao ponto de partida. O menu dele não fica mais cortado no topo da tela.']],
   ['202', ['👷 A fala do ajudante não fica mais atrás do menu lateral: ele aparece por cima de tudo e o balão abre para o lado que tem espaço.']],
   ['201', ['👷 Ajudante: dá para dar nome a ele e colocar uma foto, que vira o rosto (caricatura, cabeção). Ele mexe braços e pernas o tempo todo, as falas aparecem por cima das janelas e tem o botão 🏠 Voltar para casa.']],
@@ -6347,7 +6348,8 @@ function Assistente({ sessao, osAberta }) {
     ${chamada && !aberto && html`<button class=${'ch-mini ' + fase} onClick=${() => setAberto(true)} title="Chamada ativa — toque para ver">
       <i></i><span>${fase === 'pensando' ? '⏳' : fase === 'falando' ? '🔊' : '🎙'}</span>${ouvido && html`<em>${ouvido.slice(-40)}</em>`}
       <b onClick=${e => { e.stopPropagation(); desligar(); }} title="Encerrar">✕</b></button>`}
-    <button class=${'assist-fab' + (aberto ? ' on' : ' pisca')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
+    ${(window.__abrirAssist = () => setAberto(true), aberto) && html`<button class="assist-fab on" onClick=${() => setAberto(false)} aria-label="Fechar assistente">✕</button>`}
+    <button style=${{ display: 'none' }} class=${'assist-fab' + (aberto ? ' on' : ' pisca')} onClick=${() => setAberto(v => !v)} aria-label="Assistente de IA">
       ${aberto ? '✕' : html`<span>✦</span><em> Peça qualquer coisa</em>`}
     </button>
     ${aberto && html`
@@ -6676,9 +6678,10 @@ function Mascote() {
   const [fala, setFala] = useState(''), [andando, setAndando] = useState(false), [vira, setVira] = useState(false), [menu, setMenu] = useState(false), [q, setQ] = useState('');
   const [oculto, setOculto] = useState(() => { try { return localStorage.getItem('osm_mascote') === '0'; } catch { return false; } });
   const ler = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
-  const [nome, setNome] = useState(() => ler('osm_masc_nome', 'Zé')), [rosto, setRosto] = useState(() => ler('osm_masc_rosto', ''));
+  const [cfgV, setCfgV] = useState(0);
+  useEffect(() => { const h = () => setCfgV(v => v + 1); window.addEventListener('masc-cfg', h); return () => window.removeEventListener('masc-cfg', h); }, []);
+  const nome = (window.__mascCfg || {}).nome || 'Zé', rosto = (window.__mascCfg || {}).rosto || '';
   const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-  const trocarRosto = async (f) => { if (!f) return; try { const u = await imagemParaJpeg(f, 260); setRosto(u); gravar('osm_masc_rosto', u); setFala('Ficou bom? 😄'); } catch { setFala('Não consegui ler a foto.'); } };
   const casa = () => { setMenu(false); setFala(''); destacar(null); irPara(window.innerWidth - 120, window.innerHeight - 170); };
   const alvoRef = useRef(null), posRef = useRef(pos); posRef.current = pos;
   const destacar = (el) => { document.querySelectorAll('.masc-alvo').forEach(x => x.classList.remove('masc-alvo')); if (el) { el.classList.add('masc-alvo'); alvoRef.current = el; setTimeout(() => el.classList.remove('masc-alvo'), 4500); } };
@@ -6704,13 +6707,10 @@ function Mascote() {
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
+        <button class="btn btn-sm" onClick=${() => { setMenu(false); window.__abrirAssist && window.__abrirAssist(); }}>💬 Fazer uma pergunta</button>
         <form class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }} onSubmit=${e => { e.preventDefault(); setMenu(false); onde(q); setQ(''); }}><input class="inp inp-sm" placeholder="Onde fica…? (ex: compras)" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn btn-sm">Ir</button></form>
         <button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button>
-        <button class="btn btn-sm btn-ghost" onClick=${() => { setMenu(false); window.__irPara && window.__irPara('inicio'); }}>⌂ Ir para o Início</button>
-        <div class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Nome do ajudante" value=${nome} onInput=${e => { setNome(e.target.value); gravar('osm_masc_nome', e.target.value || 'Zé'); }} /></div>
-        <label class="btn btn-sm">📷 ${rosto ? 'Trocar' : 'Usar'} foto (vira caricatura)<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { trocarRosto(e.target.files[0]); e.target.value = ''; }} /></label>
-        ${rosto && html`<button class="btn btn-sm btn-ghost" onClick=${() => { setRosto(''); gravar('osm_masc_rosto', ''); }}>Tirar foto</button>`}
-        <button class="btn btn-sm btn-ghost" onClick=${() => { setOculto(true); try { localStorage.setItem('osm_mascote', '0'); } catch {} }}>🙈 Esconder</button></div>` : ''}</div>`}
+</div>` : ''}</div>`}
     ${longe && !andando && html`<button class="masc-casa" title="Voltar ao ponto de partida" onClick=${casa}>🏠</button>`}
     <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title=${nome + ', o ajudante'}>
       ${rosto ? html`<div class="masc-cab foto"><img src=${rosto} /><div class="masc-cap"></div></div>` : html`<div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>`}
@@ -6918,6 +6918,20 @@ function aplicarEtapas(cfg) {
   const fab = Array.isArray(cfg?.etapasFab) && cfg.etapasFab.length ? cfg.etapasFab.map(x => [x.k, x.nome, x.desc || '']) : FAB_PADRAO;
   ETAPAS_FAB.splice(0, ETAPAS_FAB.length, ...fab);
 }
+function MascoteCfg({ sessao, toast }) {
+  const c = window.__mascCfg || {};
+  const [nome, setNome] = useState(c.nome || 'Zé'), [rosto, setRosto] = useState(c.rosto || '');
+  const foto = async (f) => { if (!f) return; try { setRosto(await imagemParaJpeg(f, 260)); } catch { toast('Não consegui ler a foto.', 'erro'); } };
+  const salvar = async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { mascoteNome: nome.trim() || 'Zé', mascoteRosto: rosto }); toast('Ajudante atualizado em todos os aparelhos.', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
+  return html`<div class="card page-card stack"><div class="sec-title">👷 Ajudante (bonequinho)</div>
+    <small class="dim">O nome e a foto valem para todos os aparelhos da empresa. A foto vira o rosto em caricatura.</small>
+    <div class="row" style=${{ gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div class="masc-prev">${rosto ? html`<img src=${rosto} />` : html`<span>👷</span>`}</div>
+      <input class="inp" style=${{ flex: 1, minWidth: '160px' }} placeholder="Nome do ajudante" value=${nome} onInput=${e => setNome(e.target.value)} />
+      <label class="btn">📷 ${rosto ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { foto(e.target.files[0]); e.target.value = ''; }} /></label>
+      ${rosto && html`<button class="btn btn-ghost" onClick=${() => setRosto('')}>Tirar foto</button>`}
+      <button class="btn btn-primary" onClick=${salvar}>Salvar</button></div></div>`;
+}
 function SenhaLiberacaoCfg({ sessao, toast }) {
   const [a, setA] = useState(''), [b, setB] = useState('');
   const salvar = async () => { if (a.length < 4) return toast('Mínimo 4 caracteres.'); if (a !== b) return toast('As senhas não conferem.');
@@ -6949,6 +6963,7 @@ function TelaConfig({ sessao, toast }) {
   </div>`;
   return html`<div class="fade-up stack">
     ${sessao.papel === 'admin' && html`<${SenhaLiberacaoCfg} sessao=${sessao} toast=${toast} />`}
+    ${sessao.papel === 'admin' && html`<${MascoteCfg} sessao=${sessao} toast=${toast} />`}
     <div><h2>⚙ Configurações</h2><div class="dim">Etapas do processo da sua empresa. Renomeie, reordene, mude a cor, acrescente ou tire etapas.</div></div>
     <div class="card page-card stack">
       <div class="sec-title">📋 Etapas da OS (andamento geral)</div>
@@ -6985,7 +7000,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };

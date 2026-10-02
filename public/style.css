@@ -1729,3 +1729,5 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 @media(min-width:1500px){.ini-clis,.os-clis{column-width:320px}.tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important}}
 .sug-lista{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 .po{max-width:1100px;margin-inline:auto}
+.masc-prev{width:64px;height:64px;border-radius:50%;overflow:hidden;background:#fde68a;display:flex;align-items:center;justify-content:center;font-size:30px;border:3px solid #f59e0b}
+.masc-prev img{width:100%;height:100%;object-fit:cover;filter:saturate(1.6) contrast(1.3)}
