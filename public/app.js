@@ -48,6 +48,7 @@ const NOVIDADES = [
   ['108', ['🖨 Folha de compras padrão pode ser impressa em branco (sem itens) para preencher à mão.']],
   ['158', ['🎤 Busca por voz no Início: toque no microfone e fale o cliente, nº ou ambiente.']],
   ['178', ['🔧 Corrigido: avançar a esteira para "Projeto" escondia a OS como se a obra estivesse concluída. Agora só a última etapa (Conclusão) tira a OS da tela.']],
+  ['189', ['🧾 Ordem para parceiro: as especificações agora vêm só do que é ligado ao tipo escolhido (ex.: Pintura puxa laca, cores, verniz; Vidros puxa vidros e espelhos…). Cada foto pede de qual móvel é (A, B, C…), e isso sai na impressão.', '📐 Serralheria exige o PDF do desenho técnico (fica salvo na ordem, botão 📐 para abrir).']],
   ['188', ['🧪 Zerar (testes) agora limpa toda a atividade da OS — esteiras, tempos, paradas, liberações, parceiros, compras, peças extras, diário e cronograma — deixando só a OS.', '🔓 O aviso de liberado com pendência também sai na folha de impressão.']],
   ['187', ['🧾 Botão "Ordem de pintura, serralheria…" na OS: escolha o tipo e o parceiro, prazo, fotos; as especificações já vêm da OS (pode editar). Salva na OS e imprime.', '📍 Endereço de montagem obrigatório para mandar para produção ou concluir.', '🔓 A senha para avançar com pendência agora é cadastrada pelo administrador em Configurações. "Vou resolver" leva direto para Compras.']],
   ['186', ['🔓 OS liberada com pendência mostra um aviso chamativo (pequeno) no topo da OS com o motivo, quem liberou e quando — some quando as pendências forem resolvidas.']],
@@ -4158,36 +4159,55 @@ function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
   </div></div>`, document.body);
 }
 /* ---------- Ordem para parceiro (pintura, serralheria, vidros…) ---------- */
-const GRUPOS_TIPO = { pintura: ['Acabamentos', 'Portas'], vidros: ['Vidros'], tapecaria: ['Tecidos'], serralheria: ['Puxadores & perfis', 'Ferragens'], lamina: ['Acabamentos'], corte: ['Acabamentos'] };
+const GRUPOS_TIPO = { vidros: ['Vidros'], tapecaria: ['Tecidos'] };
+const RE_TIPO = {
+  pintura: /laca|pint|\bcor(es)?\b|verniz|tinta|fosc|brilh|acetin|primer|\bpu\b|seladora|patina|pátina|ral\b|suvinil|coral/i,
+  vidros: /vidro|espelh|cristal|temperad|bisot|jatead|fum[eê]|reflecta|box\b/i,
+  tapecaria: /tecid|couro|estof|tape[cç]|espuma|almofad|courino|linho|veludo|capiton/i,
+  serralheria: /serralh|metal|ferro|alum[ií]n|inox|lat[aã]o|estrutura met|solda|tubo|cantoneira|perfil met/i,
+  pedra: /pedra|m[aá]rmor|granit|quartz|silestone|dekton|nanoglass|porcelanato|cuba/i,
+  lamina: /l[aâ]mina|madeira|freij|carvalh|nogueira|cumaru|ripad|natural/i,
+  corte: /mdf|mdp|chapa|corte|espessura|\d+\s?mm/i,
+};
 function specsParceiro(o, tipo) {
-  const L = [];
+  const re = RE_TIPO[tipo]; const L = [];
+  const pedacos = (t) => String(t || '').split(/(?<=[.;])\s+|\s+-\s+|\n/).map(x => x.trim()).filter(Boolean);
   (o.ambientes || []).forEach(a => {
-    const g = gruposEspec(a.padrao || o.padrao).filter(([, t]) => !GRUPOS_TIPO[tipo] || GRUPOS_TIPO[tipo].includes(t));
-    const mv = (a.moveis || []).map(m => '• ' + nomePadrao(m.nome) + (m.quantidade > 1 ? ' (' + m.quantidade + 'x)' : '') + ([m.largura, m.altura, m.profundidade].some(Boolean) ? ' — ' + [m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ') + ' mm' : '') + (m.observacoes ? ' — ' + m.observacoes : ''));
-    if (!g.length && !mv.length) return;
-    L.push('▸ ' + (nomePadrao(a.nome) || 'Conjunto')); mv.forEach(x => L.push(x));
-    g.forEach(([, t, , li]) => li.forEach(([k, v]) => L.push('   ' + t + (k ? ' · ' + k : '') + ': ' + v)));
+    const linhas = [];
+    (a.moveis || []).forEach((m, mi) => {
+      const campos = [m.observacoes, m.puxador, m.iluminacao, [m.mdfCaixa?.fabricante, m.mdfCaixa?.cor].filter(Boolean).join(' '), [m.mdfFrente?.fabricante, m.mdfFrente?.cor].filter(Boolean).join(' ')].flatMap(pedacos);
+      const rel = re ? campos.filter(x => re.test(x)) : campos;
+      if (!rel.length && re) return;
+      const med = [m.largura, m.altura, m.profundidade].some(Boolean) ? ' — ' + [m.largura, m.altura, m.profundidade].map(x => x || '—').join(' × ') + ' mm' : '';
+      linhas.push('• ' + String.fromCharCode(65 + mi) + ') ' + nomePadrao(m.nome) + (m.quantidade > 1 ? ' (' + m.quantidade + 'x)' : '') + med);
+      rel.forEach(x => linhas.push('     ' + x));
+    });
+    gruposEspec(a.padrao || o.padrao).forEach(([, t, , li]) => li.forEach(([k, v]) => { const l = t + (k ? ' · ' + k : '') + ': ' + v; if (!re || (GRUPOS_TIPO[tipo] || []).includes(t) || re.test(l)) linhas.push('   ' + l); }));
+    if (linhas.length) { L.push('▸ ' + (nomePadrao(a.nome) || 'Conjunto')); L.push(...linhas); }
   });
-  return L.join('\n');
+  return L.length ? L.join('\n') : '(Nada na OS relacionado a este tipo — descreva aqui o que vai para o parceiro.)';
 }
 function OrdemParceiro({ sessao, o, fechar, toast }) {
   const [tipo, setTipo] = useState('pintura');
   const [parc, setParc] = useState(''), [prazo, setPrazo] = useState(''), [fotos, setFotos] = useState([]);
   const [texto, setTexto] = useState(() => specsParceiro(o, 'pintura'));
   const [salv, setSalv] = useState(false);
+  const [pdf, setPdf] = useState(null);
+  const lerPdf = (f) => { if (!f) return; if (f.size > 750 * 1024) return toast('PDF muito grande (máx. 750 KB). Exporte o desenho mais leve.', 'erro'); const r = new FileReader(); r.onload = () => setPdf({ nome: f.name, data: r.result }); r.readAsDataURL(f); };
   const lista = (window.__parcLista || []).map(p => p.nome).filter(Boolean).sort();
   const mudaTipo = (t) => { setTipo(t); setTexto(specsParceiro(o, t)); };
   const T = TIPOS_PARC.find(x => x[0] === tipo) || TIPOS_PARC[0];
-  const addFotos = async (files) => { const n = []; for (const f of [...files].slice(0, 8 - fotos.length)) { try { n.push(await fotoCompacta(f)); } catch {} } setFotos(v => [...v, ...n]); };
+  const addFotos = async (files) => { const n = []; for (const f of [...files].slice(0, 8 - fotos.length)) { try { n.push({ src: await fotoCompacta(f), movel: '' }); } catch {} } setFotos(v => [...v, ...n]); };
+  const moveisL = (o.ambientes || []).flatMap(a => (a.moveis || []).map((m, mi) => String.fromCharCode(65 + mi) + ') ' + nomePadrao(m.nome) + (a.nome ? ' · ' + nomePadrao(a.nome) : '')));
   const imprimir = (x) => { const w = window.open('', '_blank'); if (!w) return toast('Permita pop-ups para imprimir.', 'erro');
     const esc = (t) => String(t || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     w.document.write(`<html><head><meta charset="utf-8"><title>Ordem de ${esc(x.titulo)} — ${numOS(o)}</title><style>body{font:14px Arial,sans-serif;margin:24px;color:#1c1917}h1{margin:0;font-size:22px}.top{display:flex;justify-content:space-between;border-bottom:4px solid #b45309;padding-bottom:10px;margin-bottom:12px}.cod{font:800 22px monospace}.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.kv div{background:#f5f5f4;border-radius:8px;padding:6px 9px}.kv small{display:block;color:#78716c;font-size:10px;text-transform:uppercase}pre{white-space:pre-wrap;font:13px/1.5 Arial;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px}.fotos img{width:31%;margin:1%;border-radius:8px}.ass{display:flex;gap:30px;margin-top:40px}.ass div{flex:1;border-top:1px solid #333;text-align:center;font-size:11px;padding-top:4px}</style></head><body>
       <div class="top"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">${esc(sessao.empresaNome || '')}</div><h1>${esc(x.ic)} Ordem de ${esc(x.titulo)}</h1><div>${esc(nomePadrao(o.cliente?.nome))}</div></div><div class="cod">${numOS(o)}</div></div>
       <div class="kv"><div><small>Parceiro</small><b>${esc(x.parceiro || '—')}</b></div><div><small>Prazo</small><b>${esc(x.prazo ? x.prazo.split('-').reverse().join('/') : '—')}</b></div><div><small>Emitida</small><b>${esc(fmtData(x.em))} · ${esc(x.por)}</b></div></div>
-      <pre>${esc(x.texto)}</pre><div class="fotos">${(x.fotos || []).map(f => `<img src="${f}">`).join('')}</div>
+      <pre>${esc(x.texto)}</pre>${x.pdf ? `<p>📐 <b>Desenho técnico anexo:</b> ${esc(x.pdf.nome)}</p>` : ''}<div class="fotos">${(x.fotos || []).map(f => typeof f === 'string' ? `<img src="${f}">` : `<figure style="display:inline-block;width:31%;margin:1%"><img src="${f.src}" style="width:100%;border-radius:8px"><figcaption style="font-size:11px;font-weight:bold">${esc(f.movel || '')}</figcaption></figure>`).join('')}</div>
       <div class="ass"><div>Emitido por</div><div>Parceiro — recebi</div></div><script>setTimeout(()=>print(),400)<\/script></body></html>`); w.document.close(); };
-  const salvar = async (imp) => { if (!parc.trim()) return toast('Escolha o parceiro.'); setSalv(true);
-    const x = { tipo, titulo: T[2], ic: T[1], parceiro: parc.trim(), prazo, texto, fotos, em: nowIso(), por: sessao.nome };
+  const salvar = async (imp) => { if (!parc.trim()) return toast('Escolha o parceiro.'); if (fotos.some(f => !f.movel)) return toast('Diga de qual móvel é cada foto.'); if (tipo === 'serralheria' && !pdf) return toast('📐 Serralheria: anexe o PDF do desenho técnico.', 'erro'); setSalv(true);
+    const x = { tipo, titulo: T[2], ic: T[1], parceiro: parc.trim(), prazo, texto, fotos, ...(pdf ? { pdf } : {}), em: nowIso(), por: sessao.nome };
     try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ordensParceiro: [...(o.ordensParceiro || []), x] }); registrar(sessao, o.id, T[1], 'Ordem de ' + T[2] + ' para ' + x.parceiro, ''); toast('Ordem salva.', 'ok'); if (imp) imprimir(x); fechar(); }
     catch (e) { toast('Não salvou: ' + e.message, 'erro'); } setSalv(false); };
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(640px,100%)' }}>
@@ -4197,10 +4217,13 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
       <div class="field" style=${{ flex: 2, minWidth: '180px' }}><span class="lbl">Parceiro</span><input class="inp" list="op-parc" placeholder="Escolha ou digite" value=${parc} onInput=${e => setParc(e.target.value)} /><datalist id="op-parc">${lista.map(n => html`<option key=${n} value=${n} />`)}</datalist></div>
       <div class="field" style=${{ flex: 1, minWidth: '140px' }}><span class="lbl">Prazo</span><input class="inp" type="date" value=${prazo} onInput=${e => setPrazo(e.target.value)} /></div></div>
     <div class="field"><span class="lbl">Especificações (puxadas da OS — pode editar)</span><textarea class="inp" rows="9" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></div>
-    <div class="row" style=${{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}><label class="btn btn-sm">📷 Fotos<input type="file" accept="image/*" multiple style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
-      ${fotos.length > 0 && html`<div class="dia-fotos">${fotos.map((f, i) => html`<span key=${i}><img src=${f} /><button onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button></span>`)}</div>`}</div>
+    <div class="row" style=${{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>${tipo === 'serralheria' && html`<label class=${'btn btn-sm' + (pdf ? ' btn-verde' : ' op-falta')}>📐 ${pdf ? pdf.nome : 'PDF do desenho técnico (obrigatório)'}<input type="file" accept="application/pdf" style=${{ display: 'none' }} onChange=${e => { lerPdf(e.target.files[0]); e.target.value = ''; }} /></label>`}
+      <label class="btn btn-sm">📷 Fotos<input type="file" accept="image/*" multiple style=${{ display: 'none' }} onChange=${e => { addFotos(e.target.files); e.target.value = ''; }} /></label>
+    </div>
+    ${fotos.length > 0 && html`<div class="op-fotos">${fotos.map((f, i) => html`<div key=${i} class="op-foto"><img src=${f.src} /><button class="op-x" onClick=${() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button>
+      <select class=${'inp inp-sm' + (f.movel ? '' : ' op-falta')} value=${f.movel} onChange=${e => setFotos(fotos.map((g, j) => j === i ? { ...g, movel: e.target.value } : g))}><option value="">De qual móvel?</option>${moveisL.map(n => html`<option key=${n} value=${n}>${n}</option>`)}</select></div>`)}</div>`}
     <div class="row" style=${{ gap: '8px', justifyContent: 'flex-end' }}><button class="btn" disabled=${salv} onClick=${() => salvar(false)}>💾 Salvar</button><button class="btn btn-primary" disabled=${salv} onClick=${() => salvar(true)}>🖨 Salvar e imprimir</button></div>
-    ${(o.ordensParceiro || []).length > 0 && html`<details><summary>📁 ${o.ordensParceiro.length} ordem(ns) já emitida(s)</summary>${o.ordensParceiro.slice().reverse().map((x, i) => html`<div key=${i} class="row" style=${{ justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #e7e5e4' }}><span>${x.ic} ${x.titulo} · <b>${x.parceiro}</b> <small class="dim">${fmtData(x.em)}</small></span><button class="btn btn-ghost btn-sm" onClick=${() => imprimir(x)}>🖨</button></div>`)}</details>`}
+    ${(o.ordensParceiro || []).length > 0 && html`<details><summary>📁 ${o.ordensParceiro.length} ordem(ns) já emitida(s)</summary>${o.ordensParceiro.slice().reverse().map((x, i) => html`<div key=${i} class="row" style=${{ justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #e7e5e4' }}><span>${x.ic} ${x.titulo} · <b>${x.parceiro}</b> <small class="dim">${fmtData(x.em)}</small></span><span>${x.pdf && html`<button class="btn btn-ghost btn-sm" title=${x.pdf.nome} onClick=${() => { const w = window.open(); if (w) w.document.write('<iframe src="' + x.pdf.data + '" style="border:0;width:100%;height:100vh"></iframe>'); }}>📐</button>`}<button class="btn btn-ghost btn-sm" onClick=${() => imprimir(x)}>🖨</button></span></div>`)}</details>`}
   </div></div>`, document.body);
 }
 function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [], irAba }) {
