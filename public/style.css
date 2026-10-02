@@ -1594,3 +1594,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .cobrar-lista{display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow:auto;text-align:left}
 .cobrar-lista button{border:1px solid #fecaca;background:#fef2f2;border-radius:12px;padding:9px 12px;cursor:pointer;font-size:14px;display:flex;flex-direction:column;gap:2px}
 .cobrar-lista button small{color:#78716c}
+.lib-aviso{background:linear-gradient(90deg,#fff7ed,#ffedd5);border:1.5px solid #fb923c;border-left:6px solid #ea580c;color:#7c2d12;border-radius:10px;padding:7px 11px;font-size:13.5px;animation:libPulse 2.4s ease-in-out infinite}
+.lib-aviso small{opacity:.7}
+@keyframes libPulse{0%,100%{box-shadow:0 0 0 0 #fb923c55}50%{box-shadow:0 0 0 5px #fb923c22}}
