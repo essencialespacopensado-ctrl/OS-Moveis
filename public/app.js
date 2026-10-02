@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['205', ['📲 iPhone/iPad: botão "Instalar" no topo mostra o passo a passo para colocar o Gestão Pró na tela de início (Safari → Compartilhar → Adicionar à Tela de Início).', '🤔 Quando a IA está pensando, o ajudante coloca a mão no queixo.']],
   ['204', ['👷 Nome e foto do ajudante agora ficam em Configurações (administrador) e aparecem iguais em todos os aparelhos. No bonequinho ficam só: Me mostra esta tela, Fazer uma pergunta, Onde fica…? e Voltar para casa.', '✦ Saiu o botão "Peça qualquer coisa" — as perguntas agora são pelo bonequinho.']],
   ['203', ['🖥 As telas agora usam toda a largura do monitor e se ajustam sozinhas no celular e tablet.', '👣 O ajudante anda de lado, dando passinhos, e deixa pegadas pelo caminho. Quando está longe do canto aparece um 🏠 ao lado dele para voltar ao ponto de partida. O menu dele não fica mais cortado no topo da tela.']],
   ['202', ['👷 A fala do ajudante não fica mais atrás do menu lateral: ele aparece por cima de tudo e o balão abre para o lado que tem espaço.']],
@@ -6247,6 +6248,7 @@ function Assistente({ sessao, osAberta }) {
   const [msgs, setMsgs] = useState(() => { try { return JSON.parse(localStorage.getItem(chave) || '[]'); } catch { return []; } });
   const [texto, setTexto] = useState('');
   const [pensando, setPensando] = useState(false);
+  useEffect(() => { window.dispatchEvent(new CustomEvent('masc-pensa', { detail: !!pensando })); }, [pensando]);
   const [erro, setErro] = useState('');
   const fimRef = useRef(null);
   const [interim, setInterim] = useState('');
@@ -6278,6 +6280,7 @@ function Assistente({ sessao, osAberta }) {
   /* ---- Chamada ativa: fala em tempo real, ela responde falando e executa ---- */
   const [chamada, setChamada] = useState(false);
   const [fase, setFase] = useState('');
+  useEffect(() => { if (fase) window.dispatchEvent(new CustomEvent('masc-pensa', { detail: fase === 'pensando' })); }, [fase]);
   const [ouvido, setOuvido] = useState('');
   const bufRef = useRef(''); const timerRef = useRef(null); const faseRef = useRef(''); faseRef.current = fase;
   const pendRef = useRef(null); const msgsRef = useRef(msgs); msgsRef.current = msgs;
@@ -6678,7 +6681,8 @@ function Mascote() {
   const [fala, setFala] = useState(''), [andando, setAndando] = useState(false), [vira, setVira] = useState(false), [menu, setMenu] = useState(false), [q, setQ] = useState('');
   const [oculto, setOculto] = useState(() => { try { return localStorage.getItem('osm_mascote') === '0'; } catch { return false; } });
   const ler = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
-  const [cfgV, setCfgV] = useState(0);
+  const [cfgV, setCfgV] = useState(0); const [pensa, setPensa] = useState(false);
+  useEffect(() => { const h = (e) => setPensa(!!e.detail); window.addEventListener('masc-pensa', h); return () => window.removeEventListener('masc-pensa', h); }, []);
   useEffect(() => { const h = () => setCfgV(v => v + 1); window.addEventListener('masc-cfg', h); return () => window.removeEventListener('masc-cfg', h); }, []);
   const nome = (window.__mascCfg || {}).nome || 'Zé', rosto = (window.__mascCfg || {}).rosto || '';
   const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -6703,7 +6707,7 @@ function Mascote() {
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
   const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
-  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
@@ -7006,6 +7010,8 @@ function Principal({ sessao, toast }) {
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
   const [aba, setAba] = useState('inicio');
   const [podeInstalar, setPodeInstalar] = useState(!!window.__instalar);
+  const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); const instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const [iosAj, setIosAj] = useState(false);
   useEffect(() => { const f = () => setPodeInstalar(!!window.__instalar); window.addEventListener('pode-instalar', f); return () => window.removeEventListener('pode-instalar', f); }, []);
   const [osAberta, setOsAberta] = useState(null);
   const [conta, setConta] = useState(false);
@@ -7081,6 +7087,14 @@ function Principal({ sessao, toast }) {
               <span class="avatar">${iniciais}</span>
               <span class="txt-desk" style=${{ textAlign: 'left', lineHeight: 1.2 }}><b style=${{ fontSize: '13px' }}>${sessao.nome}</b><br/><span class="ok-txt">● ${(PAPEIS.find(p => p.v === sessao.papel) || {}).t}</span></span>
             </button>
+            ${ehIOS && !instalado && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${() => setIosAj(true)}>📲 Instalar</button>`}
+            ${iosAj && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setIosAj(false)}><div class="card modal-caixa stack" style=${{ width: 'min(420px,100%)' }}>
+              <div class="sec-title">📲 Instalar no iPhone / iPad</div>
+              <div class="ios-passo"><b>1</b> Abra este site no <b>Safari</b> (no Chrome do iPhone não funciona).</div>
+              <div class="ios-passo"><b>2</b> Toque no botão <b>Compartilhar</b> <span class="ios-ic">⬆︎</span> na barra de baixo.</div>
+              <div class="ios-passo"><b>3</b> Role e toque em <b>“Adicionar à Tela de Início”</b> ➕.</div>
+              <div class="ios-passo"><b>4</b> Toque em <b>Adicionar</b>. O Gestão Pró aparece como app na tela do iPhone.</div>
+              <button class="btn btn-primary" onClick=${() => setIosAj(false)}>Entendi</button></div></div>`, document.body)}
             ${podeInstalar && html`<button class="btn btn-verde btn-sm btn-instalar" onClick=${async () => { const e = window.__instalar; if (!e) return; e.prompt(); const r = await e.userChoice.catch(() => null); if (r?.outcome === 'accepted') { window.__instalar = null; setPodeInstalar(false); } }}>📲 Instalar app</button>`}
             ${novaVersao ? html`<button class="btn btn-sm btn-nova-versao" title="Tem versão nova do app" onClick=${recarregarApp}>🔄<span> Atualizar</span></button>`
               : html`<button class="btn btn-ghost btn-sm" title="Atualizar o app e os dados" onClick=${recarregarApp}>⟳<span class="txt-desk"> Atualizar</span></button>`}
