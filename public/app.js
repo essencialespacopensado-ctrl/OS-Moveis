@@ -45,6 +45,8 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['209', ['🔧 Diário de obra e peças extras pedidas pelo montador agora ficam só dentro da aba Montagem da OS (saiu a aba Diário separada).']],
+  ['208', ['👤 Página geral do cliente (toque no cliente em Clientes): dados, status da obra, pendências, check-list de finalização com subtítulos, abas de OSs, puxadores, eletros, contrato e atas.', '🗒 Aba Montagem da OS: planejamento de execução (lista com ✓), eletros com foto e puxadores puxados da OS, e o vídeo do projeto finalizado.']],
   ['207', ['← Botão Voltar dentro da OS: volta para a aba anterior (ex.: de Montagem para Andamento) e, no começo, fecha a OS e volta para a tela de antes.']],
   ['206', ['🔧 Nova aba Montagem na OS: cole o link do QR Code do projeto 3D do Dinabox e o montador abre direto na obra (botão Abrir, QR Code para o celular e copiar). Também mostra o endereço com mapa, WhatsApp do cliente e atalhos para a ordem de entrega, diário e folha.']],
   ['205', ['📲 iPhone/iPad: botão "Instalar" no topo mostra o passo a passo para colocar o Gestão Pró na tela de início (Safari → Compartilhar → Adicionar à Tela de Início).', '🤔 Quando a IA está pensando, o ajudante coloca a mão no queixo.']],
@@ -4269,6 +4271,74 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
   </div></div>`, document.body);
 }
 /* ---------- Aba Montagem: links 3D (Dinabox) e o que o montador precisa ---------- */
+/* Planejamento de execução (check-list livre na OS) */
+function PlanejamentoExec({ sessao, o, toast }) {
+  const [t, setT] = useState('');
+  const L = o.planejamento || [];
+  const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { planejamento: l }).catch(e => toast(e.message, 'erro'));
+  const add = () => { const x = t.trim(); if (!x) return; salvar([...L, { t: x, ok: false, por: sessao.nome, em: nowIso() }]); setT(''); };
+  const feitos = L.filter(x => x.ok).length;
+  return html`<div class="card stack"><div class="row" style=${{ justifyContent: 'space-between' }}><b>🗒 Planejamento de execução</b>${L.length > 0 && html`<span class="chip">${feitos}/${L.length}</span>`}</div>
+    ${L.map((x, i) => html`<label key=${i} class=${'plan-it' + (x.ok ? ' ok' : '')}><input type="checkbox" checked=${!!x.ok} onChange=${() => salvar(L.map((y, j) => j === i ? { ...y, ok: !y.ok, okPor: sessao.nome, okEm: nowIso() } : y))} /><span>${x.t}</span><small>${x.ok && x.okPor ? '✓ ' + x.okPor : x.por || ''}</small><button class="btn btn-ghost btn-sm" onClick=${e => { e.preventDefault(); salvar(L.filter((_, j) => j !== i)); }}>✕</button></label>`)}
+    <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp" placeholder="Ex: 1º dia — instalar aéreos da cozinha" value=${t} onInput=${e => setT(e.target.value)} onKeyDown=${e => e.key === 'Enter' && add()} /><button class="btn btn-primary" onClick=${add}>＋</button></div></div>`;
+}
+/* Eletros e puxadores da OS — puxadores vêm sozinhos da OS; eletros com foto */
+function puxadoresDaOS(o) { const r = []; (o.ambientes || []).forEach(a => { const P = a.padrao || o.padrao || {}; [...(P.puxadores || []), ...(P.perfis || [])].forEach(x => r.push([nomePadrao(a.nome) || '', x])); (a.moveis || []).forEach(m => m.puxador && r.push([nomePadrao(m.nome), m.puxador])); }); const v = new Set(); return r.filter(([, x]) => { const k = norm(x); if (v.has(k)) return false; v.add(k); return true; }); }
+function EletrosPuxadores({ sessao, o, toast }) {
+  const [n, setN] = useState({ nome: '', modelo: '', medidas: '', foto: '' });
+  const E = o.eletros || [];
+  const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { eletros: l }).catch(e => toast(e.message, 'erro'));
+  const foto = async (f) => { if (f) try { setN(v => ({ ...v, foto: '' })); const u = await fotoCompacta(f); setN(v => ({ ...v, foto: u })); } catch {} };
+  const pux = puxadoresDaOS(o);
+  return html`<div class="card stack"><b>🔌 Eletros e ✋ puxadores</b>
+    <div class="ep-grade">
+      ${pux.map(([onde, x], i) => html`<div key=${'p' + i} class="ep-card pux"><div class="ep-foto">✋</div><div><b>${x}</b><small>${onde ? 'Puxador · ' + onde : 'Puxador'}</small></div></div>`)}
+      ${E.map((x, i) => html`<div key=${'e' + i} class="ep-card"><div class="ep-foto">${x.foto ? html`<img src=${x.foto} />` : '🔌'}</div><div style=${{ flex: 1 }}><b>${x.nome}</b><small>${[x.modelo, x.medidas].filter(Boolean).join(' · ')}</small></div><button class="btn btn-ghost btn-sm" onClick=${() => salvar(E.filter((_, j) => j !== i))}>✕</button></div>`)}
+      ${!pux.length && !E.length && html`<div class="dim">Nenhum puxador especificado nem eletro cadastrado.</div>`}
+    </div>
+    <div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>
+      <input class="inp" style=${{ flex: 2, minWidth: '140px' }} placeholder="Eletro (ex: Cooktop 5 bocas)" value=${n.nome} onInput=${e => setN({ ...n, nome: e.target.value })} />
+      <input class="inp" style=${{ flex: 2, minWidth: '120px' }} placeholder="Marca / modelo" value=${n.modelo} onInput=${e => setN({ ...n, modelo: e.target.value })} />
+      <input class="inp" style=${{ flex: 1, minWidth: '100px' }} placeholder="Medidas de embutir" value=${n.medidas} onInput=${e => setN({ ...n, medidas: e.target.value })} />
+      <label class=${'btn btn-sm' + (n.foto ? ' btn-verde' : '')}>📷${n.foto ? ' ✓' : ''}<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { foto(e.target.files[0]); e.target.value = ''; }} /></label>
+      <button class="btn btn-primary" onClick=${() => { if (!n.nome.trim()) return toast('Escreva o eletro.'); salvar([...E, { ...n, nome: n.nome.trim() }]); setN({ nome: '', modelo: '', medidas: '', foto: '' }); }}>＋ Eletro</button></div></div>`;
+}
+/* ---------- Página geral do cliente ---------- */
+const CHECK_PADRAO = [
+  { tit: 'Antes da montagem', itens: ['Endereço e acesso confirmados', 'Medidas finais conferidas', 'Eletros e pedras no local', 'Elétrica e hidráulica prontas'] },
+  { tit: 'Montagem', itens: ['Todos os móveis entregues', 'Ferragens reguladas', 'Puxadores instalados', 'Iluminação testada'] },
+  { tit: 'Finalização da obra', itens: ['Limpeza final', 'Fotos finais', 'Pendências zeradas', 'Cliente assinou o recebimento'] },
+];
+function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
+  const [aba, setAba] = useState('oss'), [atas, setAtas] = useState([]), [novoIt, setNovoIt] = useState({}), [novaSec, setNovaSec] = useState('');
+  const ck = c.checklist || CHECK_PADRAO.map(s => ({ tit: s.tit, itens: s.itens.map(t => ({ t, ok: false })) }));
+  const salvarCk = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'clientes', c.id), { checklist: l }).catch(e => toast(e.message, 'erro'));
+  useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(s => setAtas(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(c.nome)))).catch(() => {}); }, [c.id]);
+  const ativas = oss.filter(o => !osConcluida(o));
+  const pend = [];
+  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo]); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2]])); });
+  const pct = oss.length ? Math.round(oss.reduce((n, o) => n + pctObra(o), 0) / oss.length) : 0;
+  const pux = oss.flatMap(o => puxadoresDaOS(o).map(([onde, x]) => [numOS(o) + (onde ? ' · ' + onde : ''), x]));
+  const ele = oss.flatMap(o => (o.eletros || []).map(e => ({ ...e, os: numOS(o) })));
+  const tot = ck.reduce((n, s) => n + s.itens.length, 0), ok = ck.reduce((n, s) => n + s.itens.filter(i => i.ok).length, 0);
+  const abrirOS = (id) => { fechar(); window.__abrirOS && window.__abrirOS(id); };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack pcli" style=${{ width: 'min(980px,100%)', '--cc': corCliente(c.nome) }}>
+    <div class="pcli-cab"><div><h2>${nomePadrao(c.nome)}</h2><small>${[c.telefone, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ')}</small>${(c.enderecoMontagem || c.endereco) && html`<div><small>📍 ${c.enderecoMontagem || c.endereco}</small></div>`}</div>
+      <div class="row" style=${{ gap: '6px' }}>${c.telefone && html`<a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://wa.me/55' + String(c.telefone).replace(/\D/g, '').replace(/^55/, '')}>💬</a>`}<button class="btn btn-sm" onClick=${editar}>✏️ Dados</button><button class="x-btn" onClick=${fechar}>✕</button></div></div>
+    <div class="pcli-kpis"><div><small>Status da obra</small><${BarraPct} p=${pct} /></div><div><small>OSs</small><b>${ativas.length} em aberto · ${oss.length - ativas.length} concluídas</b></div><div><small>Pendências</small><b style=${{ color: pend.length ? 'var(--danger)' : '' }}>${pend.length}</b></div><div><small>Finalização</small><b>${ok}/${tot}</b></div></div>
+    ${pend.length > 0 && html`<div class="ficha-falta"><b>⚠ Pendências</b>${pend.slice(0, 12).map(([ic, t], i) => html`<div key=${i}>${ic} ${t}</div>`)}</div>`}
+    <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['oss', '📋 OSs'], ['check', '✅ Finalização'], ['pux', '✋ Puxadores'], ['ele', '🔌 Eletros'], ['contrato', '📑 Contrato'], ['atas', '🎙 Atas']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
+    ${aba === 'oss' && html`<div class="pcli-lista">${oss.map(o => { const st = (STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]); return html`<button key=${o.id} class="pcli-os" onClick=${() => abrirOS(o.id)}><b class="mono">${numOS(o)}</b><span>${nomePadrao((o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo) || '—'}</span><span class=${st.c + ' mini'}>${st.t.replace(/^\d+\. /, '')}</span><${BarraPct} p=${pctObra(o)} /></button>`; })}</div>`}
+    ${aba === 'check' && html`<div class="stack">${ck.map((sec, si) => html`<div key=${si} class="pcli-sec"><div class="pcli-sec-t">${sec.tit} <small>${sec.itens.filter(i => i.ok).length}/${sec.itens.length}</small></div>
+        ${sec.itens.map((it, ii) => html`<label key=${ii} class=${'plan-it' + (it.ok ? ' ok' : '')}><input type="checkbox" checked=${!!it.ok} onChange=${() => salvarCk(ck.map((s2, a2) => a2 !== si ? s2 : { ...s2, itens: s2.itens.map((x, b2) => b2 !== ii ? x : { ...x, ok: !x.ok, por: sessao.nome, em: nowIso() }) }))} /><span>${it.t}</span><small>${it.ok && it.por ? '✓ ' + it.por : ''}</small></label>`)}
+        <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Novo lembrete" value=${novoIt[si] || ''} onInput=${e => setNovoIt({ ...novoIt, [si]: e.target.value })} /><button class="btn btn-sm" onClick=${() => { const t = (novoIt[si] || '').trim(); if (!t) return; salvarCk(ck.map((s2, a2) => a2 !== si ? s2 : { ...s2, itens: [...s2.itens, { t, ok: false }] })); setNovoIt({ ...novoIt, [si]: '' }); }}>＋</button></div></div>`)}
+      <div class="row" style=${{ gap: '6px', flexWrap: 'nowrap' }}><input class="inp" placeholder="Novo subtítulo (ex: Vistoria)" value=${novaSec} onInput=${e => setNovaSec(e.target.value)} /><button class="btn" onClick=${() => { if (!novaSec.trim()) return; salvarCk([...ck, { tit: novaSec.trim(), itens: [] }]); setNovaSec(''); }}>＋ Subtítulo</button></div></div>`}
+    ${aba === 'pux' && html`<div class="ep-grade">${pux.length ? pux.map(([onde, x], i) => html`<div key=${i} class="ep-card pux"><div class="ep-foto">✋</div><div><b>${x}</b><small>${onde}</small></div></div>`) : html`<div class="dim">Nenhum puxador especificado nas OSs.</div>`}</div>`}
+    ${aba === 'ele' && html`<div class="ep-grade">${ele.length ? ele.map((x, i) => html`<div key=${i} class="ep-card"><div class="ep-foto">${x.foto ? html`<img src=${x.foto} />` : '🔌'}</div><div><b>${x.nome}</b><small>${[x.os, x.modelo, x.medidas].filter(Boolean).join(' · ')}</small></div></div>`) : html`<div class="dim">Nenhum eletro cadastrado. Cadastre na aba Montagem de cada OS.</div>`}</div>`}
+    ${aba === 'contrato' && html`<div class="stack"><small class="dim">Contratos e detalhamentos do cliente ficam na tela Contratos.</small><button class="btn btn-primary" style=${{ alignSelf: 'flex-start' }} onClick=${() => { fechar(); window.__buscaOS = c.nome; window.__irPara && window.__irPara('contratos'); }}>📑 Abrir contratos</button></div>`}
+    ${aba === 'atas' && html`<div class="pcli-lista">${atas.length ? atas.map(p => html`<button key=${p.id} class="pcli-os" onClick=${() => { fechar(); window.__irPara && window.__irPara('projetos'); }}><b>🎙</b><span>${p.titulo || 'Reunião'}</span><small class="dim">${fmtData(p.criadoEm || p.em || '')}</small></button>`) : html`<div class="dim">Nenhuma ata de reunião deste cliente.</div>`}</div>`}
+  </div></div>`, document.body);
+}
 function MontagemFicha({ sessao, o, toast, irAba }) {
   const [url, setUrl] = useState(''), [nome, setNome] = useState(''), [qr, setQr] = useState(null);
   const links = o.links3d || [];
@@ -4292,9 +4362,13 @@ function MontagemFicha({ sessao, o, toast, irAba }) {
     </div>
     <div class="card stack"><b>📍 Endereço de montagem</b>${end ? html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><span style=${{ flex: 1 }}>${end}</span><a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(end)}>🗺 Abrir no mapa</a></div>` : html`<div class="dim">Não preenchido.</div>`}
       ${o.cliente?.telefone && html`<a class="btn btn-sm" style=${{ alignSelf: 'flex-start' }} href=${'https://wa.me/55' + String(o.cliente.telefone).replace(/\D/g, '').replace(/^55/, '')} target="_blank" rel="noopener">💬 WhatsApp do cliente</a>`}</div>
+    <div class="card stack mont-diario"><b>📓 Diário de obra</b><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>
+    <div class="card stack"><b>🪵 Peças extras pedidas na montagem</b><small class="dim">O montador pede aqui as peças que faltaram ou precisam ser refeitas.</small><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>
+    <${PlanejamentoExec} sessao=${sessao} o=${o} toast=${toast} />
+    <${EletrosPuxadores} sessao=${sessao} o=${o} toast=${toast} />
+    <div class="card stack"><b>🎬 Vídeo do projeto finalizado</b><small class="dim">Coloque aqui o vídeo/render do projeto para a equipe ver como deve ficar.</small><${VideosOS} sessao=${sessao} os=${o} toast=${toast} /></div>
     <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
       <button class="btn" onClick=${() => irAba('entrega')}>🚚 Ordem de entrega (check-list)</button>
-      <button class="btn" onClick=${() => irAba('diario')}>📓 Diário de obra</button>
       <button class="btn" onClick=${() => irAba('folha')}>📄 Folha da OS</button></div>
     ${qr && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${() => setQr(null)}><div class="card modal-caixa stack" style=${{ width: 'min(360px,100%)', textAlign: 'center' }}>
       <b>${qr.nome}</b><img style=${{ width: '100%', imageRendering: 'pixelated' }} src=${'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(qr.url)} alt="QR Code" />
@@ -4409,7 +4483,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
     ...parcAb.map(p => [p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2], 'compras']),
     ...faltaCompra.map(i => ['🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : ''), 'compras']),
     ...pedAb.map(p => ['🪵 Peça extra: ' + resumoPed(p), 'andamento']),
-    ...pend.map(p => ['⚠️ Pendência: ' + String(p.texto || '').slice(0, 90), 'diario']),
+    ...pend.map(p => ['⚠️ Pendência: ' + String(p.texto || '').slice(0, 90), 'montagem']),
   ];
   const falta = faltaI.map(x => x[0]);
   const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
@@ -4434,14 +4508,14 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
       ${(o.liberacoes || []).length > 0 && falta.length > 0 && (() => { const L = o.liberacoes[o.liberacoes.length - 1]; return html`<div class="lib-aviso" title=${'Pendências na liberação: ' + (L.falta || []).join('; ')}>🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> <small>(${L.por}, ${fmtData(L.em)})</small></div>`; })()}
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'montagem' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
-      ${modoV === 'diario' && html`<div class="ficha-compras stack"><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
+      ${modoV === 'diario' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
       <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
@@ -5951,9 +6025,11 @@ function TelaClientes({ sessao, toast, catalogo }) {
     setLendo('');
   };
   const vis = (lista || []).filter(c => !q || norm(JSON.stringify(c)).includes(norm(q))).sort((a, b) => a.nome.localeCompare(b.nome));
+  const [pg, setPg] = useState(null);
   const [massa, setMassa] = useState(false);
   return html`<div class="fade-up stack">
     <div class="page-head"><div><h2>👤 Clientes</h2><div class="dim">Cadastre uma vez — os dados vão para todas as OS do cliente (e saem na folha de impressão).</div></div></div>
+    ${pg && html`<${PaginaCliente} sessao=${sessao} c=${pg} oss=${osDe(pg.nome)} toast=${toast} fechar=${() => setPg(null)} editar=${() => { setEd({ ...pg, _antigo: pg.nome }); setPg(null); }} />`}
     ${massa && html`<${ConcluirMassa} sessao=${sessao} oss=${oss} fechar=${() => setMassa(false)} />`}
     <div class="cli-acoes">
       <button class="cli-acao" onClick=${() => setEd({ nome: '' })}><span>✍️</span><b>Cadastrar digitando</b><small>Nome, telefone, endereço, obra…</small></button>
@@ -5964,7 +6040,7 @@ function TelaClientes({ sessao, toast, catalogo }) {
     <input ref=${inp} type="file" hidden accept=".pdf,.doc,.docx,image/*" onChange=${e => { doContrato(e.target.files[0]); e.target.value = ''; }} />
     ${semCad.length > 0 && html`<div class="card warn-box"><b>${semCad.length} cliente(s) das OS ainda sem cadastro:</b><div class="row" style=${{ gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>${semCad.map(n => { const o = osDe(n)[0]; return html`<button key=${n} class="pill" onClick=${() => setEd({ nome: n, telefone: o?.cliente?.telefone || '', endereco: o?.cliente?.endereco || '', obra: o?.cliente?.obra || '', arquiteto: o?.arquiteto || '', _antigo: n })}>＋ ${n}</button>`; })}</div></div>`}
     <input class="inp" placeholder="🔍 Buscar cliente" value=${q} onInput=${e => setQ(e.target.value)} />
-    ${lista === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nenhum cliente cadastrado.</div>` : html`<div class="cli-grade">${vis.map(c => { const os = osDe(c.nome); return html`<div key=${c.id} class="card cli-card" style=${{ '--cc': corCliente(c.nome) }} onClick=${() => setEd({ ...c, _antigo: c.nome })}>
+    ${lista === null ? html`<div class="dim">Carregando…</div>` : !vis.length ? html`<div class="vazio dim">Nenhum cliente cadastrado.</div>` : html`<div class="cli-grade">${vis.map(c => { const os = osDe(c.nome); return html`<div key=${c.id} class="card cli-card" style=${{ '--cc': corCliente(c.nome) }} onClick=${() => setPg(c)}>
       <b>${c.nome}</b><small>${[c.telefone, c.obra || c.endereco, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ') || 'sem dados'}</small><span class="chip">${os.length} OS</span></div>`; })}</div>`}
     ${ed && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setEd(null)}><div class="card modal-caixa stack" style=${{ width: 'min(620px,100%)' }}>
       <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">👤 ${ed.id ? 'Editar cliente' : 'Novo cliente'}</div><button class="x-btn" onClick=${() => setEd(null)}>✕</button></div>
