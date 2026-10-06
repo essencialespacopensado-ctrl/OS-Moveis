@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['206', ['🔧 Nova aba Montagem na OS: cole o link do QR Code do projeto 3D do Dinabox e o montador abre direto na obra (botão Abrir, QR Code para o celular e copiar). Também mostra o endereço com mapa, WhatsApp do cliente e atalhos para a ordem de entrega, diário e folha.']],
   ['205', ['📲 iPhone/iPad: botão "Instalar" no topo mostra o passo a passo para colocar o Gestão Pró na tela de início (Safari → Compartilhar → Adicionar à Tela de Início).', '🤔 Quando a IA está pensando, o ajudante coloca a mão no queixo.']],
   ['204', ['👷 Nome e foto do ajudante agora ficam em Configurações (administrador) e aparecem iguais em todos os aparelhos. No bonequinho ficam só: Me mostra esta tela, Fazer uma pergunta, Onde fica…? e Voltar para casa.', '✦ Saiu o botão "Peça qualquer coisa" — as perguntas agora são pelo bonequinho.']],
   ['203', ['🖥 As telas agora usam toda a largura do monitor e se ajustam sozinhas no celular e tablet.', '👣 O ajudante anda de lado, dando passinhos, e deixa pegadas pelo caminho. Quando está longe do canto aparece um 🏠 ao lado dele para voltar ao ponto de partida. O menu dele não fica mais cortado no topo da tela.']],
@@ -4266,6 +4267,39 @@ function OrdemParceiro({ sessao, o, fechar, toast }) {
     ${(o.ordensParceiro || []).length > 0 && html`<details><summary>📁 ${o.ordensParceiro.length} ordem(ns) já emitida(s)</summary>${o.ordensParceiro.slice().reverse().map((x, i) => html`<div key=${i} class="row" style=${{ justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #e7e5e4' }}><span>${x.ic} ${x.titulo} · <b>${x.parceiro}</b> <small class="dim">${fmtData(x.em)}</small></span><span>${x.pdf && html`<button class="btn btn-ghost btn-sm" title=${x.pdf.nome} onClick=${() => { const w = window.open(); if (w) w.document.write('<iframe src="' + x.pdf.data + '" style="border:0;width:100%;height:100vh"></iframe>'); }}>📐</button>`}<button class="btn btn-ghost btn-sm" onClick=${() => imprimir(x)}>🖨</button></span></div>`)}</details>`}
   </div></div>`, document.body);
 }
+/* ---------- Aba Montagem: links 3D (Dinabox) e o que o montador precisa ---------- */
+function MontagemFicha({ sessao, o, toast, irAba }) {
+  const [url, setUrl] = useState(''), [nome, setNome] = useState(''), [qr, setQr] = useState(null);
+  const links = o.links3d || [];
+  const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { links3d: l, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }).catch(e => toast(e.message, 'erro'));
+  const add = () => { let u = url.trim(); if (!u) return toast('Cole o link do QR Code do Dinabox.'); if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    salvar([...links, { url: u, nome: nome.trim() || 'Projeto 3D', por: sessao.nome, em: nowIso() }]); setUrl(''); setNome(''); toast('Link salvo.', 'ok'); };
+  const end = o.cliente?.enderecoMontagem || o.cliente?.endereco || '';
+  return html`<div class="stack">
+    <div class="card stack mont-card">
+      <b>🧊 Projeto 3D para a montagem</b>
+      <small class="dim">No Dinabox, abra o lote → "Obter link QRCODE" → copie o link e cole aqui. O montador abre direto na obra.</small>
+      ${links.length ? html`<div class="mont-links">${links.map((l, i) => html`<div key=${i} class="mont-link">
+          <a class="btn btn-primary" href=${l.url} target="_blank" rel="noopener">🧊 Abrir ${l.nome}</a>
+          <button class="btn btn-sm" title="Mostrar QR Code" onClick=${() => setQr(l)}>▦ QR</button>
+          <button class="btn btn-sm" title="Copiar link" onClick=${() => { navigator.clipboard?.writeText(l.url); toast('Link copiado.', 'ok'); }}>📋</button>
+          <button class="btn btn-sm btn-ghost" title="Remover" onClick=${() => confirm('Remover este link?') && salvar(links.filter((_, j) => j !== i))}>🗑</button></div>`)}</div>`
+        : html`<div class="vazio dim">Nenhum link 3D ainda.</div>`}
+      <div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}><input class="inp" style=${{ flex: 3, minWidth: '200px' }} placeholder="Cole aqui o link do QR Code do Dinabox" value=${url} onInput=${e => setUrl(e.target.value)} />
+        <input class="inp" style=${{ flex: 1, minWidth: '120px' }} placeholder="Nome (ex: Banheiro filha)" value=${nome} onInput=${e => setNome(e.target.value)} />
+        <button class="btn btn-verde" onClick=${add}>＋ Salvar link</button></div>
+    </div>
+    <div class="card stack"><b>📍 Endereço de montagem</b>${end ? html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><span style=${{ flex: 1 }}>${end}</span><a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(end)}>🗺 Abrir no mapa</a></div>` : html`<div class="dim">Não preenchido.</div>`}
+      ${o.cliente?.telefone && html`<a class="btn btn-sm" style=${{ alignSelf: 'flex-start' }} href=${'https://wa.me/55' + String(o.cliente.telefone).replace(/\D/g, '').replace(/^55/, '')} target="_blank" rel="noopener">💬 WhatsApp do cliente</a>`}</div>
+    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
+      <button class="btn" onClick=${() => irAba('entrega')}>🚚 Ordem de entrega (check-list)</button>
+      <button class="btn" onClick=${() => irAba('diario')}>📓 Diário de obra</button>
+      <button class="btn" onClick=${() => irAba('folha')}>📄 Folha da OS</button></div>
+    ${qr && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${() => setQr(null)}><div class="card modal-caixa stack" style=${{ width: 'min(360px,100%)', textAlign: 'center' }}>
+      <b>${qr.nome}</b><img style=${{ width: '100%', imageRendering: 'pixelated' }} src=${'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(qr.url)} alt="QR Code" />
+      <small class="dim">Aponte a câmera do celular para abrir o 3D.</small><button class="btn" onClick=${() => setQr(null)}>Fechar</button></div></div>`, document.body)}
+  </div>`;
+}
 function AndamentoFicha({ sessao, o, toast, pend, compras, peds, falta = [], irAba }) {
   const [bloq, setBloq] = useState(null);
   const exigir = (titulo, acao) => { if (!String(o.cliente?.enderecoMontagem || '').trim()) return toast('📍 Falta o endereço de montagem: abra Editar OS e preencha no final da OS.', 'erro'); if (!falta.length) return acao(); setBloq({ titulo, acao }); };
@@ -4397,8 +4431,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
       ${(o.liberacoes || []).length > 0 && falta.length > 0 && (() => { const L = o.liberacoes[o.liberacoes.length - 1]; return html`<div class="lib-aviso" title=${'Pendências na liberação: ' + (L.falta || []).join('; ')}>🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> <small>(${L.por}, ${fmtData(L.em)})</small></div>`; })()}
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['diario', '📓 Diário de obra'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
+      ${modoV === 'montagem' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
       ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
