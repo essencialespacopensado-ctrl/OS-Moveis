@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['207', ['← Botão Voltar dentro da OS: volta para a aba anterior (ex.: de Montagem para Andamento) e, no começo, fecha a OS e volta para a tela de antes.']],
   ['206', ['🔧 Nova aba Montagem na OS: cole o link do QR Code do projeto 3D do Dinabox e o montador abre direto na obra (botão Abrir, QR Code para o celular e copiar). Também mostra o endereço com mapa, WhatsApp do cliente e atalhos para a ordem de entrega, diário e folha.']],
   ['205', ['📲 iPhone/iPad: botão "Instalar" no topo mostra o passo a passo para colocar o Gestão Pró na tela de início (Safari → Compartilhar → Adicionar à Tela de Início).', '🤔 Quando a IA está pensando, o ajudante coloca a mão no queixo.']],
   ['204', ['👷 Nome e foto do ajudante agora ficam em Configurações (administrador) e aparecem iguais em todos os aparelhos. No bonequinho ficam só: Me mostra esta tela, Fazer uma pergunta, Onde fica…? e Voltar para casa.', '✦ Saiu o botão "Peça qualquer coisa" — as perguntas agora são pelo bonequinho.']],
@@ -4378,7 +4379,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const [enviar, setEnviar] = useState(false);
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
   const [ordP, setOrdP] = useState(false);
+  const histV = useRef([]), pularHist = useRef(false), ultV = useRef(null);
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'andamento'; });
+  useEffect(() => { if (ultV.current && ultV.current !== modoV && !pularHist.current) histV.current.push(ultV.current); pularHist.current = false; ultV.current = modoV; }, [modoV]);
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
   const [todas, setTodas] = useState([]);
@@ -4412,7 +4415,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const fim = (o.statusHist || []).slice().reverse().find(h => h.st === 'concluida');
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}>
     <div class="card modal-caixa stack ficha" style=${{ width: 'min(720px,100%)', '--cc': cor }}>
-      <div class="ficha-cab"><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
+      <div class="ficha-cab"><button class="ficha-voltar" title="Voltar" onClick=${() => { const h = histV.current; if (h.length) { pularHist.current = true; setModoV(h.pop()); } else fechar(); }}>←</button><div><div class="ficha-num">${numOS(o)} <span>${fin ? '✅ Finalizada' + (fim ? ' · ' + fmtData(fim.em) : '') : ((STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0] || {}).t || '').replace(/^\d+\. /, '')}</span></div>
         <b>${nomePadrao(o.cliente?.nome)} <button class="edit-cli" title="Editar nome do cliente" onClick=${async () => {
           const antigo = o.cliente?.nome || ''; const novo = nomePadrao(await pedirTexto('✏️ Nome do cliente', 'Nome do cliente', antigo) || ''); if (!novo || novo === antigo) return;
           const outras = baseCli(antigo) && baseCli(antigo) !== baseCli(novo) ? (await F().fsMod.getDocs(col('empresas', sessao.empresaId, 'os'))).docs.map(d => ({ id: d.id, ...d.data() })).filter(x => x.id !== o.id && baseCli(x.cliente?.nome) === baseCli(antigo)) : [];

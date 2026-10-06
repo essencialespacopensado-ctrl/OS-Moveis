@@ -1743,3 +1743,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .mont-links{display:flex;flex-direction:column;gap:6px}
 .mont-link{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .mont-link a.btn{flex:1;min-width:200px;text-align:center}
+.ficha-cab{align-items:center}
+.ficha-voltar{flex:none;border:0;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:20px;font-weight:800;cursor:pointer;margin-right:10px}
+.ficha-voltar:hover{background:rgba(255,255,255,.32)}
