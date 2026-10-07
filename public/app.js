@@ -7157,15 +7157,17 @@ function Mascote() {
     const h = () => setPos(p => ({ x: Math.min(p.x, window.innerWidth - 90), y: Math.min(p.y, window.innerHeight - 150) })); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
+  const balPos = () => { const W = window.innerWidth, H = window.innerHeight, w = Math.min(260, W - 16); const left = Math.max(8, Math.min(W - w - 8, pos.x + 35 - w / 2)); const alto = rosto ? 160 : 130;
+    return pos.y < H / 2 ? { position: 'fixed', left: left + 'px', top: Math.min(H - 120, pos.y + alto) + 'px', bottom: 'auto', right: 'auto', width: w + 'px', transform: 'none', maxHeight: (H - Math.min(H - 120, pos.y + alto) - 12) + 'px' } : { position: 'fixed', left: left + 'px', bottom: (H - pos.y + 6) + 'px', top: 'auto', right: 'auto', width: w + 'px', transform: 'none', maxHeight: (pos.y - 12) + 'px' }; };
   const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
   return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '') + ' prof-' + prof + (rosto ? ' com-foto' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
-    ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
+    ${(fala || menu) && ReactDOM.createPortal(html`<div class="masc-bal masc-bal-fix" style=${balPos()}>${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
         <button class="btn btn-sm" onClick=${() => { setMenu(false); window.__abrirAssist && window.__abrirAssist(); }}>💬 Fazer uma pergunta</button>
         <form class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }} onSubmit=${e => { e.preventDefault(); setMenu(false); onde(q); setQ(''); }}><input class="inp inp-sm" placeholder="Onde fica…? (ex: compras)" value=${q} onInput=${e => setQ(e.target.value)} /><button class="btn btn-sm">Ir</button></form>
         <button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button>
-</div>` : ''}</div>`}
+</div>` : ''}</div>`, document.body)}
     ${longe && !andando && html`<button class="masc-casa" title="Voltar ao ponto de partida" onClick=${casa}>🏠</button>`}
     <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title=${nome + ', o ajudante'}>
       <div class="masc-pesc"></div>

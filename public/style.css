@@ -1943,3 +1943,4 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .comb-it img{width:54px;height:54px;object-fit:cover;border-radius:6px}.comb-it small{display:block}
 .nova-versao{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483003;background:#0f1e33;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.3);font-weight:600;display:flex;gap:10px;align-items:center}.nova-versao button{background:#22c55e;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
 .masc.com-foto.bal-baixo .masc-bal{bottom:auto!important;top:158px}.masc-bal{min-height:auto;height:auto;max-height:60vh}
+.masc-bal.masc-bal-fix{z-index:2147483001!important;overflow:auto;height:auto!important;min-height:0}.masc-bal.masc-bal-fix::after{display:none}
