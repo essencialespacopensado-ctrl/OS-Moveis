@@ -4484,7 +4484,7 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
   useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(s => setAtas(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(c.nome)))).catch(() => {}); }, [c.id]);
   const ativas = oss.filter(o => !osConcluida(o));
   const pend = [];
-  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo, o.id, 'andamento']); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2], o.id, 'compras'])); });
+  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo, o.id, 'andamento']); if (o.entregaPendente) pend.push(['🚚', numOS(o) + ' falta entregar: ' + o.entregaPendente.faltam.join(', ') + ' (' + o.entregaPendente.motivo + ')', o.id, 'entrega']); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2], o.id, 'compras'])); });
   const pct = oss.length ? Math.round(oss.reduce((n, o) => n + pctObra(o), 0) / oss.length) : 0;
   const pux = oss.flatMap(o => puxadoresDaOS(o).map(([onde, x]) => [numOS(o) + (onde ? ' · ' + onde : ''), x]));
   const ele = oss.flatMap(o => (o.eletros || []).map(e => ({ ...e, os: numOS(o) })));
@@ -4708,6 +4708,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const parcAb = parc.filter(p => p.st !== 'recebido');
   const etAb = ETAPAS_FAB.filter(([k]) => et[k] && et[k].status !== 'pronto' && et[k].onde !== 'nao');
   const faltaI = [
+    ...(o.entregaPendente ? [['🚚 Falta entregar: ' + o.entregaPendente.faltam.join(', ') + ' — ' + o.entregaPendente.motivo, 'entrega']] : []),
     ...parcAb.map(p => [p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2], 'compras']),
     ...faltaCompra.map(i => ['🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : ''), 'compras']),
     ...pedAb.map(p => ['🪵 Peça extra: ' + resumoPed(p), 'andamento']),
@@ -4746,7 +4747,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
       ${modoV === 'diario' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
-      <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
+      <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} sessao=${sessao} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
@@ -5443,7 +5444,7 @@ function gruposEspec(P) {
   ].map(([i, t, c, l]) => [i, t, c, l.filter(([, v]) => v)]).filter(([, , , l]) => l.length);
 }
 /* ---------- Ordem de entrega: check-list por móvel com tudo que compõe ---------- */
-function OrdemEntrega({ os, empresa }) {
+function OrdemEntrega({ os, empresa, sessao }) {
   const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
   const ambs = os.ambientes || [];
   const todos = ambs.flatMap((a, ai) => (a.moveis || []).map((m, mi) => ({ a, ai, m, k: ai + '-' + mi })));
@@ -5458,13 +5459,26 @@ function OrdemEntrega({ os, empresa }) {
     ...(m.ferragens || []).map(f => ['Ferragem', (f.quantidade ? f.quantidade + '× ' : '') + [f.tipo, f.fabricante, f.modelo].filter(Boolean).join(' ')]),
   ].filter(([k, v]) => k && v && String(v).trim());
   const vai = todos.filter(x => sel.has(x.k));
+  const vaiK = () => todos.filter(x => sel.has(x.k)).map(x => x.k);
+  const registrarEntrega = async () => {
+    const ent = [...new Set([...(os.entreguesK || []), ...vaiK()])];
+    const falt = todos.filter(x => !ent.includes(x.k)).map(x => nomePadrao(x.m.nome) || 'Móvel');
+    let motivo = '';
+    if (falt.length) { motivo = await pedirMotivo('Entrega incompleta', 'Ficaram faltando ' + falt.length + ' móvel(is): ' + falt.join(', ') + '. Por que não foram entregues?'); if (!motivo) return; }
+    const reg = { em: nowIso(), por: sessao.nome, data, entregues: todos.filter(x => sel.has(x.k)).map(x => nomePadrao(x.m.nome) || 'Móvel'), faltam: falt, motivo };
+    try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { entreguesK: ent, entregas: [...(os.entregas || []), reg], entregaPendente: falt.length ? { faltam: falt, motivo, por: sessao.nome, em: reg.em } : null });
+      registrar(sessao, os.id, '🚚', falt.length ? 'Entrega parcial — faltam: ' + falt.join(', ') : 'Entrega completa registrada', motivo);
+      alert(falt.length ? '⚠ Entrega registrada como INCOMPLETA. Fica um alerta na OS até entregar: ' + falt.join(', ') : '✅ Entrega completa registrada.');
+    } catch (e) { alert('Não salvou: ' + e.message); } };
   const porAmb = ambs.map((a, ai) => ({ a, ai, l: vai.filter(x => x.ai === ai) })).filter(g => g.l.length);
   return html`<div class="oe-wrap">
     <div class="oe-sel so-tela">
       <div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🚚 Quais móveis vão nesta entrega?</b>
         <span class="row" style=${{ gap: '6px' }}><small>Data:</small><input type="date" class="inp inp-sm" value=${data} onInput=${e => setData(e.target.value)} />
         <button class="btn btn-sm" onClick=${() => setSel(new Set(todos.map(x => x.k)))}>Todos</button><button class="btn btn-sm" onClick=${() => setSel(new Set())}>Nenhum</button></span></div>
-      <div class="oe-chips">${todos.map(x => html`<button key=${x.k} class=${'sug-pessoa' + (sel.has(x.k) ? ' on' : '')} onClick=${() => tog(x.k)}>${sel.has(x.k) ? '✓ ' : ''}${nomePadrao(x.m.nome) || 'Móvel'}</button>`)}</div>
+      <div class="oe-chips">${todos.map(x => { const ja = (os.entreguesK || []).includes(x.k); return html`<button key=${x.k} class=${'sug-pessoa' + (sel.has(x.k) ? ' on' : '')} title=${ja ? 'Já entregue' : ''} onClick=${() => tog(x.k)}>${sel.has(x.k) ? '✓ ' : ''}${ja ? '🚚 ' : ''}${nomePadrao(x.m.nome) || 'Móvel'}</button>`; })}</div>
+      ${os.entregaPendente && html`<div class="oe-pend">⚠ <b>Ficou faltando entregar:</b> ${os.entregaPendente.faltam.join(', ')}<br/><small>Motivo: ${os.entregaPendente.motivo} — ${os.entregaPendente.por}, ${fmtData(os.entregaPendente.em)}</small></div>`}
+      ${sessao && html`<button class="btn btn-primary" style=${{ alignSelf: 'flex-start' }} disabled=${!vaiK().length} onClick=${registrarEntrega}>✅ Registrar entrega (${vaiK().length} móveis)</button>`}
     </div>
     <div class="po po2 oe" style=${varsCores(cor)}>
       <div class="po-topo">

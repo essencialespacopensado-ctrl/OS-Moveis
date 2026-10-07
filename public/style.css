@@ -1926,3 +1926,4 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .ele-ficha{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}.ele-ficha th{text-align:left;background:#f1f5f9;padding:3px 6px;width:42%;font-weight:600;color:#334155}.ele-ficha td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
 .masc,.masc-volta{z-index:2147483000!important}.masc-bal{z-index:2147483001!important}.lang-aviso{z-index:2147483002}
 .fc-confcat{display:flex;gap:6px;align-items:center;margin:0 0 6px}
+.oe-pend{background:#fef2f2;border:2px solid #fca5a5;color:#991b1b;border-radius:10px;padding:8px 10px;font-size:13px;margin:6px 0}
