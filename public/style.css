@@ -1789,3 +1789,57 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .orc-p.ok{background:#f0fdf4;border-color:#86efac}
 .orc-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13.5px}
 .orc-sel{display:flex;flex-wrap:wrap;gap:6px}
+/* v216 idiomas */
+.lang-sel{margin-left:auto;border:1px solid rgba(0,0,0,.15);border-radius:8px;padding:3px 4px;font:600 12px inherit;background:#fff;cursor:pointer}
+.lang-aviso{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:10100;background:#1c1917;color:#fde68a;padding:8px 16px;border-radius:20px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.25);animation:fadeIn .2s}
+/* v216 mascote humano + uniformes por profissão */
+.masc{--pele:#f2c29b;--pele2:#d9976a;--cab:#3b2414;--u1:#b45309;--u2:#78350f;--calca:#1e3a8a;--sap:#1c1917;--ch:none}
+.masc-cab.hum{background:radial-gradient(circle at 38% 32%,#ffe4cf,var(--pele) 55%,var(--pele2));border-radius:46% 46% 44% 44%/50% 50% 48% 48%;width:42px;left:14px;top:2px}
+.masc-cabelo{position:absolute;left:-2px;top:-4px;width:46px;height:20px;background:var(--cab);border-radius:24px 24px 6px 10px;box-shadow:inset -3px -3px 5px rgba(0,0,0,.25)}
+.masc-cabelo::after{content:'';position:absolute;left:-1px;top:10px;width:8px;height:14px;background:var(--cab);border-radius:0 0 6px 6px}
+.masc-orelha{position:absolute;top:20px;width:8px;height:11px;border-radius:50%;background:var(--pele2)}.masc-orelha.e{left:-4px}.masc-orelha.d{right:-4px}
+.masc-sobr{position:absolute;top:18px;width:9px;height:2px;border-radius:2px;background:var(--cab)}.masc-sobr.e{left:9px}.masc-sobr.d{left:24px}
+.masc-cab.hum .masc-olho{top:22px;width:6px;height:7px;background:#fff;border:0;box-shadow:inset 0 0 0 1.5px #3f2a1d}
+.masc-cab.hum .masc-olho::after{content:'';position:absolute;left:1.5px;top:1.5px;width:3.5px;height:4px;border-radius:50%;background:#1c1917}
+.masc-cab.hum .masc-olho.e{left:10px}.masc-cab.hum .masc-olho.d{left:25px}
+.masc-nariz{position:absolute;left:18px;top:26px;width:6px;height:8px;border-radius:40% 40% 50% 50%;background:var(--pele2);opacity:.75}
+.masc-cab.hum .masc-boca{left:15px;top:35px;width:12px;height:5px;background:#9f1239;border-radius:0 0 8px 8px}
+.masc-pesc{position:absolute;left:29px;top:38px;width:12px;height:8px;background:var(--pele2);border-radius:3px}
+.masc-tronco{background:linear-gradient(90deg,var(--u1),var(--u2))!important;border-radius:12px 12px 6px 6px}
+.masc-braco{background:linear-gradient(90deg,var(--u1),var(--u2))!important}
+.masc-mao{position:absolute;bottom:-6px;left:0;width:10px;height:9px;border-radius:50%;background:var(--pele)}
+.masc-item{position:absolute;bottom:-14px;left:-4px;font-size:12px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+.masc-perna{background:linear-gradient(90deg,var(--calca),color-mix(in srgb,var(--calca) 70%,#000))!important}
+.masc-sapato{position:absolute;bottom:-3px;left:-2px;width:15px;height:6px;border-radius:6px 8px 3px 3px;background:var(--sap)}
+.masc-gola,.masc-gravata,.masc-avental,.masc-cinto,.masc-oculos{display:none;position:absolute}
+.masc-gola{left:10px;top:0;width:18px;height:6px;border-radius:0 0 9px 9px;background:#fff}
+.masc-gravata{left:16px;top:2px;width:6px;height:20px;background:#b91c1c;clip-path:polygon(20% 0,80% 0,100% 85%,50% 100%,0 85%)}
+.masc-avental{left:6px;top:6px;width:26px;height:30px;border-radius:4px 4px 8px 8px;background:#a16207;box-shadow:inset 0 -6px 0 rgba(0,0,0,.12)}
+.masc-cinto{left:0;bottom:2px;width:38px;height:4px;background:#1c1917}
+.masc-oculos{left:7px;top:19px;width:30px;height:10px;border:2px solid #1f2937;border-radius:5px;background:linear-gradient(90deg,transparent 45%,#1f2937 45% 55%,transparent 55%);z-index:2}
+.masc-chapeu{position:absolute;display:none;left:-3px;top:-10px;width:48px;height:20px;border-radius:24px 24px 4px 4px;z-index:3;box-shadow:inset -3px -4px 6px rgba(0,0,0,.2)}
+.masc-cab.foto .masc-chapeu{left:4px;top:-14px;width:52px}
+.masc-chapeu.cap::after,.prof-montador .masc-chapeu::after,.prof-engenheiro .masc-chapeu::after{content:'';position:absolute;left:-4px;bottom:-2px;width:56px;height:5px;border-radius:3px;background:inherit}
+/* profissões */
+.prof-marceneiro{--u1:#f5f5f4;--u2:#d6d3d1;--calca:#1e40af}.prof-marceneiro .masc-avental{display:block}.prof-marceneiro .masc-cinto{display:block;background:#78350f}
+.prof-montador{--u1:#2563eb;--u2:#1e3a8a;--calca:#1e3a8a}.prof-montador .masc-chapeu{display:block;background:radial-gradient(circle at 35% 25%,#fde68a,#f59e0b 60%,#b45309)}.prof-montador .masc-cinto{display:block;background:#facc15}
+.prof-projetista{--u1:#fafafa;--u2:#e5e7eb;--calca:#374151;--sap:#78350f}.prof-projetista .masc-oculos,.prof-projetista .masc-gola{display:block}.prof-projetista .masc-gola{background:#e5e7eb}
+.prof-vendedor{--u1:#1e3a8a;--u2:#172554;--calca:#172554;--sap:#0f172a}.prof-vendedor .masc-gola,.prof-vendedor .masc-gravata{display:block}.prof-vendedor .masc-gravata{background:#2563eb}
+.prof-gerente{--u1:#4b5563;--u2:#1f2937;--calca:#1f2937;--sap:#0f172a;--cab:#6b7280}.prof-gerente .masc-gola,.prof-gerente .masc-gravata{display:block}.prof-gerente .masc-oculos{display:block}
+.prof-pintor{--u1:#ffffff;--u2:#e7e5e4;--calca:#f5f5f4;--sap:#78716c}.prof-pintor .masc-chapeu{display:block;background:#fff;border:1px solid #d6d3d1;height:14px;top:-6px}.prof-pintor .masc-tronco::after{content:'';position:absolute;left:6px;top:14px;width:8px;height:6px;border-radius:50%;background:#60a5fa;box-shadow:16px 6px 0 #f472b6,8px 12px 0 #facc15}
+.prof-engenheiro{--u1:#f97316;--u2:#c2410c;--calca:#1e3a8a}.prof-engenheiro .masc-chapeu{display:block;background:radial-gradient(circle at 35% 25%,#fff,#e5e7eb 60%,#9ca3af)}.prof-engenheiro .masc-tronco::after{content:'';position:absolute;left:0;top:14px;width:38px;height:4px;background:#e5e7eb;box-shadow:0 8px 0 #e5e7eb}
+.prof-motorista{--u1:#16a34a;--u2:#166534;--calca:#1f2937}.prof-motorista .masc-chapeu{display:block;background:#166534;height:14px;top:-6px}.prof-motorista .masc-gola{display:block;background:#14532d}
+.prof-serralheiro{--u1:#57534e;--u2:#292524;--calca:#292524}.prof-serralheiro .masc-avental{display:block;background:#44403c}.prof-serralheiro .masc-oculos{display:block;border-color:#0ea5e9}
+.prof-eletricista{--u1:#facc15;--u2:#ca8a04;--calca:#1e3a8a}.prof-eletricista .masc-chapeu{display:block;background:radial-gradient(circle at 35% 25%,#93c5fd,#2563eb 60%,#1e3a8a)}.prof-eletricista .masc-cinto{display:block}
+.masc.anda .masc-cabelo,.masc.anda .masc-sobr.e,.masc.anda .masc-orelha.e{opacity:.9}
+/* escolha de profissão */
+.masc-profs{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.masc-prof{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border:2px solid #e7e5e4;border-radius:12px;background:#fff;cursor:pointer;font:600 12px inherit}
+.masc-prof.on{border-color:#f59e0b;background:#fffbeb}
+.masc-mini{position:relative;width:34px;height:52px;--u1:#b45309;--u2:#78350f;--calca:#1e3a8a}
+.masc-mini i{position:absolute;display:block}
+.masc-mini .mm-cab{left:9px;top:6px;width:16px;height:16px;border-radius:50%;background:#f2c29b}
+.masc-mini .mm-ch{left:7px;top:3px;width:20px;height:9px;border-radius:10px 10px 2px 2px;background:#3b2414;z-index:2}
+.masc-mini .mm-tr{left:6px;top:22px;width:22px;height:17px;border-radius:6px 6px 3px 3px;background:linear-gradient(90deg,var(--u1),var(--u2))}
+.masc-mini .mm-ca{left:9px;top:38px;width:16px;height:13px;border-radius:2px;background:var(--calca)}
+.masc-mini.prof-montador .mm-ch{background:#f59e0b}.masc-mini.prof-engenheiro .mm-ch{background:#e5e7eb}.masc-mini.prof-eletricista .mm-ch{background:#2563eb}.masc-mini.prof-pintor .mm-ch{background:#fff;border:1px solid #ccc}.masc-mini.prof-motorista .mm-ch{background:#166534}.masc-mini.prof-gerente .mm-ch{background:#6b7280}

@@ -472,7 +472,7 @@ async function chamarIA(tarefa, dados = {}, imagens = []) {
   const user = F().auth.currentUser;
   if (!user) throw new Error('Faça login de novo.');
   const token = await user.getIdToken();
-  const mostrar = tarefa !== 'assistente';
+  const mostrar = tarefa !== 'assistente' && tarefa !== 'traduzir';
   const corpo = JSON.stringify({ tarefa, dados, imagens });
   const base = PROG.st ? Math.max(PROG.st.pct || 0, 40) : 5;
   let espera = null;
@@ -761,14 +761,14 @@ function useFala({ onFinal, onInterim, global: ehGlobal } = {}) {
     if (!SR) { setErro('Este navegador não reconhece voz. Use o Google Chrome ou o Microsoft Edge.'); return; }
     setErro('');
     const rec = new SR();
-    rec.lang = 'pt-BR';
+    rec.lang = (window.__I18N && window.__I18N.locale()) || 'pt-BR';
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = (ev) => {
       let interim = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) cbRef.current.onFinal?.(r[0].transcript.trim());
+        if (r.isFinal) { try { window.__I18N && window.__I18N.detectar(r[0].transcript); } catch {} cbRef.current.onFinal?.(r[0].transcript.trim()); }
         else interim += r[0].transcript;
       }
       cbRef.current.onInterim?.(interim);
@@ -6545,7 +6545,7 @@ function Assistente({ sessao, osAberta }) {
     const sy = window.speechSynthesis; if (!sy || !txt) { if (chamadaRef.current) { setFase('ouvindo'); falaCh.iniciar(); } return res(); }
     setFase('falando'); if (!falaCh.ouvindo) falaCh.iniciar();
     const u = new SpeechSynthesisUtterance(String(txt).replace(/[*#_`>]/g, '').slice(0, 600));
-    u.lang = 'pt-BR'; const v = sy.getVoices().find(x => /pt-BR/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.35; falandoTxt.current = norm(txt);
+    u.lang = (window.__I18N && window.__I18N.locale()) || 'pt-BR'; const v = sy.getVoices().find(x => x.lang.replace('_', '-').toLowerCase() === u.lang.toLowerCase()) || sy.getVoices().find(x => x.lang.slice(0, 2) === u.lang.slice(0, 2)); if (v) u.voice = v; u.rate = 1.35; falandoTxt.current = norm(txt);
     let feito = false;
     const fim = () => { if (feito) return; feito = true; falandoTxt.current = ''; res(); if (chamadaRef.current) { if (faseRef.current === 'falando') setFase('ouvindo'); } };
     u.onend = fim; u.onerror = fim; try { sy.cancel(); sy.resume(); sy.speak(u); } catch { fim(); }
@@ -6915,7 +6915,7 @@ function MenuLateral({ abas, aba, irPara, logo, empresa, aberto, setAberto }) {
   const ir = (v) => { irPara(v); setAberto(false); };
   return html`${aberto && html`<div class="side-fundo" onClick=${() => setAberto(false)}></div>`}
   <aside class=${'side' + (aberto ? ' aberto' : '')}>
-    <div class="side-brand">${logo ? html`<img src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}<div><b>Gestão Pró</b><small>${empresa}</small></div></div>
+    <div class="side-brand">${logo ? html`<img src=${logo} alt="logo" />` : html`<div class="brand-mark">GP</div>`}<div><b class="notr">Gestão Pró</b><small class="notr">${empresa}</small></div><${IdiomaRapido} /></div>
     <nav class="side-nav">
       ${secs.map(([k, t, cor, subs]) => { const ativo = secaoDe(aba)[0] === k; const ic = t.split(' ')[0], nome = t.replace(/^\S+\s/, '');
         if (subs.length === 1) return html`<button key=${k} data-aba=${subs[0].v} data-sec=${k} class=${'side-it' + (ativo ? ' on' : '')} onClick=${() => ir(subs[0].v)}><span class="side-ic">${ic}</span><span class="side-t">${nome}</span></button>`;
@@ -6927,6 +6927,69 @@ function MenuLateral({ abas, aba, irPara, logo, empresa, aberto, setAberto }) {
     </nav>
   </aside>`;
 }
+const PROFS = { marceneiro: { nome: 'Marceneiro', item: '📏' }, montador: { nome: 'Montador', item: '🔧' }, projetista: { nome: 'Projetista / Arquiteto', item: '📐' }, vendedor: { nome: 'Vendedor', item: '📋' }, gerente: { nome: 'Gerente', item: '💼' }, pintor: { nome: 'Pintor', item: '🖌️' }, engenheiro: { nome: 'Engenheiro', item: '🦺' }, motorista: { nome: 'Motorista / Entregas', item: '🚚' }, serralheiro: { nome: 'Serralheiro', item: '🔥' }, eletricista: { nome: 'Eletricista', item: '💡' } };
+/* ---------- Idiomas: PT / EN / ES (tradução automática da tela, troca por configuração, voz ou escrita) ---------- */
+const I18N = (() => {
+  const LOC = { pt: 'pt-BR', en: 'en-US', es: 'es-ES' };
+  const ler = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+  let lang = ler('osm_lang', 'pt'); if (!LOC[lang]) lang = 'pt';
+  const dic = { en: {}, es: {} }; ['en', 'es'].forEach(l => { try { Object.assign(dic[l], JSON.parse(localStorage.getItem('osm_i18n_' + l) || '{}')); } catch {} });
+  const pend = new Set(); let tmr = null, ocupado = false, remotoLido = {};
+  const PULA = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'CODE', 'PRE', 'NOSCRIPT', 'SVG']);
+  const vale = (t) => { const x = t.trim(); return x.length > 1 && x.length <= 220 && /[A-Za-zÀ-ú]{2}/.test(x) && !/^[\w.+-]+@[\w.-]+$/.test(x) && !/^https?:/.test(x); };
+  const pular = (el) => { for (let e = el; e && e !== document.body; e = e.parentElement) { if (PULA.has(e.tagName) || e.isContentEditable || (e.classList && (e.classList.contains('notr') || e.classList.contains('cm-content')))) return true; } return false; };
+  const tradDe = (pt) => { const k = pt.trim(); const t = dic[lang][k]; if (t == null) { pend.add(k); agendar(); return null; } const i = pt.indexOf(k); return pt.slice(0, i) + t + pt.slice(i + k.length); };
+  const aplicarNo = (n) => { if (n.nodeType !== 3) return; if (n.__tr != null && n.nodeValue === n.__tr) return; if (!vale(n.nodeValue) || pular(n.parentElement)) return; n.__pt = n.nodeValue; n.__tr = null;
+    if (lang === 'pt') return; const t = tradDe(n.__pt); if (t != null) { n.__tr = t; n.nodeValue = t; } };
+  const ATR = ['placeholder', 'title', 'aria-label'];
+  const aplicarAtr = (el) => { if (!el.getAttribute || pular(el.parentElement || el) && !['INPUT', 'TEXTAREA'].includes(el.tagName)) return; ATR.forEach(a => { const v = el.getAttribute(a); if (!v) return; const keyPt = 'data-pt-' + a, keyTr = 'data-tr-' + a;
+    if (el.getAttribute(keyTr) === v) return; if (!vale(v)) return; el.setAttribute(keyPt, v); if (lang === 'pt') return; const t = tradDe(v); if (t != null) { el.setAttribute(keyTr, t); el.setAttribute(a, t); } }); };
+  const varrer = (raiz) => { if (!raiz) return; if (raiz.nodeType === 3) return aplicarNo(raiz); if (raiz.nodeType !== 1 || PULA.has(raiz.tagName) && !['INPUT', 'TEXTAREA'].includes(raiz.tagName)) { if (raiz.nodeType === 1) aplicarAtr(raiz); return; }
+    aplicarAtr(raiz); const w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT); let n; while ((n = w.nextNode())) { if (n.nodeType === 3) aplicarNo(n); else aplicarAtr(n); } };
+  const restaurar = () => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT); let n; while ((n = w.nextNode())) { if (n.nodeType === 3) { if (n.__pt != null && n.__tr != null && n.nodeValue === n.__tr) n.nodeValue = n.__pt; n.__tr = null; } else ATR.forEach(a => { const p = n.getAttribute('data-pt-' + a); if (p != null && n.getAttribute(a) === n.getAttribute('data-tr-' + a)) n.setAttribute(a, p); n.removeAttribute('data-tr-' + a); }); } };
+  const empresaDoc = () => { const E = window.__empresaIdI18n; const f = window.__fb; return E && f ? f.fsMod.doc(f.db, 'empresas', E, 'i18n', lang) : null; };
+  const lerRemoto = async () => { if (lang === 'pt' || remotoLido[lang]) return; const r = empresaDoc(); if (!r) return; remotoLido[lang] = true; try { const s = await window.__fb.fsMod.getDoc(r); const d = s.exists() ? JSON.parse(s.data().d || '{}') : {}; Object.assign(dic[lang], d); varrer(document.body); } catch {} };
+  const salvar = async (l, novos) => { try { localStorage.setItem('osm_i18n_' + l, JSON.stringify(dic[l])); } catch {} const E = window.__empresaIdI18n, f = window.__fb; if (!E || !f) return;
+    try { const r = f.fsMod.doc(f.db, 'empresas', E, 'i18n', l); const s = await f.fsMod.getDoc(r); const d = s.exists() ? JSON.parse(s.data().d || '{}') : {}; Object.assign(d, novos); Object.assign(dic[l], d); await f.fsMod.setDoc(r, { d: JSON.stringify(d), em: new Date().toISOString() }); } catch {} };
+  function agendar() { if (tmr) return; tmr = setTimeout(rodar, 500); }
+  async function rodar() { tmr = null; if (ocupado || lang === 'pt' || !pend.size || typeof chamarIA !== 'function' || !window.__fb?.auth?.currentUser) return; ocupado = true; const l = lang;
+    const lote = [...pend].filter(k => dic[l][k] == null).slice(0, 120); lote.forEach(k => pend.delete(k));
+    try { if (lote.length) { const r = await chamarIA('traduzir', { lang: l, textos: lote }); const t = (r && (r.resultado || r).t) || []; const novos = {}; lote.forEach((k, i) => { if (typeof t[i] === 'string' && t[i].trim()) { dic[l][k] = t[i].trim(); novos[k] = dic[l][k]; } }); await salvar(l, novos); if (l === lang) varrer(document.body); } }
+    catch (e) { lote.forEach(k => pend.add(k)); ocupado = false; setTimeout(agendar, 15000); return; }
+    ocupado = false; if (pend.size) agendar(); }
+  let obs = null;
+  const ligar = () => { if (obs) return; obs = new MutationObserver(ms => { if (lang === 'pt') { ms.forEach(m => { if (m.type === 'characterData') m.target.__tr = null; }); return; } for (const m of ms) { if (m.type === 'characterData') aplicarNo(m.target); else if (m.type === 'attributes') aplicarAtr(m.target); else m.addedNodes.forEach(varrer); } });
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATR }); };
+  const NOMES = { pt: 'Português', en: 'English', es: 'Español' };
+  const AVISO = { pt: '🌐 Idioma: Português', en: '🌐 Language: English', es: '🌐 Idioma: Español' };
+  const setLang = (l, origem) => { if (!LOC[l] || l === lang) return; lang = l; try { localStorage.setItem('osm_lang', l); } catch {} document.documentElement.lang = LOC[l];
+    if (l === 'pt') restaurar(); else { lerRemoto(); varrer(document.body); } window.dispatchEvent(new CustomEvent('lang-mudou', { detail: l }));
+    if (origem) { const d = document.createElement('div'); d.className = 'lang-aviso notr'; d.textContent = AVISO[l] + (origem === 'voz' ? ' 🎙' : origem === 'texto' ? ' ⌨️' : ''); document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } };
+  const PAL = { pt: 'o os as é que onde como abrir mostrar você com do da não está olá oi quero preciso fazer obrigado tela cliente agora isso esse essa minha meu por favor também cadê'.split(' '),
+    en: 'the and is are what where how open show you with of to my please this that want need hello hi thanks can could would find go client screen now it i me your'.split(' '),
+    es: 'el la los las es qué que dónde donde cómo como abrir mostrar usted con del y está hola quiero necesito hacer gracias pantalla cliente ahora eso esta mi por favor también puedes'.split(' ') };
+  const detectar = (txt) => { const w = String(txt || '').toLowerCase().normalize('NFC').match(/[a-zà-úñ]+/g) || []; if (w.length < 2) return null; const sc = {};
+    for (const l of ['pt', 'en', 'es']) sc[l] = w.reduce((a, x) => a + (PAL[l].includes(x) ? 1 : 0), 0);
+    if (/[ñ¿¡]/.test(txt)) sc.es += 2; if (/[ãõç]/.test(txt)) sc.pt += 2;
+    const best = Object.entries(sc).sort((a, b) => b[1] - a[1])[0]; if (best[0] !== lang && best[1] >= 2 && best[1] - sc[lang] >= 2) { setLang(best[0], 'auto'); return best[0]; } return null; };
+  const iniciar = (empresaId) => { window.__empresaIdI18n = empresaId; document.documentElement.lang = LOC[lang]; ligar(); if (lang !== 'pt') { lerRemoto(); varrer(document.body); } };
+  // escrita: barras de busca/pergunta e campos marcados com data-lang-detect
+  let dt = null; document.addEventListener('input', (e) => { const el = e.target; if (!el || !el.matches || !el.matches('.bg-inp, .masc-bal input, .assist-inp, [data-lang-detect]')) return; clearTimeout(dt); dt = setTimeout(() => { if (detectar(el.value)) {} }, 1200); }, true);
+  return { get lang() { return lang; }, locale: () => LOC[lang], setLang, detectar: (t) => { const r = detectar(t); return r; }, iniciar, NOMES };
+})();
+window.__I18N = I18N;
+function IdiomaCfg() {
+  const [l, setL] = useState(I18N.lang);
+  useEffect(() => { const h = (e) => setL(e.detail); window.addEventListener('lang-mudou', h); return () => window.removeEventListener('lang-mudou', h); }, []);
+  return html`<div class="card page-card stack notr"><div class="sec-title">🌐 Idioma / Language / Idioma</div>
+    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>${[['pt', '🇧🇷 Português'], ['en', '🇺🇸 English'], ['es', '🇪🇸 Español']].map(([k, t]) => html`<button key=${k} class=${'btn' + (l === k ? ' btn-primary' : '')} onClick=${() => I18N.setLang(k, 'cfg')}>${t}</button>`)}</div>
+    <small class="dim">Também troca sozinho quando você fala ou escreve em outro idioma na busca ou no ajudante. · Also switches automatically when you speak or type in another language. · También cambia solo cuando hablas o escribes en otro idioma.</small></div>`;
+}
+function IdiomaRapido() {
+  const [l, setL] = useState(I18N.lang);
+  useEffect(() => { const h = (e) => setL(e.detail); window.addEventListener('lang-mudou', h); return () => window.removeEventListener('lang-mudou', h); }, []);
+  return html`<select class="lang-sel notr" title="Idioma" value=${l} onChange=${e => I18N.setLang(e.target.value, 'cfg')}><option value="pt">🇧🇷 PT</option><option value="en">🇺🇸 EN</option><option value="es">🇪🇸 ES</option></select>`;
+}
 /* ---------- Mascote guia (bonequinho 3D que anda e mostra onde ficam as coisas) ---------- */
 function Mascote() {
   const [pos, setPos] = useState(() => ({ x: window.innerWidth - 120, y: window.innerHeight - 170 }));
@@ -6936,7 +6999,7 @@ function Mascote() {
   const [cfgV, setCfgV] = useState(0); const [pensa, setPensa] = useState(false);
   useEffect(() => { const h = (e) => setPensa(!!e.detail); window.addEventListener('masc-pensa', h); return () => window.removeEventListener('masc-pensa', h); }, []);
   useEffect(() => { const h = () => setCfgV(v => v + 1); window.addEventListener('masc-cfg', h); return () => window.removeEventListener('masc-cfg', h); }, []);
-  const nome = (window.__mascCfg || {}).nome || 'Zé', rosto = (window.__mascCfg || {}).rosto || '';
+  const nome = (window.__mascCfg || {}).nome || 'Zé', rosto = (window.__mascCfg || {}).rosto || '', prof = (window.__mascCfg || {}).prof || 'marceneiro';
   const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   const casa = () => { setMenu(false); setFala(''); destacar(null); irPara(window.innerWidth - 120, window.innerHeight - 170); };
   const alvoRef = useRef(null), posRef = useRef(pos); posRef.current = pos;
@@ -6959,7 +7022,7 @@ function Mascote() {
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
   const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
-  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '') + ' prof-' + prof} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
@@ -6969,10 +7032,11 @@ function Mascote() {
 </div>` : ''}</div>`}
     ${longe && !andando && html`<button class="masc-casa" title="Voltar ao ponto de partida" onClick=${casa}>🏠</button>`}
     <div class="masc-corpo" onClick=${() => { setMenu(m => !m); setFala(''); }} title=${nome + ', o ajudante'}>
-      ${rosto ? html`<div class="masc-cab foto"><img src=${rosto} /><div class="masc-cap"></div></div>` : html`<div class="masc-cab"><div class="masc-cap"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-boca"></div></div>`}
+      <div class="masc-pesc"></div>
+      ${rosto ? html`<div class="masc-cab foto"><img src=${rosto} /><div class="masc-chapeu"></div></div>` : html`<div class="masc-cab hum"><div class="masc-orelha e"></div><div class="masc-orelha d"></div><div class="masc-cabelo"></div><div class="masc-sobr e"></div><div class="masc-sobr d"></div><div class="masc-olho e"></div><div class="masc-olho d"></div><div class="masc-nariz"></div><div class="masc-boca"></div><div class="masc-oculos"></div><div class="masc-chapeu"></div></div>`}
       <div class="masc-nome">${nome}</div>
-      <div class="masc-tronco"><div class="masc-braco e"></div><div class="masc-braco d"></div></div>
-      <div class="masc-perna e"></div><div class="masc-perna d"></div>
+      <div class="masc-tronco"><div class="masc-gola"></div><div class="masc-gravata"></div><div class="masc-avental"></div><div class="masc-cinto"></div><div class="masc-braco e"><div class="masc-mao"></div></div><div class="masc-braco d"><div class="masc-mao"></div><span class="masc-item">${(PROFS[prof] || PROFS.marceneiro).item}</span></div></div>
+      <div class="masc-perna e"><div class="masc-sapato"></div></div><div class="masc-perna d"><div class="masc-sapato"></div></div>
       <div class="masc-sombra"></div>
     </div>
   </div>`, document.body);
@@ -7177,8 +7241,9 @@ function aplicarEtapas(cfg) {
 function MascoteCfg({ sessao, toast }) {
   const c = window.__mascCfg || {};
   const [nome, setNome] = useState(c.nome || 'Zé'), [rosto, setRosto] = useState(c.rosto || '');
+  const [prof, setProf] = useState(c.prof || 'marceneiro');
   const foto = async (f) => { if (!f) return; try { setRosto(await imagemParaJpeg(f, 260)); } catch { toast('Não consegui ler a foto.', 'erro'); } };
-  const salvar = async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { mascoteNome: nome.trim() || 'Zé', mascoteRosto: rosto }); toast('Ajudante atualizado em todos os aparelhos.', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
+  const salvar = async () => { try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { mascoteNome: nome.trim() || 'Zé', mascoteRosto: rosto, mascoteProf: prof }); toast('Ajudante atualizado em todos os aparelhos.', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
   return html`<div class="card page-card stack"><div class="sec-title">👷 Ajudante (bonequinho)</div>
     <small class="dim">O nome e a foto valem para todos os aparelhos da empresa. A foto vira o rosto em caricatura.</small>
     <div class="row" style=${{ gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -7186,7 +7251,10 @@ function MascoteCfg({ sessao, toast }) {
       <input class="inp" style=${{ flex: 1, minWidth: '160px' }} placeholder="Nome do ajudante" value=${nome} onInput=${e => setNome(e.target.value)} />
       <label class="btn">📷 ${rosto ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { foto(e.target.files[0]); e.target.value = ''; }} /></label>
       ${rosto && html`<button class="btn btn-ghost" onClick=${() => setRosto('')}>Tirar foto</button>`}
-      <button class="btn btn-primary" onClick=${salvar}>Salvar</button></div></div>`;
+      <button class="btn btn-primary" onClick=${salvar}>Salvar</button></div>
+    <span class="lbl">Profissão (define o uniforme)</span>
+    <div class="masc-profs">${Object.entries(PROFS).map(([k, p]) => html`<button key=${k} class=${'masc-prof' + (prof === k ? ' on' : '')} onClick=${() => setProf(k)}><div class=${'masc-mini prof-' + k}><i class="mm-ch"></i><i class="mm-cab"></i><i class="mm-tr"></i><i class="mm-ca"></i></div><span>${p.item} ${p.nome}</span></button>`)}</div>
+    <small class="dim">Toque em Salvar para aplicar.</small></div>`;
 }
 function DinaboxCfg({ sessao, toast }) {
   const [rod, setRod] = useState(false);
@@ -7225,6 +7293,7 @@ function TelaConfig({ sessao, toast }) {
   </div>`;
   return html`<div class="fade-up stack">
     ${sessao.papel === 'admin' && html`<${SenhaLiberacaoCfg} sessao=${sessao} toast=${toast} />`}
+    <${IdiomaCfg} />
     ${sessao.papel === 'admin' && html`<${MascoteCfg} sessao=${sessao} toast=${toast} />`}
     ${sessao.papel === 'admin' && html`<${DinaboxCfg} sessao=${sessao} toast=${toast} />`}
     <div><h2>⚙ Configurações</h2><div class="dim">Etapas do processo da sua empresa. Renomeie, reordene, mude a cor, acrescente ou tire etapas.</div></div>
@@ -7263,7 +7332,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__dinaboxEm = dd.dinaboxEm || ''; window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__dinaboxEm = dd.dinaboxEm || ''; (window.__I18N && !window.__i18nOn && (window.__i18nOn = 1, I18N.iniciar(sessao.empresaId))); window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '', prof: dd.mascoteProf || 'marceneiro' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
