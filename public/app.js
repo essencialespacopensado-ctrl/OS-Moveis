@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['211', ['📦 Dinabox: a lista de materiais de cada lote aparece na folha de compras da OS (com botão para colocar na lista de compras), e a nova aba 🧩 Peças mostra todas as peças do lote por módulo, com busca e ✓ de conferência.']],
   ['210', ['🛒 Folha de compras padrão agora é só a lista de materiais, no mesmo estilo da Ordem de entrega: separada por categoria, cada item com ☐ para marcar recebido, quantidade e código/marca.']],
   ['209', ['🔧 Diário de obra e peças extras pedidas pelo montador agora ficam só dentro da aba Montagem da OS (saiu a aba Diário separada).']],
   ['208', ['👤 Página geral do cliente (toque no cliente em Clientes): dados, status da obra, pendências, check-list de finalização com subtítulos, abas de OSs, puxadores, eletros, contrato e atas.', '🗒 Aba Montagem da OS: planejamento de execução (lista com ✓), eletros com foto e puxadores puxados da OS, e o vídeo do projeto finalizado.']],
@@ -2977,7 +2978,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <div class="seg-mini"><button class=${modo === 'folha' ? 'on' : ''} onClick=${() => setModo('folha')}>📋 Folha padrão</button><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
       </div>
-      ${modo === 'folha' ? folhaPadrao() : grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
+      ${modo === 'folha' ? html`<${MateriaisDinabox} sessao=${sessao} os=${os} toast=${toast} itens=${itens} gravar=${gravar} />${folhaPadrao()}` : grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
           <span class="row" style=${{ gap: '4px' }}>
             <button class="btn btn-sm btn-ghost" onClick=${() => setEscolher({ ids: l.map(i => i.id) })}>🤝 ${modo === 'parceiro' ? 'Trocar' : 'Parceiro p/ todos'}</button>
             ${modo === 'parceiro' && parcNome && html`<button class="btn btn-sm" onClick=${() => { setImprimir(parcNome); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Pedido p/ ${parcNome}</button>`}
@@ -4345,6 +4346,39 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
     ${aba === 'atas' && html`<div class="pcli-lista">${atas.length ? atas.map(p => html`<button key=${p.id} class="pcli-os" onClick=${() => { fechar(); window.__irPara && window.__irPara('projetos'); }}><b>🎙</b><span>${p.titulo || 'Reunião'}</span><small class="dim">${fmtData(p.criadoEm || p.em || '')}</small></button>`) : html`<div class="dim">Nenhuma ata de reunião deste cliente.</div>`}</div>`}
   </div></div>`, document.body);
 }
+/* ---------- Dados do Dinabox (materiais e peças por OS) ---------- */
+function codigosDoLote(nome) { const r = []; String(nome || '').replace(/(?:^|\D)26\s?(\d{2,3})(?!\d)/g, (m, n) => { r.push('26.' + n.padStart(3, '0')); return m; }); return [...new Set(r)]; }
+async function importarDinabox(sessao, lotes) {
+  const L = window.__listaOS || []; const por = {};
+  lotes.forEach(l => codigosDoLote(l.nome).forEach(c => (por[c] = por[c] || []).push(l)));
+  const M = F().fsMod; let n = 0; const b = M.writeBatch(F().db);
+  Object.entries(por).forEach(([c, ls]) => { const o = L.find(x => x.codigo === c); if (!o) return; const ant = (o.dinabox?.lotes || []).filter(x => !ls.some(y => y.lote === x.lote)); b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { dinabox: { em: nowIso(), lotes: [...ant, ...ls] } }); n++; });
+  await b.commit(); return n;
+}
+function ouvirDinabox(sessao, toast) {
+  window.addEventListener('message', async (e) => { if (!/^https:\/\/(www\.)?dinabox\.app$/.test(e.origin) || e.data?.tipo !== 'dinabox-import') return;
+    if (sessao.papel !== 'admin') return toast('Só o administrador pode importar do Dinabox.', 'erro');
+    try { const n = await importarDinabox(sessao, e.data.lotes || []); toast('📦 Dinabox: materiais e peças atualizados em ' + n + ' OS.', 'ok'); e.source?.postMessage({ tipo: 'dinabox-ok', n }, e.origin); } catch (er) { toast('Não importou: ' + er.message, 'erro'); } });
+}
+function MateriaisDinabox({ sessao, os, toast, itens, gravar }) {
+  const lotes = os.dinabox?.lotes || []; if (!lotes.length) return null;
+  const imp = () => { const novos = []; lotes.forEach(l => (l.mats || []).forEach(({ c: cat, q: qtd, d: desc, m: dim }) => { const d = [desc, dim].filter(Boolean).join(' · '); if (itens.some(i => norm(i.descricao) === norm(d))) return; novos.push({ id: rand(8), descricao: d, qtd: qtd, unidade: '', categoria: cat || 'Outros', origem: 'comprar', etapa: 'principal', fonte: 'Dinabox ' + l.lote }); }));
+    if (!novos.length) return toast('Tudo do Dinabox já está na lista.'); gravar([...itens, ...novos], { __log: 'Importado do Dinabox (' + novos.length + ' itens)' }); toast(novos.length + ' itens do Dinabox adicionados.', 'ok'); };
+  return html`<div class="card stack din-card"><div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>📦 Materiais do Dinabox <small class="dim">${lotes.length} lote(s) · atualizado ${fmtData(os.dinabox.em)}</small></b><button class="btn btn-sm btn-primary" onClick=${imp}>⬇ Colocar na lista de compras</button></div>
+    ${lotes.map(l => { const g = {}; (l.mats || []).forEach(m => (g[m.c || 'Outros'] = g[m.c || 'Outros'] || []).push(m)); return html`<div key=${l.lote} class="po2-amb"><div class="po2-amb-t"><b>${l.nome}</b><em>lote ${l.lote}</em></div>
+      ${Object.entries(g).map(([c, ms]) => html`<div key=${c} class="oe-acess"><div class="oe-acess-t">${c}</div>${ms.map((m, i) => html`<div key=${i} class="oe-it"><span class="oe-box p"></span><b>${m.q}</b> · ${m.d} <small>${m.m}</small></div>`)}</div>`)}</div>`; })}</div>`;
+}
+function PecasDinabox({ sessao, o, toast }) {
+  const lotes = o.dinabox?.lotes || []; const conf = o.pecasConf || {}; const [q, setQ] = useState('');
+  const tog = (k) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ['pecasConf.' + k]: conf[k] ? null : { por: sessao.nome, em: nowIso() } }).catch(e => toast(e.message, 'erro'));
+  if (!lotes.length) return html`<div class="card"><div class="vazio dim">Nenhuma lista de peças do Dinabox para esta OS ainda.</div></div>`;
+  const tot = lotes.reduce((n, l) => n + (l.pcs || []).length, 0), ok = Object.values(conf).filter(Boolean).length;
+  return html`<div class="stack"><div class="row" style=${{ gap: '8px', alignItems: 'center' }}><b>🧩 Lista de peças (Dinabox)</b><span class="chip">${ok}/${tot} conferidas</span><input class="inp inp-sm" style=${{ flex: 1 }} placeholder="🔍 Buscar peça, código, material" value=${q} onInput=${e => setQ(e.target.value)} /></div>
+    ${lotes.map(l => { const g = {}; (l.pcs || []).forEach((p, i) => { if (q && !norm(Object.values(p).join(' ')).includes(norm(q))) return; (g[p.g || 'Peças'] = g[p.g || 'Peças'] || []).push([p, i]); });
+      return html`<div key=${l.lote} class="po2-amb"><div class="po2-amb-t"><b>${l.nome}</b><em>${(l.pcs || []).length} peças</em></div>
+      ${Object.entries(g).map(([mod, ps]) => html`<div key=${mod} class="pc-mod"><div class="oe-acess-t">${mod}</div>
+        ${ps.map(([p, i]) => { const k = l.lote + '_' + i; const f = conf[k]; return html`<label key=${k} class=${'pc-it' + (f ? ' ok' : '')}><input type="checkbox" checked=${!!f} onChange=${() => tog(k)} /><b class="mono">${p.c}</b><span class="pc-n">${p.q}× ${p.n}</span><small>${p.m}</small><span class="mono pc-d">${p.l} × ${p.a}</span>${p.u && html`<em>Usinagem: ${p.u}</em>`}</label>`; })}</div>`)}</div>`; })}</div>`;
+}
 function MontagemFicha({ sessao, o, toast, irAba }) {
   const [url, setUrl] = useState(''), [nome, setNome] = useState(''), [qr, setQr] = useState(null);
   const links = o.links3d || [];
@@ -4514,8 +4548,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
       ${(o.liberacoes || []).length > 0 && falta.length > 0 && (() => { const L = o.liberacoes[o.liberacoes.length - 1]; return html`<div class="lib-aviso" title=${'Pendências na liberação: ' + (L.falta || []).join('; ')}>🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> <small>(${L.por}, ${fmtData(L.em)})</small></div>`; })()}
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['pecas', '🧩 Peças'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
+      ${modoV === 'pecas' && html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />`}
       ${modoV === 'montagem' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
@@ -7174,6 +7209,7 @@ function Principal({ sessao, toast }) {
     { v: 'config', t: 'Configurações', i: '⚙' },
   ].filter(a => pode(sessao, a.v)).concat([{ v: 'sugestoes', t: 'Sugestões & anotações', i: '💡' }, { v: 'manual', t: 'Mapa / Manual', i: '🧠' }, { v: 'novidades', t: 'Novidades', i: '🆕' }]);
   const [menuAb, setMenuAb] = useState(false);
+  useEffect(() => { ouvirDinabox(sessao, toast); }, []);
   const vis = (v) => abas.some(a => a.v === v);
   useEffect(() => { if (!vis(aba) && abas[0]) setAba(abas[0].v); });
   const [devL, setDevL] = useState(false);
