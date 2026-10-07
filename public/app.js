@@ -6936,8 +6936,9 @@ const I18N = (() => {
   const dic = { en: {}, es: {} }; ['en', 'es'].forEach(l => { try { Object.assign(dic[l], JSON.parse(localStorage.getItem('osm_i18n_' + l) || '{}')); } catch {} });
   const pend = new Set(); let tmr = null, ocupado = false, remotoLido = {};
   const PULA = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'CODE', 'PRE', 'NOSCRIPT', 'SVG']);
-  const vale = (t) => { const x = t.trim(); return x.length > 1 && x.length <= 220 && /[A-Za-zÀ-ú]{2}/.test(x) && !/^[\w.+-]+@[\w.-]+$/.test(x) && !/^https?:/.test(x); };
-  const pular = (el) => { for (let e = el; e && e !== document.body; e = e.parentElement) { if (PULA.has(e.tagName) || e.isContentEditable || (e.classList && (e.classList.contains('notr') || e.classList.contains('cm-content')))) return true; } return false; };
+  let FONTE = ''; try { fetch(document.querySelector('script[src*="app.js"]')?.src || '/app.js').then(r => r.text()).then(t => { FONTE = t; if (lang !== 'pt') { restaurar(); varrer(document.body); } }); } catch {}
+  const vale = (t) => { const x = t.trim(); return x.length > 1 && !/^[A-Z0-9]{1,4}$/.test(x) && !!FONTE && FONTE.includes(x) && x.length <= 220 && /[A-Za-zÀ-ú]{2}/.test(x) && !/^[\w.+-]+@[\w.-]+$/.test(x) && !/^https?:/.test(x); };
+  const pular = (el) => { for (let e = el; e && e !== document.body; e = e.parentElement) { if (PULA.has(e.tagName) || e.isContentEditable || (e.classList && (e.classList.contains('notr') || e.classList.contains('cm-content') || e.classList.contains('nm') || e.classList.contains('avatar')))) return true; } return false; };
   const tradDe = (pt) => { const k = pt.trim(); const t = dic[lang][k]; if (t == null) { pend.add(k); agendar(); return null; } const i = pt.indexOf(k); return pt.slice(0, i) + t + pt.slice(i + k.length); };
   const aplicarNo = (n) => { if (n.nodeType !== 3) return; if (n.__tr != null && n.nodeValue === n.__tr) return; if (!vale(n.nodeValue) || pular(n.parentElement)) return; n.__pt = n.nodeValue; n.__tr = null;
     if (lang === 'pt') return; const t = tradDe(n.__pt); if (t != null) { n.__tr = t; n.nodeValue = t; } };
@@ -6956,7 +6957,7 @@ const I18N = (() => {
     const lote = [...pend].filter(k => dic[l][k] == null).slice(0, 120); lote.forEach(k => pend.delete(k));
     try { if (lote.length) { let t = [];
         try { for (let i = 0; i < lote.length; i += 30) { const parte = lote.slice(i, i + 30); const q = parte.map(x => x.replace(/\n/g, ' ')).join('\n'); const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&tl=' + l + '&dt=t&q=' + encodeURIComponent(q)); const j = await r.json(); const out = (j[0] || []).map(x => x[0] || '').join('').split('\n');
-            if (out.length !== parte.length) throw new Error('n'); t.push(...out.map((x, k) => { let y = x.trim(); if (/\bOS\b/.test(parte[k])) y = y.replace(/\b(SO|SOs)\b/g, m => m === 'SO' ? 'OS' : 'OSs'); return y; })); } }
+            if (out.length !== parte.length) throw new Error('n'); t.push(...out.map((x, k) => { let y = x.trim(); if (/\bOSs?\b/.test(parte[k])) y = y.replace(/\bSOs?\b/g, 'OS'); return y; })); } }
         catch { t = []; const r = await chamarIA('traduzir', { lang: l, textos: lote }); t = (r && (r.resultado || r).t) || []; } const novos = {}; lote.forEach((k, i) => { if (typeof t[i] === 'string' && t[i].trim()) { dic[l][k] = t[i].trim(); novos[k] = dic[l][k]; } }); await salvar(l, novos); if (l === lang) varrer(document.body); } }
     catch (e) { lote.forEach(k => pend.add(k)); ocupado = false; setTimeout(agendar, 15000); return; }
     ocupado = false; if (pend.size) agendar(); }
