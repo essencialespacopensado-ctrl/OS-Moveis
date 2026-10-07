@@ -1860,3 +1860,33 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .masc.com-foto.anda .masc-tronco{left:16px}
 .masc.com-foto.anda .masc-perna.e,.masc.com-foto.anda .masc-perna.d{left:28px}
 .masc.com-foto .masc-bal{bottom:138px}
+/* v219 paleta profissional: azul-marinho + cinza-ardósia, um único acento */
+:root:root{--side-bg:#0f1e33;--side-bg2:#0b1729}
+@media (prefers-color-scheme: light){:root:root:not([data-theme="dark"]){--bg:#f3f5f8;--bg2:#e8ecf1;--surface:#ffffffee;--surface-solid:#fff;--surface2:#f6f8fa;--line:rgba(15,30,51,.10);--line-strong:rgba(15,30,51,.20);--text:#0f172a;--text-mid:#475569;--text-dim:#64748b;--accent:#1e4fa3;--accent-2:#173f82;--teal:#0f766e;--ok:#15803d;--warn:#b45309;--danger:#b91c1c;--on-accent:#fff;--shadow:0 10px 28px -18px rgba(15,30,51,.35)}}
+:root:root[data-theme="light"]{--bg:#f3f5f8;--bg2:#e8ecf1;--surface:#ffffffee;--surface-solid:#fff;--surface2:#f6f8fa;--line:rgba(15,30,51,.10);--line-strong:rgba(15,30,51,.20);--text:#0f172a;--text-mid:#475569;--text-dim:#64748b;--accent:#1e4fa3;--accent-2:#173f82;--teal:#0f766e;--ok:#15803d;--warn:#b45309;--danger:#b91c1c;--on-accent:#fff;--shadow:0 10px 28px -18px rgba(15,30,51,.35)}
+:root:root:not([data-theme="light"]){--accent:#5b8def;--accent-2:#3f6fd1;--on-accent:#fff;--bg:#0b1220;--bg2:#0f172a;--surface:#131c2ecc;--surface-solid:#131c2e;--surface2:#1a2438;--line:rgba(148,163,184,.14);--line-strong:rgba(148,163,184,.28);--text:#e2e8f0;--text-mid:#a3b1c6;--text-dim:#74839a}
+@media (prefers-color-scheme: light){:root:root:not([data-theme="dark"]){--accent:#1e4fa3;--accent-2:#173f82;--bg:#f3f5f8;--bg2:#e8ecf1;--surface:#ffffffee;--surface-solid:#fff;--surface2:#f6f8fa;--line:rgba(15,30,51,.10);--line-strong:rgba(15,30,51,.20);--text:#0f172a;--text-mid:#475569;--text-dim:#64748b}}
+body{background:var(--bg)!important}
+.side-brand{background:#fff!important;border-bottom:1px solid #e2e8f0!important}
+.side-brand b{color:#0f1e33!important}
+.side-it{color:#cbd5e1}
+.side-it.on{background:rgba(255,255,255,.08)!important;color:#fff!important;border-radius:0!important;margin-right:0!important;width:100%!important;box-shadow:inset 3px 0 0 #5b8def!important}
+.side-sub{color:#94a3b8}
+.side-sub.on{color:#fff!important;background:rgba(91,141,239,.14)!important;box-shadow:inset 3px 0 0 #5b8def!important}
+.btn-primary{background:#1e4fa3!important;border-color:#1e4fa3!important;color:#fff!important;box-shadow:none!important}
+.btn-primary:hover{background:#173f82!important}
+.btn-verde{background:#15803d!important;border-color:#15803d!important}
+/* cabeçalhos de cliente: sóbrio, com faixa da cor do cliente */
+.ini-cli-top{background:#0f1e33!important;border-left:5px solid var(--cc)!important}
+.ini-cli{border-color:#e2e8f0!important;background:#fff!important}
+.ini-cli-oss,.ini-cli-os{background:#fff!important}
+.ini-cli-os:hover{background:#f1f5f9!important}
+.ini-cli-os b,.ini-cli-os .cod{color:#1e4fa3!important}
+/* abas/segmentos e topo */
+.seg button.on,.seg .on,.tabs .on{background:#0f1e33!important;color:#fff!important}
+header,.topo{background:#fff!important;border-bottom:1px solid #e2e8f0!important}
+.masc-bal{border-color:#1e4fa3!important}.masc-bal::after{border-color:#1e4fa3!important}
+.lang-aviso{background:#0f1e33;color:#fff}
+.ini-cli-os .mono{color:#1e4fa3!important}
+.seg-mini button.on,.seg-mini .on{background:#0f1e33!important;color:#fff!important;border-color:#0f1e33!important}
+.assist-fab,.fab-ajuda{background:#0f1e33!important}
