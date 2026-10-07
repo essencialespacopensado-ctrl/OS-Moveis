@@ -1918,3 +1918,7 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 @media print{.so-imp-folha{display:flex!important}.fc-ctl{display:none!important}}
 .fc-cat{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0 6px;padding:6px 8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px}
 .fc-chip.nf{background:#15803d}
+.fc-marc{margin-top:12px;border:2px solid #1e4fa3;border-radius:10px;padding:8px 10px;background:#fff}
+.fc-marc-t{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.fc-marc-t em{font-style:normal;font-size:11px;color:#475569}
+.fc-marc table{width:100%;border-collapse:collapse}.fc-marc th{background:#0f1e33;color:#fff;font-size:8pt;text-align:left;padding:4px 6px}.fc-marc td{border-bottom:1px solid #e2e8f0;padding:4px 6px;font-size:9pt}
+.fc-marc-ok{margin-top:8px;padding:6px 8px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:12px}
