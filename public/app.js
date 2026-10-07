@@ -4353,7 +4353,8 @@ async function importarDinabox(sessao, lotes, comCompras = true) {
   const L = window.__listaOS || []; const por = {};
   lotes.forEach(l => codigosDoLote(l.nome).forEach(c => (por[c] = por[c] || []).push(l)));
   const M = F().fsMod; let n = 0; const b = M.writeBatch(F().db);
-  Object.entries(por).forEach(([c, ls]) => { const o = L.find(x => x.codigo === c); if (!o) return; const ant = (o.dinabox?.lotes || []).filter(x => !ls.some(y => y.lote === x.lote)); b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { dinabox: { em: nowIso(), lotes: [...ant, ...ls] } }); n++; });
+  Object.entries(por).forEach(([c, ls]) => { const o = L.find(x => x.codigo === c); if (!o) return; const ant = (o.dinabox?.lotes || []).filter(x => !ls.some(y => y.lote === x.lote)); const ex = o.links3d || []; const nl = []; ls.forEach(l => (l.qr || []).forEach(q => { const url = 'https://www.dinabox.app/apps/3d/module-viewer/?qrcode=' + q; if (!ex.some(e => e.url === url) && !nl.some(e => e.url === url)) nl.push({ url, nome: nomePadrao(String(l.nome).replace(/^OS\s*[\d\s]+(E\s*[\d\s]+)?/i, '')) || 'Projeto 3D', por: 'Dinabox', em: nowIso() }); }));
+    b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { dinabox: { em: nowIso(), lotes: [...ant, ...ls.map(({ qr, ...r }) => r)] }, ...(nl.length ? { links3d: [...ex, ...nl] } : {}) }); n++; });
   await b.commit();
   if (comCompras) for (const [c, ls] of Object.entries(por)) { const o = L.find(x => x.codigo === c); if (o) { try { await preencherComprasDinabox(sessao, o, ls); } catch {} } }
   return n;
