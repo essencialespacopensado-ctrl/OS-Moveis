@@ -2837,8 +2837,8 @@ function ItemCompraModal({ item, parceiros, salvar, fechar }) {
 const soNum = (t) => String(t || '').replace(/\D/g, '');
 const linkWa = (num, txt) => { let n = soNum(num); if (n && !n.startsWith('55')) n = '55' + n; return 'https://wa.me/' + n + '?text=' + encodeURIComponent(txt); };
 const linkCot = (id) => location.origin + '/orcamento.html?c=' + id;
-function OrcamentosOS({ sessao, os, toast, itens, parceiros }) {
-  const [cots, setCots] = useState([]), [resp, setResp] = useState({}), [novo, setNovo] = useState(false);
+function OrcamentosOS({ sessao, os, toast, itens, parceiros, gravar }) {
+  const [cots, setCots] = useState([]), [resp, setResp] = useState({}), [novo, setNovo] = useState(false), [aprov, setAprov] = useState(null);
   useEffect(() => { const M = F().fsMod; return M.onSnapshot(M.query(M.collection(F().db, 'cotacoes'), M.where('empresaId', '==', sessao.empresaId), M.where('osId', '==', os.id)), s => setCots(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {}); }, [os.id]);
   useEffect(() => { const M = F().fsMod; const us = cots.map(c => M.onSnapshot(M.collection(F().db, 'cotacoes', c.id, 'respostas'), s => setResp(r => ({ ...r, [c.id]: s.docs.map(d => ({ id: d.id, ...d.data() })) })), () => {})); return () => us.forEach(u => u()); }, [cots.map(c => c.id).join()]);
   const voltaram = cots.filter(c => (resp[c.id] || []).length), faltam = cots.filter(c => !(resp[c.id] || []).length);
@@ -2852,12 +2852,36 @@ function OrcamentosOS({ sessao, os, toast, itens, parceiros }) {
         <div class="row" style=${{ justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}><b>${rs.length ? '✅' : '⏳'} ${c.parceiro}</b><span class="row" style=${{ gap: '4px' }}>
           ${!rs.length && html`<button class="btn btn-sm" onClick=${() => avisar(c)}>📣 Cobrar</button>`}
           <button class="btn btn-sm btn-ghost" title="Copiar link" onClick=${() => { navigator.clipboard?.writeText(linkCot(c.id)); toast('Link copiado.', 'ok'); }}>🔗</button></span></div>
-        ${rs.map(r => html`<div key=${r.id} class="orc-r"><span>${r.valor ? html`<b>R$ ${r.valor}</b> · ` : ''}${r.condicoes}${r.prazo ? ' · ' + r.prazo : ''}</span>${r.pdf && html`<button class="btn btn-sm btn-primary" onClick=${() => verPdf(r)}>📄 Ver PDF</button>`}<small class="dim">${fmtData(r.em)}</small>${r.obs && html`<div class="dim" style=${{ width: '100%' }}>${r.obs}</div>`}</div>`)}
+        ${rs.map(r => html`<div key=${r.id} class="orc-r"><span>${r.valor ? html`<b>R$ ${r.valor}</b> · ` : ''}${r.condicoes}${r.prazo ? ' · ' + r.prazo : ''}</span>${r.pdf && html`<button class="btn btn-sm btn-primary" onClick=${() => verPdf(r)}>📄 Ver PDF</button>`}<small class="dim">${fmtData(r.em)}</small>${c.aprovado?.rid === r.id ? html`<span class="chip" style=${{ background: '#15803d', color: '#fff' }}>✅ Aprovado (${(c.aprovado.itens || []).length} itens)</span>` : gravar && html`<button class="btn btn-sm btn-verde" onClick=${() => setAprov({ c, r })}>✅ Usar este orçamento</button>`}${r.obs && html`<div class="dim" style=${{ width: '100%' }}>${r.obs}</div>`}</div>`)}
       </div>`; })}</div>
       ${faltam.length > 0 && voltaram.length > 0 && html`<button class="btn btn-sm" style=${{ alignSelf: 'flex-start' }} onClick=${() => faltam.forEach((c, i) => setTimeout(() => avisar(c), i * 900))}>📣 Avisar os ${faltam.length} que faltam: "já recebemos ${voltaram.length} orçamento(s)"</button>`}`}
+    ${aprov && html`<${AprovarOrcamento} sessao=${sessao} os=${os} itens=${itens} gravar=${gravar} toast=${toast} c=${aprov.c} r=${aprov.r} fechar=${() => setAprov(null)} />`}
     ${novo && html`<${PedirOrcamento} sessao=${sessao} os=${os} itens=${itens} parceiros=${parceiros} toast=${toast} fechar=${() => setNovo(false)} />`}
   </div>`;
 }
+function prazoParaData(t) { const m = String(t || '').match(/(\d+)\s*(dia|d\b|semana)/i); if (!m) { const d = String(t || '').match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/); if (d) { const y = d[3] ? (d[3].length === 2 ? '20' + d[3] : d[3]) : String(new Date().getFullYear()); return y + '-' + d[2].padStart(2, '0') + '-' + d[1].padStart(2, '0'); } return ''; }
+  let n = +m[1] * (/semana/i.test(m[2]) ? 7 : 1); const uteis = /út|ut/i.test(t); const dt = new Date(); while (n > 0) { dt.setDate(dt.getDate() + 1); if (!uteis || (dt.getDay() !== 0 && dt.getDay() !== 6)) n--; } return dt.toISOString().slice(0, 10); }
+function AprovarOrcamento({ sessao, os, itens, gravar, toast, c, r, fechar }) {
+  const norm2 = (x) => String(x || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const naCot = new Set((c.itens || []).map(i => norm2(i.descricao)));
+  const cand = itens.filter(i => i.origem !== 'estoque');
+  const [sel, setSel] = useState(() => new Set(cand.filter(i => naCot.has(norm2(i.descricao))).map(i => i.id)));
+  const [prev, setPrev] = useState(prazoParaData(r.prazo));
+  const ok = async () => { if (!sel.size) return toast('Escolha ao menos um item.');
+    const novos = itens.map(i => sel.has(i.id) ? { ...i, parceiros: [c.parceiro], parceiro: c.parceiro, comprado: true, st: i.recebido ? 'recebido' : 'pedido', previsao: prev || i.previsao || '', orcamento: { cotacao: c.id, resp: r.id, valor: r.valor || '', condicoes: r.condicoes || '', em: nowIso(), por: sessao.nome } } : i);
+    await gravar(novos, { __log: 'Orçamento de ' + c.parceiro + ' aprovado para ' + sel.size + ' itens' });
+    try { await F().fsMod.updateDoc(F().fsMod.doc(F().db, 'cotacoes', c.id), { aprovado: { rid: r.id, itens: [...sel], por: sessao.nome, em: nowIso() } }); } catch {}
+    toast('Aprovado: ' + sel.size + ' itens com ' + c.parceiro + '.', 'ok'); fechar(); };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">✅ Usar orçamento de ${c.parceiro}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    <small class="dim">${r.valor ? 'R$ ' + r.valor + ' · ' : ''}${r.condicoes}${r.prazo ? ' · prazo ' + r.prazo : ''}. Marque os itens que vão ser comprados com este parceiro:</small>
+    <div class="row" style=${{ gap: '6px' }}><button class="btn btn-sm" onClick=${() => setSel(new Set(cand.map(i => i.id)))}>Todos</button><button class="btn btn-sm" onClick=${() => setSel(new Set())}>Nenhum</button></div>
+    <div class="stack" style=${{ maxHeight: '45vh', overflow: 'auto', gap: '2px' }}>${cand.map(i => html`<label key=${i.id} class="row" style=${{ gap: '8px', alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked=${sel.has(i.id)} onChange=${() => setSel(v => { const n = new Set(v); n.has(i.id) ? n.delete(i.id) : n.add(i.id); return n; })} /><span style=${{ flex: 1 }}>${i.descricao}</span><b>${i.qtd} ${i.unidade || ''}</b>${parcsLabel(i)}</label>`)}</div>
+    <div class="field"><span class="lbl">Previsão de entrega</span><input class="inp" type="date" value=${prev} onInput=${e => setPrev(e.target.value)} /></div>
+    <button class="btn btn-primary" onClick=${ok}>Aprovar e preencher a folha de compras (${sel.size})</button>
+  </div></div>`, document.body);
+}
+const parcsLabel = (i) => { const p = (i.parceiros && i.parceiros.length ? i.parceiros : (i.parceiro ? [i.parceiro] : [])); return p.length ? html`<small class="dim">${p.join(', ')}</small>` : ''; };
 function PedirOrcamento({ sessao, os, itens, parceiros, toast, fechar }) {
   const lista = (parceiros || []).filter(p => p.nome);
   const [sel, setSel] = useState([]), [prazo, setPrazo] = useState(''), [obs, setObs] = useState(''), [criados, setCriados] = useState(null), [rod, setRod] = useState(false);
@@ -2973,6 +2997,13 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     registrar(sessao, os.id, i.recebido ? '↺' : '📦', (i.recebido ? 'Recebimento desfeito: ' : i.origem === 'estoque' ? 'Separado do estoque: ' : 'Recebido: ') + i.descricao + (i.parceiro && i.origem !== 'estoque' ? ' · ' + i.parceiro : ''), mot);
     mudar(i.id, i.recebido ? { recebido: false, st: i.comprado ? 'pedido' : 'orcar', recebidoEm: '' } : { recebido: true, comprado: true, st: 'recebido', recebidoEm: nowIso(), recebidoPor: sessao.nome }); };
   const hojeC = isoD(new Date());
+  const fmtDH = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+  const parcsDe = (i) => (i.parceiros && i.parceiros.length ? i.parceiros : (i.parceiro ? [i.parceiro] : []));
+  const setParcs = (i, ps) => { mudar(i.id, { parceiros: ps, parceiro: ps[0] || '' }); if (ps.length) { const c = i.categoria || 'Outros'; window.__parcPorCat = { ...(window.__parcPorCat || {}), [c]: ps }; F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { ['parceiroPorCat.' + c]: ps }).catch(() => {}); } };
+  const conferirEst = (i, tem) => { const em = nowIso(); const log = [...(doc?.conferencias || []), { em, por: sessao.nome, txt: i.descricao + ': ' + (tem ? 'tem no estoque' : 'não tem no estoque') }].slice(-300);
+    gravar(itens.map(x => x.id === i.id ? { ...x, estoque: { tem, em, por: sessao.nome }, ...(tem ? { origem: 'estoque' } : (x.origem === 'estoque' ? { origem: '' } : {})) } : x), { conferencias: log }); };
+  const entregarMarc = (i) => { const para = prompt('Entregue a qual marceneiro?', (window.__ultMarc || '')); if (!para) return; window.__ultMarc = para; mudar(i.id, { entregueMarc: { para: para.trim(), em: nowIso(), por: sessao.nome } }); registrar(sessao, os.id, '🔨', 'Entregue ao marceneiro ' + para + ': ' + i.descricao, ''); };
+  const autoParcs = () => { const m = window.__parcPorCat || {}; let n = 0; const novos = itens.map(i => { if (parcsDe(i).length) return i; const a = m[i.categoria || 'Outros']; if (a && a.length) { n++; return { ...i, parceiros: a, parceiro: a[0] }; } return i; }); if (!n) return toast('Nenhuma sugestão automática ainda — escolha manualmente uma vez por categoria que o app aprende.'); gravar(novos); toast(n + ' itens receberam parceiro automático.', 'ok'); };
   const folhaPadrao = () => { const cats = [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length);
     const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
     return html`<div class="po po2 oe fc-lista" style=${varsCores(cor)}>
@@ -2980,14 +3011,34 @@ function ComprasOS({ sessao, os, toast, soNota }) {
         <div class="po-tit">${nomePadrao((os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Materiais'}</div>
         <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b>${(os.cliente?.enderecoMontagem || os.cliente?.endereco) ? ' · 📍 ' + (os.cliente.enderecoMontagem || os.cliente.endereco) : ''}</div></div>
         <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${itens.filter(i => i.recebido).length} recebidos</div></div></div>
+      <div class="row so-tela" style=${{ gap: '6px', flexWrap: 'wrap', margin: '6px 0' }}><button class="btn btn-sm" onClick=${autoParcs}>✨ Parceiros automáticos</button><button class="btn btn-sm" onClick=${() => { const n = itens.filter(i => i.estoque).length; gravar(itens, { conferencias: [...(doc?.conferencias || []), { em: nowIso(), por: sessao.nome, txt: '✍️ Assinado digitalmente — conferência de material (' + n + ' de ' + itens.length + ' itens conferidos)' }].slice(-300) }); toast('Conferência registrada.', 'ok'); }}>✍️ Assinar conferência de material</button><small class="dim">${itens.filter(i => i.entregueMarc).length} entregues ao marceneiro · ${itens.filter(i => i.estoque).length} conferidos no estoque</small></div>
       ${!itens.length ? html`<div class="vazio dim">Nenhum item ainda — use 📐 Levantar do detalhamento, 📥 Dinabox, 📑 Conferir com o contrato, ou adicione abaixo.</div>` : cats.map(([c, l]) => html`<div key=${c} class="po2-amb">
         <div class="po2-amb-t"><b>${ICO_CAT[c] || '📦'} ${c}</b><em>${l.length} itens</em></div>
-        ${l.map(i => html`<div key=${i.id} class=${'oe-movel fc-it' + (i.recebido ? ' ok' : '')}>
-          <div class="oe-mt"><button class=${'oe-box fc-ck' + (i.recebido ? ' on' : '')} title="Marcar recebido" onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button>
+        ${l.map(i => { const ps = parcsDe(i), auto = !ps.length ? (window.__parcPorCat || {})[i.categoria || 'Outros'] || [] : [];
+          return html`<div key=${i.id} class=${'oe-movel fc-it' + (i.recebido ? ' ok' : '')}>
+          <div class="oe-mt"><button class=${'oe-box fc-ck' + (i.recebido ? ' on' : '')} title="Assinar recebimento" onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button>
             <b style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}>${i.descricao}</b><em>${i.qtd} ${i.unidade || ''}</em></div>
           ${(i.codigo || i.marca || i.obs) ? html`<div class="oe-itens"><div class="oe-it">${[i.codigo, i.marca, i.obs].filter(Boolean).join(' · ')}</div></div>` : ''}
-        </div>`)}</div>`)}
-      <div class="po-ass">${['Separado / conferido', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+          <div class="fc-ctl so-tela">
+            <div class="fc-c"><span class="fc-l">🏢 Parceiro(s)</span><div class="fc-parcs">${ps.map(p => html`<span key=${p} class="fc-chip">${p}<button title="Tirar" onClick=${() => setParcs(i, ps.filter(x => x !== p))}>✕</button></span>`)}
+              ${auto.length ? html`<button class="fc-chip auto" title="Sugestão automática — toque para usar" onClick=${() => setParcs(i, auto)}>✨ ${auto.join(', ')}</button>` : ''}
+              <select class="fc-sel" value="" onChange=${e => { const v = e.target.value; e.target.value = ''; if (v && !ps.includes(v)) setParcs(i, [...ps, v]); }}><option value="">+ escolher</option>${parceiros.map(p => html`<option key=${p.nome} value=${p.nome}>${p.nome}</option>`)}</select></div></div>
+            <div class="fc-c"><span class="fc-l">📅 Previsão de entrega</span><input type="date" class="inp inp-sm" value=${i.previsao || ''} onChange=${e => mudar(i.id, { previsao: e.target.value })} /></div>
+            <div class="fc-c"><span class="fc-l">📦 Estoque</span><div class="row" style=${{ gap: '4px' }}><button class=${'btn btn-sm' + (i.estoque?.tem === true ? ' fc-on' : '')} onClick=${() => conferirEst(i, true)}>Tem</button><button class=${'btn btn-sm' + (i.estoque?.tem === false ? ' fc-on nao' : '')} onClick=${() => conferirEst(i, false)}>Não tem</button></div>${i.estoque ? html`<small class="fc-st">${i.estoque.por} · ${fmtDH(i.estoque.em)}</small>` : ''}</div>
+            <div class="fc-c"><span class="fc-l">✍️ Recebido</span>${i.recebido ? html`<small class="fc-st ok">${i.recebidoPor || '—'} · ${fmtDH(i.recebidoEm)}</small>` : html`<button class="btn btn-sm" onClick=${() => receber(i)}>Assinar recebimento</button>`}</div>
+            <div class="fc-c"><span class="fc-l">🔨 Entregue ao marceneiro</span>${i.entregueMarc ? html`<small class="fc-st ok">${i.entregueMarc.para} · ${fmtDH(i.entregueMarc.em)} <button class="fc-x" title="Desfazer" onClick=${() => mudar(i.id, { entregueMarc: null })}>✕</button></small>` : html`<button class="btn btn-sm" disabled=${!i.recebido} title=${i.recebido ? '' : 'Primeiro assine o recebimento'} onClick=${() => entregarMarc(i)}>Entregar</button>`}</div>
+          </div>
+          <div class="fc-imp so-imp-folha">
+            <span>Parceiro: <b>${ps.join(', ') || '____________________'}</b></span>
+            <span>Previsão: <b>${i.previsao ? i.previsao.split('-').reverse().join('/') : '___/___/____'}</b></span>
+            <span>Estoque: ${i.estoque?.tem === true ? '☒' : '☐'} Tem ${i.estoque?.tem === false ? '☒' : '☐'} Não tem</span>
+            <span>Recebido: ${i.recebido ? '☒ ' + (i.recebidoPor || '') + ' ' + fmtDH(i.recebidoEm) : '☐ Ass.: ______________ Data: ___/___'}</span>
+            <span>Entregue ao marceneiro: ${i.entregueMarc ? '☒ ' + i.entregueMarc.para + ' ' + fmtDH(i.entregueMarc.em) : '☐ Ass.: ______________ Data: ___/___'}</span>
+          </div>
+        </div>`; })}</div>`)}
+      ${(doc?.conferencias || []).length ? html`<div class="fc-log"><b>📋 Registro de conferências de estoque</b>${(doc.conferencias || []).slice().reverse().slice(0, 30).map((c, k) => html`<div key=${k}>${fmtDH(c.em)} · ${c.por} — ${c.txt}</div>`)}</div>` : ''}
+      <div class="fc-log so-imp-folha"><b>Conferência de estoque (manual)</b><div>Data: ___/___/____ Hora: ___:___ Conferido por: ____________________ Ass.: ____________________</div></div>
+      <div class="po-ass">${['Conferido no estoque', 'Recebido na fábrica', 'Entregue ao marceneiro'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
     </div>`; };
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
@@ -3047,7 +3098,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
         <div class="seg-mini"><button class=${modo === 'folha' ? 'on' : ''} onClick=${() => setModo('folha')}>📋 Folha padrão</button><button class=${modo === 'etapa' ? 'on' : ''} onClick=${() => setModo('etapa')}>Por etapa</button><button class=${modo === 'categoria' ? 'on' : ''} onClick=${() => setModo('categoria')}>Por categoria</button><button class=${modo === 'parceiro' ? 'on' : ''} onClick=${() => setModo('parceiro')}>🤝 Por parceiro</button></div>
       </div>
-      ${modo === 'folha' ? html`<${OrcamentosOS} sessao=${sessao} os=${os} toast=${toast} itens=${itens} parceiros=${parceiros} /><${MateriaisDinabox} sessao=${sessao} os=${os} toast=${toast} itens=${itens} gravar=${gravar} />${folhaPadrao()}` : grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
+      ${modo === 'folha' ? html`<${OrcamentosOS} sessao=${sessao} os=${os} toast=${toast} itens=${itens} parceiros=${parceiros} gravar=${gravar} /><${MateriaisDinabox} sessao=${sessao} os=${os} toast=${toast} itens=${itens} gravar=${gravar} />${folhaPadrao()}` : grupos.map(([c, l, parcNome]) => html`<div key=${c}><div class="compra-cat row" style=${{ justifyContent: 'space-between' }}><span>${modo === 'parceiro' ? (parcNome ? '🤝' : '❔') : ICO_CAT[c]} ${c} <small>${l.filter(i => i.comprado).length}/${l.length}</small></span>
           <span class="row" style=${{ gap: '4px' }}>
             <button class="btn btn-sm btn-ghost" onClick=${() => setEscolher({ ids: l.map(i => i.id) })}>🤝 ${modo === 'parceiro' ? 'Trocar' : 'Parceiro p/ todos'}</button>
             ${modo === 'parceiro' && parcNome && html`<button class="btn btn-sm" onClick=${() => { setImprimir(parcNome); setTimeout(() => { window.print(); setImprimir(false); }, 300); }}>🖨 Pedido p/ ${parcNome}</button>`}
@@ -3090,13 +3141,15 @@ function ImpressaoCompras({ os, doc, empresa }) {
   return html`<div class="po" style=${varsCores(cor)}>
     <div class="po-topo"><div class="row" style=${{ gap: '12px', flexWrap: 'nowrap' }}><${LogoImp} empresa=${empresa} /><div><div class="po-emp">${empresa || ''}</div><div class="po-tit">${doc?.parceiro ? 'Pedido de compra' : 'Folha de compras'}</div>${doc?.parceiro ? html`<div class="po-sub">Fornecedor: <b>${doc.parceiro}</b></div>` : ''}<div class="po-sub">${os.cliente?.nome || ''} · ${(os.ambientes || []).map(a => a.nome).join(', ')}</div></div></div>
       <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${new Date().toLocaleDateString('pt-BR')}${doc?.origem ? ' · ' + doc.origem : ''}</div></div></div>
-    ${!itens.length && html`<div class="po-amb"><div class="po-amb-t"><span>—</span>Itens</div><table><thead><tr><th style=${{ width: '46px' }}>Receb.</th><th>Descrição</th><th style=${{ width: '11%' }}>Qtd</th><th style=${{ width: '11%' }}>Comprar / estoque</th><th style=${{ width: '18%' }}>Comprado com</th><th style=${{ width: '12%' }}>Prazo entrega</th></tr></thead>
-      <tbody>${Array.from({ length: 18 }, (_, k) => html`<tr key=${k} style=${{ height: '28px' }}><td class="c"><span class="caixa"></span></td><td></td><td></td><td class="c">☐ C  ☐ E</td><td></td><td></td></tr>`)}</tbody></table></div>`}
+    ${!itens.length && html`<div class="po-amb"><div class="po-amb-t"><span>—</span>Itens</div><table><thead><tr><th>Descrição</th><th style=${{ width: '8%' }}>Qtd</th><th style=${{ width: '15%' }}>Parceiro(s)</th><th style=${{ width: '9%' }}>Previsão</th><th style=${{ width: '10%' }}>Estoque</th><th style=${{ width: '14%' }}>Recebido (ass./data)</th><th style=${{ width: '14%' }}>Entregue marceneiro</th></tr></thead>
+      <tbody>${Array.from({ length: 18 }, (_, k) => html`<tr key=${k} style=${{ height: '28px' }}><td></td><td></td><td></td><td></td><td class="c">☐ Tem ☐ Não</td><td></td><td></td></tr>`)}</tbody></table></div>`}
     ${CAT_COMPRA.map(c => [c, itens.filter(i => i.categoria === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
       <div key=${c} class="po-amb"><div class="po-amb-t"><span>${l.length}</span>${c}</div>
-        <table><thead><tr><th style=${{ width: '46px' }}>Receb.</th><th>Descrição</th><th style=${{ width: '11%' }}>Qtd</th><th style=${{ width: '11%' }}>Comprar / estoque</th><th style=${{ width: '18%' }}>Comprado com</th><th style=${{ width: '12%' }}>Prazo entrega</th></tr></thead>
-          <tbody>${l.map(i => html`<tr key=${i.id}><td class="c">${i.recebido ? '✔' : html`<span class="caixa"></span>`}</td><td><b>${i.descricao}</b>${i.codigo || i.marca || i.obs ? html`<br/><small>${[i.codigo, i.marca, i.obs].filter(Boolean).join(' · ')}</small>` : ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td class="c">${i.origem === 'estoque' ? 'Estoque' : 'Comprar'}</td><td>${i.origem === 'estoque' ? '—' : (i.parceiro || '')}</td><td class="c">${i.origem === 'estoque' ? '—' : dm(i.previsao || '')}</td></tr>`)}</tbody></table></div>`)}
-    <div class="po-ass">${['Solicitado por', 'Compras', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+        <table><thead><tr><th>Descrição</th><th style=${{ width: '8%' }}>Qtd</th><th style=${{ width: '15%' }}>Parceiro(s)</th><th style=${{ width: '9%' }}>Previsão</th><th style=${{ width: '10%' }}>Estoque</th><th style=${{ width: '14%' }}>Recebido (ass./data)</th><th style=${{ width: '14%' }}>Entregue marceneiro</th></tr></thead>
+          <tbody>${l.map(i => html`<tr key=${i.id}><td><b>${i.descricao}</b>${i.codigo || i.marca || i.obs ? html`<br/><small>${[i.codigo, i.marca, i.obs].filter(Boolean).join(' · ')}</small>` : ''}</td><td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td><td>${((i.parceiros && i.parceiros.length) ? i.parceiros : (i.parceiro ? [i.parceiro] : [])).join(', ')}</td><td class="c">${dm(i.previsao || '')}</td><td class="c">${i.estoque ? (i.estoque.tem ? '☒ Tem' : '☒ Não tem') : '☐ Tem ☐ Não'}</td><td><small>${i.recebido ? '✔ ' + (i.recebidoPor || '') + ' ' + (i.recebidoEm ? new Date(i.recebidoEm).toLocaleDateString('pt-BR') : '') : ''}</small></td><td><small>${i.entregueMarc ? '✔ ' + i.entregueMarc.para + ' ' + new Date(i.entregueMarc.em).toLocaleDateString('pt-BR') : ''}</small></td></tr>`)}</tbody></table></div>`)}
+    ${(doc?.conferencias || []).length ? html`<div class="po-obs"><b>Conferências de estoque</b>${(doc.conferencias || []).slice(-8).map((c, k) => html`<div key=${k}>${new Date(c.em).toLocaleString('pt-BR')} · ${c.por} — ${c.txt}</div>`)}</div>` : ''}
+    <div class="po-obs"><b>Conferência de estoque (manual)</b><div>Data: ___/___/____  Hora: ___:___  Conferido por: ______________________  Ass.: ______________________</div></div>
+    <div class="po-ass">${['Solicitado por', 'Conferido no estoque', 'Recebido na fábrica', 'Entregue ao marceneiro'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
     <div class="po-rod"><span>${empresa || ''} · OS ${numOS(os)}</span><span>Gerado pelo Gestão Pró</span></div>
   </div>`;
 }
@@ -7336,7 +7389,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__dinaboxEm = dd.dinaboxEm || ''; (window.__I18N && !window.__i18nOn && (window.__i18nOn = 1, I18N.iniciar(sessao.empresaId))); window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '', prof: dd.mascoteProf || 'marceneiro' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__dinaboxEm = dd.dinaboxEm || ''; (window.__I18N && !window.__i18nOn && (window.__i18nOn = 1, I18N.iniciar(sessao.empresaId))); window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '', prof: dd.mascoteProf || 'marceneiro' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcPorCat = dd.parceiroPorCat || {}; window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
