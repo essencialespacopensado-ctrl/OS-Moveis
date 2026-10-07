@@ -1843,3 +1843,20 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .masc-mini .mm-tr{left:6px;top:22px;width:22px;height:17px;border-radius:6px 6px 3px 3px;background:linear-gradient(90deg,var(--u1),var(--u2))}
 .masc-mini .mm-ca{left:9px;top:38px;width:16px;height:13px;border-radius:2px;background:var(--calca)}
 .masc-mini.prof-montador .mm-ch{background:#f59e0b}.masc-mini.prof-engenheiro .mm-ch{background:#e5e7eb}.masc-mini.prof-eletricista .mm-ch{background:#2563eb}.masc-mini.prof-pintor .mm-ch{background:#fff;border:1px solid #ccc}.masc-mini.prof-motorista .mm-ch{background:#166534}.masc-mini.prof-gerente .mm-ch{background:#6b7280}
+/* v217 corpo proporcional à foto */
+.masc.com-foto{height:150px}
+.masc.com-foto .masc-corpo{height:132px;top:4px}
+.masc.com-foto .masc-pesc{left:28px;top:50px;width:14px;height:10px}
+.masc.com-foto .masc-tronco{left:11px;top:56px;width:48px;height:44px;border-radius:16px 16px 8px 8px}
+.masc.com-foto .masc-braco{width:12px;height:36px}
+.masc.com-foto .masc-braco.e{left:-10px}.masc.com-foto .masc-braco.d{right:-10px}
+.masc.com-foto .masc-mao{width:12px;height:11px;bottom:-7px}
+.masc.com-foto .masc-perna{top:98px;width:14px;height:28px}
+.masc.com-foto .masc-perna.e{left:19px}.masc.com-foto .masc-perna.d{left:37px}
+.masc.com-foto .masc-sapato{width:19px;height:7px}
+.masc.com-foto .masc-sombra{top:128px;left:10px;width:52px}
+.masc.com-foto .masc-nome{top:134px}
+.masc.com-foto .masc-gola{left:14px;width:20px}.masc.com-foto .masc-gravata{left:21px;height:24px}.masc.com-foto .masc-avental{left:8px;width:32px;height:36px}.masc.com-foto .masc-cinto{width:48px}
+.masc.com-foto.anda .masc-tronco{left:16px}
+.masc.com-foto.anda .masc-perna.e,.masc.com-foto.anda .masc-perna.d{left:28px}
+.masc.com-foto .masc-bal{bottom:138px}

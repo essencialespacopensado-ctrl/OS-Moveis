@@ -6954,7 +6954,10 @@ const I18N = (() => {
   function agendar() { if (tmr) return; tmr = setTimeout(rodar, 500); }
   async function rodar() { tmr = null; if (ocupado || lang === 'pt' || !pend.size || typeof chamarIA !== 'function' || !window.__fb?.auth?.currentUser) return; ocupado = true; const l = lang;
     const lote = [...pend].filter(k => dic[l][k] == null).slice(0, 120); lote.forEach(k => pend.delete(k));
-    try { if (lote.length) { const r = await chamarIA('traduzir', { lang: l, textos: lote }); const t = (r && (r.resultado || r).t) || []; const novos = {}; lote.forEach((k, i) => { if (typeof t[i] === 'string' && t[i].trim()) { dic[l][k] = t[i].trim(); novos[k] = dic[l][k]; } }); await salvar(l, novos); if (l === lang) varrer(document.body); } }
+    try { if (lote.length) { let t = [];
+        try { for (let i = 0; i < lote.length; i += 30) { const parte = lote.slice(i, i + 30); const q = parte.map(x => x.replace(/\n/g, ' ')).join('\n'); const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&tl=' + l + '&dt=t&q=' + encodeURIComponent(q)); const j = await r.json(); const out = (j[0] || []).map(x => x[0] || '').join('').split('\n');
+            if (out.length !== parte.length) throw new Error('n'); t.push(...out.map((x, k) => { let y = x.trim(); if (/\bOS\b/.test(parte[k])) y = y.replace(/\b(SO|SOs)\b/g, m => m === 'SO' ? 'OS' : 'OSs'); return y; })); } }
+        catch { t = []; const r = await chamarIA('traduzir', { lang: l, textos: lote }); t = (r && (r.resultado || r).t) || []; } const novos = {}; lote.forEach((k, i) => { if (typeof t[i] === 'string' && t[i].trim()) { dic[l][k] = t[i].trim(); novos[k] = dic[l][k]; } }); await salvar(l, novos); if (l === lang) varrer(document.body); } }
     catch (e) { lote.forEach(k => pend.add(k)); ocupado = false; setTimeout(agendar, 15000); return; }
     ocupado = false; if (pend.size) agendar(); }
   let obs = null;
@@ -7022,7 +7025,7 @@ function Mascote() {
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
   const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
-  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '') + ' prof-' + prof} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
+  return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '') + ' prof-' + prof + (rosto ? ' com-foto' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
     ${(fala || menu) && html`<div class="masc-bal">${!menu && fala ? html`<div>${fala}<div style=${{ textAlign: 'right', marginTop: '4px' }}><button class="btn btn-sm btn-ghost" onClick=${casa}>🏠 Voltar para casa</button></div></div>` : ''}${menu ? html`<div class="stack" style=${{ gap: '6px' }}>
         <b>Oi! Sou o ${nome} 👷 Posso ajudar?</b>
         <button class="btn btn-sm btn-primary" onClick=${tour}>🗺 Me mostra esta tela</button>
