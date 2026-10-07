@@ -413,6 +413,12 @@ Responda SOMENTE JSON: {"t": [traduções na mesma ordem]}.
 TEXTOS:
 ${JSON.stringify((d.textos || []).slice(0, 200))}`;
     }
+    case 'eletro_ficha':
+      return `Esta é a página de um eletrodoméstico (loja ou fabricante). Extraia a FICHA TÉCNICA completa, útil para o marceneiro que vai embutir/instalar.
+Responda SOMENTE JSON: {"nome":"tipo do produto (ex: Cooktop 5 bocas)","marca":"","modelo":"","medidas":"L x A x P do produto em mm","embutir":"medidas do nicho/recorte de embutir em mm (se houver)","tensao":"","potencia":"","peso":"","specs":[["característica","valor"]...]}
+Em "specs" coloque TODAS as informações técnicas encontradas (dimensões, recorte, ventilação, distâncias mínimas, consumo, gás, capacidade, cor, material, garantia etc.). Converta cm para mm. Não invente: se não houver, deixe "".
+PÁGINA:
+${String(d.texto || '').slice(0, 60000)}`;
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
@@ -520,6 +526,17 @@ async function rotaIA(req, res) {
   try { corpo = JSON.parse(await lerCorpo(req)); } catch { return enviarJSON(res, 413, { erro: 'Arquivo grande demais. Envie menos páginas por vez.' }); }
   const { tarefa, dados = {}, imagens = [] } = corpo || {};
   if (tarefa === 'assistente') return assistente(res, dados);
+  if (tarefa === 'eletro_ficha') {
+    try {
+      const u = new URL(String(dados.url || '')); if (!/^https?:$/.test(u.protocol) || /^(localhost|127\.|10\.|192\.168\.|169\.254\.)/.test(u.hostname)) throw new Error('link');
+      const r = await fetch(u.href, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36', 'accept-language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+      const h = (await r.text()).slice(0, 2_000_000);
+      const ld = [...h.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n').slice(0, 15000);
+      const txt = h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<(br|\/tr|\/li|\/p|\/div|\/h\d)[^>]*>/gi, '\n').replace(/<\/t[dh]>/gi, ' | ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n');
+      const img = (h.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i) || [])[1] || '';
+      dados.texto = (ld + '\n' + txt).slice(0, 60000); dados.img = img;
+    } catch (e) { return enviarJSON(res, 400, { erro: 'Não consegui abrir o link do eletro.' }); }
+  }
   const prompt = tarefaPrompt(tarefa, dados);
   if (!prompt) return enviarJSON(res, 400, { erro: 'Tarefa desconhecida.' });
 
@@ -534,7 +551,7 @@ async function rotaIA(req, res) {
     let texto, cortado;
     try { ({ texto, cortado } = await chamarModelo({ messages: [{ role: 'user', content }], maxTokens: tarefa === 'ata' ? 6000 : 16000 })); }
     catch (e) { return enviarJSON(res, 502, { erro: 'A IA recusou o pedido: ' + e.message }); }
-    const json = extrairJSON(texto);
+    const json = extrairJSON(texto); if (json && tarefa === 'eletro_ficha' && dados.img && !json.img) json.img = dados.img;
     if (!json) return enviarJSON(res, 502, { erro: 'A IA respondeu num formato inesperado. Tente de novo.' });
     enviarJSON(res, 200, { ok: true, resultado: json, cortado });
   } catch {
