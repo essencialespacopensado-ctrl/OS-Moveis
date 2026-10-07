@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['210', ['🛒 Folha de compras padrão agora é só a lista de materiais, no mesmo estilo da Ordem de entrega: separada por categoria, cada item com ☐ para marcar recebido, quantidade e código/marca.']],
   ['209', ['🔧 Diário de obra e peças extras pedidas pelo montador agora ficam só dentro da aba Montagem da OS (saiu a aba Diário separada).']],
   ['208', ['👤 Página geral do cliente (toque no cliente em Clientes): dados, status da obra, pendências, check-list de finalização com subtítulos, abas de OSs, puxadores, eletros, contrato e atas.', '🗒 Aba Montagem da OS: planejamento de execução (lista com ✓), eletros com foto e puxadores puxados da OS, e o vídeo do projeto finalizado.']],
   ['207', ['← Botão Voltar dentro da OS: volta para a aba anterior (ex.: de Montagem para Andamento) e, no começo, fecha a OS e volta para a tela de antes.']],
@@ -2902,17 +2903,22 @@ function ComprasOS({ sessao, os, toast, soNota }) {
     registrar(sessao, os.id, i.recebido ? '↺' : '📦', (i.recebido ? 'Recebimento desfeito: ' : i.origem === 'estoque' ? 'Separado do estoque: ' : 'Recebido: ') + i.descricao + (i.parceiro && i.origem !== 'estoque' ? ' · ' + i.parceiro : ''), mot);
     mudar(i.id, i.recebido ? { recebido: false, st: i.comprado ? 'pedido' : 'orcar', recebidoEm: '' } : { recebido: true, comprado: true, st: 'recebido', recebidoEm: nowIso(), recebidoPor: sessao.nome }); };
   const hojeC = isoD(new Date());
-  const folhaPadrao = () => html`<div class="fc-wrap"><table class="fc-tab"><thead><tr><th>Recebido</th><th>Item</th><th>Qtd</th><th>Comprar / estoque</th><th>Comprado com</th><th>Prazo de entrega</th><th></th></tr></thead>
-    <tbody>${!itens.length && html`<tr><td colspan="7" class="c dim" style=${{ padding: '18px' }}>Nenhum item ainda — use 📐 Levantar do detalhamento, 📥 Dinabox, 📑 Conferir com o contrato, ou adicione abaixo.</td></tr>`}${[...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length).map(([c, l]) => html`
-      <tr key=${'c' + c} class="fc-cat"><td colspan="7">${ICO_CAT[c] || '📦'} ${c} <small>${l.filter(i => i.recebido).length}/${l.length} recebidos</small></td></tr>
-      ${l.map(i => { const est = i.origem === 'estoque'; const atr = !i.recebido && !est && i.previsao && i.previsao < hojeC; return html`<tr key=${i.id} class=${(i.recebido ? 'ok' : '') + (atr ? ' atraso' : '')}>
-        <td class="c"><button class=${'dia-ck' + (i.recebido ? ' on' : '')} title=${est ? 'Separado do estoque' : 'Recebido'} onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button></td>
-        <td><b style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}>${i.etapa === 'pre' ? '⚡ ' : ''}${i.descricao}</b>${i.codigo || i.marca ? html`<small>${[i.codigo, i.marca].filter(Boolean).join(' · ')}</small>` : ''}</td>
-        <td class="c"><b>${i.qtd} ${i.unidade || ''}</b></td>
-        <td><div class="fc-orig"><button class=${!est ? 'on' : ''} onClick=${() => est && mudar(i.id, { origem: 'comprar' })}>🛒 Comprar</button><button class=${est ? 'on est' : ''} onClick=${() => !est && mudar(i.id, { origem: 'estoque', parceiro: '' })}>📦 Estoque</button></div></td>
-        <td>${est ? html`<span class="dim">—</span>` : html`<button class=${'parc-chip' + (i.parceiro ? ' tem' : '')} onClick=${() => setEscolher({ ids: [i.id] })}>${i.parceiro ? '🤝 ' + i.parceiro : '＋ fornecedor'}</button>`}</td>
-        <td>${est ? html`<span class="dim">—</span>` : html`<input class="inp inp-sm" type="date" value=${i.previsao || ''} onChange=${e => mudar(i.id, { previsao: e.target.value, ...(e.target.value && !i.comprado ? { comprado: true, st: 'pedido', compradoEm: nowIso(), compradoPor: sessao.nome } : {}) })} />${atr ? html`<small class="fc-atr">⚠ atrasado</small>` : ''}`}</td>
-        <td><button class="x-btn" onClick=${() => remover(i.id)}>✕</button></td></tr>`; })}`)}</tbody></table></div>`;
+  const folhaPadrao = () => { const cats = [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length);
+    const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
+    return html`<div class="po po2 oe fc-lista" style=${varsCores(cor)}>
+      <div class="po-topo"><div><div class="po-emp">${sessao.empresaNome || 'Gestão Pró'} · Lista de materiais</div>
+        <div class="po-tit">${nomePadrao((os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Materiais'}</div>
+        <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b>${(os.cliente?.enderecoMontagem || os.cliente?.endereco) ? ' · 📍 ' + (os.cliente.enderecoMontagem || os.cliente.endereco) : ''}</div></div>
+        <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${itens.filter(i => i.recebido).length} recebidos</div></div></div>
+      ${!itens.length ? html`<div class="vazio dim">Nenhum item ainda — use 📐 Levantar do detalhamento, 📥 Dinabox, 📑 Conferir com o contrato, ou adicione abaixo.</div>` : cats.map(([c, l]) => html`<div key=${c} class="po2-amb">
+        <div class="po2-amb-t"><b>${ICO_CAT[c] || '📦'} ${c}</b><em>${l.length} itens</em></div>
+        ${l.map(i => html`<div key=${i.id} class=${'oe-movel fc-it' + (i.recebido ? ' ok' : '')}>
+          <div class="oe-mt"><button class=${'oe-box fc-ck' + (i.recebido ? ' on' : '')} title="Marcar recebido" onClick=${() => receber(i)}>${i.recebido ? '✓' : ''}</button>
+            <b style=${{ cursor: 'pointer' }} onClick=${() => setItemAb(i)}>${i.descricao}</b><em>${i.qtd} ${i.unidade || ''}</em></div>
+          ${(i.codigo || i.marca || i.obs) ? html`<div class="oe-itens"><div class="oe-it">${[i.codigo, i.marca, i.obs].filter(Boolean).join(' · ')}</div></div>` : ''}
+        </div>`)}</div>`)}
+      <div class="po-ass">${['Separado / conferido', 'Recebido na fábrica'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
+    </div>`; };
   const grupos = modo === 'parceiro'
     ? [...new Set(itens.map(i => i.parceiro || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(p => [p || 'Sem parceiro definido', itens.filter(i => (i.parceiro || '') === p), p])
     : modo === 'etapa' ? [['⚡ Pré-pedido (comprar já)', itens.filter(i => i.etapa === 'pre')], ['📦 Pedido principal', itens.filter(i => i.etapa !== 'pre')]].filter(([, l]) => l.length)
