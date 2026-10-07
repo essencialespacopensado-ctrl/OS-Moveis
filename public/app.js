@@ -7687,3 +7687,10 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+
+/* Atualização automática: avisa e recarrega quando sai uma versão nova do app */
+(() => { const minha = (document.querySelector('script[src*="app.js"]')?.src.match(/v=(\d+)/) || [])[1]; if (!minha) return; let avisado = false;
+  const checar = async () => { try { const t = await (await fetch('/index.html?c=' + Date.now(), { cache: 'no-store' })).text(); const nova = (t.match(/app\.js\?v=(\d+)/) || [])[1];
+    if (nova && nova !== minha && !avisado) { avisado = true; const b = document.createElement('div'); b.className = 'nova-versao notr'; b.innerHTML = '🔄 Saiu uma versão nova do app. <button>Atualizar agora</button>'; b.querySelector('button').onclick = () => location.reload(); document.body.appendChild(b);
+      const auto = () => { if (document.visibilityState === 'visible' && !document.querySelector('.modal-fundo')) location.reload(); }; document.addEventListener('visibilitychange', auto); setTimeout(auto, 60000); } } catch {} };
+  setInterval(checar, 90000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checar(); }); })();
