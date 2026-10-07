@@ -4447,23 +4447,28 @@ function PlanejamentoExec({ sessao, o, toast }) {
 /* Eletros e puxadores da OS — puxadores vêm sozinhos da OS; eletros com foto */
 function puxadoresDaOS(o) { const r = []; (o.ambientes || []).forEach(a => { const P = a.padrao || o.padrao || {}; [...(P.puxadores || []), ...(P.perfis || [])].forEach(x => r.push([nomePadrao(a.nome) || '', x])); (a.moveis || []).forEach(m => m.puxador && r.push([nomePadrao(m.nome), m.puxador])); }); const v = new Set(); return r.filter(([, x]) => { const k = norm(x); if (v.has(k)) return false; v.add(k); return true; }); }
 function EletrosPuxadores({ sessao, o, toast }) {
-  const [n, setN] = useState({ nome: '', modelo: '', medidas: '', foto: '' });
+  const [n, setN] = useState({ nome: '', modelo: '', medidas: '', foto: '', link: '' }), [lendo, setLendo] = useState(-1), [abre, setAbre] = useState(-1);
   const E = o.eletros || [];
+  const puxarFicha = async (i, base) => { const x = base || E[i]; if (!x?.link) return toast('Cole o link do eletro.'); setLendo(i); try { const r = await chamarIA('eletro_ficha', { url: x.link }); const f = { ...x, nome: x.nome || r.nome || 'Eletro', modelo: x.modelo || [r.marca, r.modelo].filter(Boolean).join(' '), medidas: r.embutir || r.medidas || x.medidas || '', ficha: { ...r, specs: (r.specs || []).filter(p => Array.isArray(p) && p[0]).map(p => ({ k: String(p[0]), v: String(p[1] || '') })), em: nowIso() }, foto: x.foto || r.img || '' }; delete f.ficha.img;
+      const l = base ? [...E, f] : E.map((y, j) => j === i ? f : y); await salvar(l); toast('Ficha técnica puxada: ' + (f.ficha.specs.length) + ' informações.', 'ok'); return true; } catch (e) { toast('Não consegui ler o link: ' + e.message, 'erro'); return false; } finally { setLendo(-1); } };
   const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { eletros: l }).catch(e => toast(e.message, 'erro'));
   const foto = async (f) => { if (f) try { setN(v => ({ ...v, foto: '' })); const u = await fotoCompacta(f); setN(v => ({ ...v, foto: u })); } catch {} };
   const pux = puxadoresDaOS(o);
   return html`<div class="card stack"><b>🔌 Eletros e ✋ puxadores</b>
     <div class="ep-grade">
       ${pux.map(([onde, x], i) => html`<div key=${'p' + i} class="ep-card pux"><div class="ep-foto">✋</div><div><b>${x}</b><small>${onde ? 'Puxador · ' + onde : 'Puxador'}</small></div></div>`)}
-      ${E.map((x, i) => html`<div key=${'e' + i} class="ep-card"><div class="ep-foto">${x.foto ? html`<img src=${x.foto} />` : '🔌'}</div><div style=${{ flex: 1 }}><b>${x.nome}</b><small>${[x.modelo, x.medidas].filter(Boolean).join(' · ')}</small></div><button class="btn btn-ghost btn-sm" onClick=${() => salvar(E.filter((_, j) => j !== i))}>✕</button></div>`)}
+      ${E.map((x, i) => html`<div key=${'e' + i} class="ep-card"><div class="ep-foto">${x.foto ? html`<img src=${x.foto} />` : '🔌'}</div><div style=${{ flex: 1 }}><b>${x.nome}</b><small>${[x.modelo, x.medidas && ('embutir: ' + x.medidas)].filter(Boolean).join(' · ')}</small>
+        <div class="row" style=${{ gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>${x.link && html`<a class="btn btn-sm btn-ghost" href=${x.link} target="_blank" rel="noopener">🔗 Link</a>`}${x.link && html`<button class="btn btn-sm" disabled=${lendo === i} onClick=${() => puxarFicha(i)}>${lendo === i ? 'Lendo…' : x.ficha ? '🔄 Atualizar ficha' : '🔎 Puxar ficha técnica'}</button>`}${x.ficha && html`<button class="btn btn-sm btn-primary" onClick=${() => setAbre(abre === i ? -1 : i)}>📋 Ficha (${(x.ficha.specs || []).length})</button>`}</div>
+        ${abre === i && x.ficha && html`<table class="ele-ficha">${[['Marca', x.ficha.marca], ['Modelo', x.ficha.modelo], ['Medidas do produto', x.ficha.medidas], ['Medidas de embutir', x.ficha.embutir], ['Tensão', x.ficha.tensao], ['Potência', x.ficha.potencia], ['Peso', x.ficha.peso]].filter(p => p[1]).concat((x.ficha.specs || []).map(p => [p.k, p.v])).map(([k, v], j) => html`<tr key=${j}><th>${k}</th><td>${v}</td></tr>`)}</table>`}</div><button class="btn btn-ghost btn-sm" onClick=${() => salvar(E.filter((_, j) => j !== i))}>✕</button></div>`)}
       ${!pux.length && !E.length && html`<div class="dim">Nenhum puxador especificado nem eletro cadastrado.</div>`}
     </div>
     <div class="row" style=${{ gap: '6px', flexWrap: 'wrap' }}>
       <input class="inp" style=${{ flex: 2, minWidth: '140px' }} placeholder="Eletro (ex: Cooktop 5 bocas)" value=${n.nome} onInput=${e => setN({ ...n, nome: e.target.value })} />
       <input class="inp" style=${{ flex: 2, minWidth: '120px' }} placeholder="Marca / modelo" value=${n.modelo} onInput=${e => setN({ ...n, modelo: e.target.value })} />
       <input class="inp" style=${{ flex: 1, minWidth: '100px' }} placeholder="Medidas de embutir" value=${n.medidas} onInput=${e => setN({ ...n, medidas: e.target.value })} />
+      <input class="inp" style=${{ flex: 3, minWidth: '200px' }} placeholder="🔗 Link do produto (loja ou fabricante) — puxa a ficha técnica" value=${n.link} onInput=${e => setN({ ...n, link: e.target.value.trim() })} />
       <label class=${'btn btn-sm' + (n.foto ? ' btn-verde' : '')}>📷${n.foto ? ' ✓' : ''}<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { foto(e.target.files[0]); e.target.value = ''; }} /></label>
-      <button class="btn btn-primary" onClick=${() => { if (!n.nome.trim()) return toast('Escreva o eletro.'); salvar([...E, { ...n, nome: n.nome.trim() }]); setN({ nome: '', modelo: '', medidas: '', foto: '' }); }}>＋ Eletro</button></div></div>`;
+      <button class="btn btn-primary" disabled=${lendo === -2} onClick=${async () => { if (!n.nome.trim() && !n.link) return toast('Escreva o eletro ou cole o link.'); if (n.link) { setLendo(-2); const ok = await puxarFicha(-2, { ...n, nome: n.nome.trim() }); if (ok) setN({ nome: '', modelo: '', medidas: '', foto: '', link: '' }); return; } salvar([...E, { ...n, nome: n.nome.trim() }]); setN({ nome: '', modelo: '', medidas: '', foto: '', link: '' }); }}>${lendo === -2 ? 'Lendo a ficha…' : '＋ Eletro'}</button></div></div>`;
 }
 /* ---------- Página geral do cliente ---------- */
 const CHECK_PADRAO = [
