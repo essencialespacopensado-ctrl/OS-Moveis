@@ -1924,3 +1924,4 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .fc-marc-ok{margin-top:8px;padding:6px 8px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:12px}
 @media print{body:has(#print-area:not(:empty)) > *:not(#root){display:none!important} body:has(#print-area:not(:empty)) #root > *:not(#print-area){display:none!important} body:has(#print-area:not(:empty)) #print-area{display:block!important}}
 .ele-ficha{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}.ele-ficha th{text-align:left;background:#f1f5f9;padding:3px 6px;width:42%;font-weight:600;color:#334155}.ele-ficha td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
+.masc,.masc-volta{z-index:2147483000!important}.masc-bal{z-index:2147483001!important}.lang-aviso{z-index:2147483002}
