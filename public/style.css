@@ -1779,3 +1779,6 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .pc-it.ok{background:#f0fdf4}.pc-it.ok .pc-n{text-decoration:line-through;color:#78716c}
 .pc-d{white-space:nowrap}
 @media(max-width:700px){.pc-it{grid-template-columns:22px 44px 1fr}.pc-it small,.pc-it .pc-d{grid-column:3}}
+.din-card summary{cursor:pointer;list-style:none}
+.din-it{display:flex;gap:6px;align-items:center;cursor:pointer}
+.din-it.off{opacity:.45;text-decoration:line-through}

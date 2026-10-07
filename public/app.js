@@ -45,6 +45,7 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['212', ['📦 Dinabox automático: materiais entram sozinhos na lista de compras de cada OS e as peças na aba 🧩 Peças. Em Compras dá para desmarcar o que veio do Dinabox (sai da lista) e adicionar itens novos normalmente. Configurações → 📦 Dinabox mostra a última atualização e tem "Buscar agora".']],
   ['211', ['📦 Dinabox: a lista de materiais de cada lote aparece na folha de compras da OS (com botão para colocar na lista de compras), e a nova aba 🧩 Peças mostra todas as peças do lote por módulo, com busca e ✓ de conferência.']],
   ['210', ['🛒 Folha de compras padrão agora é só a lista de materiais, no mesmo estilo da Ordem de entrega: separada por categoria, cada item com ☐ para marcar recebido, quantidade e código/marca.']],
   ['209', ['🔧 Diário de obra e peças extras pedidas pelo montador agora ficam só dentro da aba Montagem da OS (saiu a aba Diário separada).']],
@@ -4348,25 +4349,51 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
 }
 /* ---------- Dados do Dinabox (materiais e peças por OS) ---------- */
 function codigosDoLote(nome) { const r = []; String(nome || '').replace(/(?:^|\D)26\s?(\d{2,3})(?!\d)/g, (m, n) => { r.push('26.' + n.padStart(3, '0')); return m; }); return [...new Set(r)]; }
-async function importarDinabox(sessao, lotes) {
+async function importarDinabox(sessao, lotes, comCompras = true) {
   const L = window.__listaOS || []; const por = {};
   lotes.forEach(l => codigosDoLote(l.nome).forEach(c => (por[c] = por[c] || []).push(l)));
   const M = F().fsMod; let n = 0; const b = M.writeBatch(F().db);
   Object.entries(por).forEach(([c, ls]) => { const o = L.find(x => x.codigo === c); if (!o) return; const ant = (o.dinabox?.lotes || []).filter(x => !ls.some(y => y.lote === x.lote)); b.update(docRef('empresas', sessao.empresaId, 'os', o.id), { dinabox: { em: nowIso(), lotes: [...ant, ...ls] } }); n++; });
-  await b.commit(); return n;
+  await b.commit();
+  if (comCompras) for (const [c, ls] of Object.entries(por)) { const o = L.find(x => x.codigo === c); if (o) { try { await preencherComprasDinabox(sessao, o, ls); } catch {} } }
+  return n;
+}
+const chaveMat = (m) => norm([m.d, m.m].filter(Boolean).join(' · '));
+const chaveOff = (m) => chaveMat(m).replace(/[.~*/\[\]]/g, '_');
+async function preencherComprasDinabox(sessao, o, lotes) {
+  const M = F().fsMod; const ref = docRef('empresas', sessao.empresaId, 'compras', o.id);
+  const snap = await M.getDoc(ref); const itens = (snap.exists() && snap.data().itens) || []; const off = o.dinaboxOff || {};
+  const novos = []; lotes.forEach(l => (l.mats || []).forEach(m => { const k = chaveMat(m); if (off[chaveOff(m)] || itens.some(i => norm(i.descricao) === k) || novos.some(i => norm(i.descricao) === k)) return;
+    novos.push({ id: rand(8), descricao: [m.d, m.m].filter(Boolean).join(' · '), qtd: m.q, unidade: '', categoria: m.c || 'Outros', origem: 'comprar', etapa: 'principal', fonte: 'Dinabox' }); }));
+  if (novos.length) await M.setDoc(ref, { osId: o.id, osCod: numOS(o), cliente: o.cliente?.nome || '', itens: [...itens, ...novos], atualizadoEm: nowIso(), atualizadoPor: 'Dinabox' }, { merge: true });
+  return novos.length;
+}
+async function sincronizarDinabox(sessao, toast, forcar) {
+  try { const tk = await F().auth.currentUser.getIdToken(); const r = await fetch('/api/dinabox-pull', { headers: { authorization: 'Bearer ' + tk } }); const d = await r.json();
+    if (!d.em || !(d.lotes || []).length) { if (forcar) toast('Ainda não chegaram dados do Dinabox.'); return 0; }
+    if (!forcar && window.__dinaboxEm && d.em <= window.__dinaboxEm) return 0;
+    const n = await importarDinabox(sessao, d.lotes, true);
+    await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { dinaboxEm: d.em }); window.__dinaboxEm = d.em;
+    toast('📦 Dinabox: materiais e peças atualizados em ' + n + ' OS.', 'ok'); return n;
+  } catch (e) { if (forcar) toast('Dinabox: ' + e.message, 'erro'); return 0; }
 }
 function ouvirDinabox(sessao, toast) {
+  if (sessao.papel === 'admin') { setTimeout(() => sincronizarDinabox(sessao, toast), 8000); setInterval(() => sincronizarDinabox(sessao, toast), 30 * 60000); }
   window.addEventListener('message', async (e) => { if (!/^https:\/\/(www\.)?dinabox\.app$/.test(e.origin) || e.data?.tipo !== 'dinabox-import') return;
     if (sessao.papel !== 'admin') return toast('Só o administrador pode importar do Dinabox.', 'erro');
     try { const n = await importarDinabox(sessao, e.data.lotes || []); toast('📦 Dinabox: materiais e peças atualizados em ' + n + ' OS.', 'ok'); e.source?.postMessage({ tipo: 'dinabox-ok', n }, e.origin); } catch (er) { toast('Não importou: ' + er.message, 'erro'); } });
 }
 function MateriaisDinabox({ sessao, os, toast, itens, gravar }) {
   const lotes = os.dinabox?.lotes || []; if (!lotes.length) return null;
-  const imp = () => { const novos = []; lotes.forEach(l => (l.mats || []).forEach(({ c: cat, q: qtd, d: desc, m: dim }) => { const d = [desc, dim].filter(Boolean).join(' · '); if (itens.some(i => norm(i.descricao) === norm(d))) return; novos.push({ id: rand(8), descricao: d, qtd: qtd, unidade: '', categoria: cat || 'Outros', origem: 'comprar', etapa: 'principal', fonte: 'Dinabox ' + l.lote }); }));
-    if (!novos.length) return toast('Tudo do Dinabox já está na lista.'); gravar([...itens, ...novos], { __log: 'Importado do Dinabox (' + novos.length + ' itens)' }); toast(novos.length + ' itens do Dinabox adicionados.', 'ok'); };
-  return html`<div class="card stack din-card"><div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>📦 Materiais do Dinabox <small class="dim">${lotes.length} lote(s) · atualizado ${fmtData(os.dinabox.em)}</small></b><button class="btn btn-sm btn-primary" onClick=${imp}>⬇ Colocar na lista de compras</button></div>
+  const off = os.dinaboxOff || {};
+  const tog = async (m) => { const k = chaveMat(m); const usar = offK(m);
+    await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', os.id), { ['dinaboxOff.' + chaveOff(m)]: usar ? null : true }).catch(e => toast(e.message, 'erro'));
+    if (usar) { if (!itens.some(i => norm(i.descricao) === k)) gravar([...itens, { id: rand(8), descricao: [m.d, m.m].filter(Boolean).join(' · '), qtd: m.q, unidade: '', categoria: m.c || 'Outros', origem: 'comprar', etapa: 'principal', fonte: 'Dinabox' }]); }
+    else gravar(itens.filter(i => !(norm(i.descricao) === k && !i.comprado && !i.recebido))); };
+  const offK = (m) => !!off[chaveOff(m)];
+  return html`<details class="card din-card"><summary><b>📦 Do Dinabox: ${lotes.reduce((n, l) => n + (l.mats || []).length, 0)} materiais</b> <small class="dim">${lotes.length} lote(s) · ${fmtData(os.dinabox.em)} · toque para desmarcar o que não vai comprar</small></summary>
     ${lotes.map(l => { const g = {}; (l.mats || []).forEach(m => (g[m.c || 'Outros'] = g[m.c || 'Outros'] || []).push(m)); return html`<div key=${l.lote} class="po2-amb"><div class="po2-amb-t"><b>${l.nome}</b><em>lote ${l.lote}</em></div>
-      ${Object.entries(g).map(([c, ms]) => html`<div key=${c} class="oe-acess"><div class="oe-acess-t">${c}</div>${ms.map((m, i) => html`<div key=${i} class="oe-it"><span class="oe-box p"></span><b>${m.q}</b> · ${m.d} <small>${m.m}</small></div>`)}</div>`)}</div>`; })}</div>`;
+      ${Object.entries(g).map(([c, ms]) => html`<div key=${c} class="oe-acess"><div class="oe-acess-t">${c}</div>${ms.map((m, i) => { const des = offK(m); return html`<label key=${i} class=${'oe-it din-it' + (des ? ' off' : '')}><input type="checkbox" checked=${!des} onChange=${() => tog(m)} /><b>${m.q}</b> · ${m.d} <small>${m.m}</small></label>`; })}</div>`)}</div>`; })}</details>`;
 }
 function PecasDinabox({ sessao, o, toast }) {
   const lotes = o.dinabox?.lotes || []; const conf = o.pecasConf || {}; const [q, setQ] = useState('');
@@ -7091,6 +7118,12 @@ function MascoteCfg({ sessao, toast }) {
       ${rosto && html`<button class="btn btn-ghost" onClick=${() => setRosto('')}>Tirar foto</button>`}
       <button class="btn btn-primary" onClick=${salvar}>Salvar</button></div></div>`;
 }
+function DinaboxCfg({ sessao, toast }) {
+  const [rod, setRod] = useState(false);
+  return html`<div class="card page-card stack"><div class="sec-title">📦 Dinabox (projetos 3D, materiais e peças)</div>
+    <small class="dim">Os dados do Dinabox entram sozinhos nas OS (pelo número no nome do lote): links 3D na aba Montagem, peças na aba 🧩 Peças e materiais direto na lista de compras. Última atualização: <b>${window.__dinaboxEm ? fmtData(window.__dinaboxEm) : 'nunca'}</b>.</small>
+    <button class="btn btn-primary" style=${{ alignSelf: 'flex-start' }} disabled=${rod} onClick=${async () => { setRod(true); await sincronizarDinabox(sessao, toast, true); setRod(false); }}>${rod ? 'Buscando…' : '🔄 Buscar agora'}</button></div>`;
+}
 function SenhaLiberacaoCfg({ sessao, toast }) {
   const [a, setA] = useState(''), [b, setB] = useState('');
   const salvar = async () => { if (a.length < 4) return toast('Mínimo 4 caracteres.'); if (a !== b) return toast('As senhas não conferem.');
@@ -7123,6 +7156,7 @@ function TelaConfig({ sessao, toast }) {
   return html`<div class="fade-up stack">
     ${sessao.papel === 'admin' && html`<${SenhaLiberacaoCfg} sessao=${sessao} toast=${toast} />`}
     ${sessao.papel === 'admin' && html`<${MascoteCfg} sessao=${sessao} toast=${toast} />`}
+    ${sessao.papel === 'admin' && html`<${DinaboxCfg} sessao=${sessao} toast=${toast} />`}
     <div><h2>⚙ Configurações</h2><div class="dim">Etapas do processo da sua empresa. Renomeie, reordene, mude a cor, acrescente ou tire etapas.</div></div>
     <div class="card page-card stack">
       <div class="sec-title">📋 Etapas da OS (andamento geral)</div>
@@ -7159,7 +7193,7 @@ function Principal({ sessao, toast }) {
   const [logo, setLogo] = useState(window.__LOGO || '');
   const [, setCfgV] = useState(0);
   useEffect(() => F().fsMod.onSnapshot(col('empresas', sessao.empresaId, 'os'), s => { setTimeout(() => garantirCoresClientes(sessao, s.docs.map(d => d.data().cliente?.nome || '')), 1500); }, () => {}), []);
-  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
+  useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId), d => { const dd = d.data() || {}; window.__CORES_CLI = dd.coresClientes || {}; const l = dd.logo || ''; window.__LOGO = l; setLogo(l); aplicarEtapas(dd); window.__etapasCfg = dd.etapasOS; window.__senhaLib = dd.senhaLiberacao || ''; window.__dinaboxEm = dd.dinaboxEm || ''; window.__mascCfg = { nome: dd.mascoteNome || '', rosto: dd.mascoteRosto || '' }; window.dispatchEvent(new Event('masc-cfg')); window.__parcLista = dd.parceirosLista || (typeof PARC_PADRAO !== 'undefined' ? PARC_PADRAO : []); aplicarGrupos(dd.gruposAcesso); if (dd.espessurasCfg) window.__ESP = dd.espessurasCfg; setCfgV(v => v + 1); }, () => {}), []);
   const [minhasAbas, setMinhasAbas] = useState(undefined);
   useEffect(() => F().fsMod.onSnapshot(docRef('empresas', sessao.empresaId, 'usuarios', sessao.uid), d => setMinhasAbas(d.data()?.abas), () => {}), []);
   sessao = { ...sessao, abasProprias: Array.isArray(minhasAbas) ? minhasAbas : undefined };
