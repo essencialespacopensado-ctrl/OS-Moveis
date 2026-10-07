@@ -1895,3 +1895,4 @@ header,.topo{background:#fff!important;border-bottom:1px solid #e2e8f0!important
 @media screen and (max-width:700px){.po{zoom:.6}}
 @media screen and (max-width:480px){.po{zoom:.45}}
 @media screen{:has(> .po){overflow-x:auto}.po .po{width:auto!important;min-height:0;margin:0!important;padding:0!important;box-shadow:none;border:0}}
+@media screen{.modal-caixa:has(.po){width:min(900px,98vw)!important;max-width:98vw!important}.ficha-papel:has(.po){padding:10px 0!important;background:#e5e7eb!important}}
