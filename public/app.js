@@ -4392,7 +4392,7 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
   useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(s => setAtas(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(c.nome)))).catch(() => {}); }, [c.id]);
   const ativas = oss.filter(o => !osConcluida(o));
   const pend = [];
-  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo]); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2]])); });
+  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo, o.id, 'andamento']); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2], o.id, 'compras'])); });
   const pct = oss.length ? Math.round(oss.reduce((n, o) => n + pctObra(o), 0) / oss.length) : 0;
   const pux = oss.flatMap(o => puxadoresDaOS(o).map(([onde, x]) => [numOS(o) + (onde ? ' · ' + onde : ''), x]));
   const ele = oss.flatMap(o => (o.eletros || []).map(e => ({ ...e, os: numOS(o) })));
@@ -4402,7 +4402,7 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
     <div class="pcli-cab"><div><h2>${nomePadrao(c.nome)}</h2><small>${[c.telefone, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ')}</small>${(c.enderecoMontagem || c.endereco) && html`<div><small>📍 ${c.enderecoMontagem || c.endereco}</small></div>`}</div>
       <div class="row" style=${{ gap: '6px' }}>${c.telefone && html`<a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://wa.me/55' + String(c.telefone).replace(/\D/g, '').replace(/^55/, '')}>💬</a>`}<button class="btn btn-sm" onClick=${editar}>✏️ Dados</button><button class="x-btn" onClick=${fechar}>✕</button></div></div>
     <div class="pcli-kpis"><div><small>Status da obra</small><${BarraPct} p=${pct} /></div><div><small>OSs</small><b>${ativas.length} em aberto · ${oss.length - ativas.length} concluídas</b></div><div><small>Pendências</small><b style=${{ color: pend.length ? 'var(--danger)' : '' }}>${pend.length}</b></div><div><small>Finalização</small><b>${ok}/${tot}</b></div></div>
-    ${pend.length > 0 && html`<div class="ficha-falta"><b>⚠ Pendências</b>${pend.slice(0, 12).map(([ic, t], i) => html`<div key=${i}>${ic} ${t}</div>`)}</div>`}
+    ${pend.length > 0 && html`<div class="ficha-falta"><b>⚠ Pendências</b>${pend.map(([ic, t, id, modo], i) => html`<button key=${i} class="falta-it" title="Abrir para resolver" onClick=${() => { window.__modoFicha = modo; fechar && fechar(); setTimeout(() => window.__abrirOS && window.__abrirOS(id), 50); }}>${ic} ${t} <small>→ resolver</small></button>`)}</div>`}
     <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['oss', '📋 OSs'], ['check', '✅ Finalização'], ['pux', '✋ Puxadores'], ['ele', '🔌 Eletros'], ['contrato', '📑 Contrato'], ['atas', '🎙 Atas']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
     ${aba === 'oss' && html`<div class="pcli-lista">${oss.map(o => { const st = (STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]); return html`<button key=${o.id} class="pcli-os" onClick=${() => abrirOS(o.id)}><b class="mono">${numOS(o)}</b><span>${nomePadrao((o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo) || '—'}</span><span class=${st.c + ' mini'}>${st.t.replace(/^\d+\. /, '')}</span><${BarraPct} p=${pctObra(o)} /></button>`; })}</div>`}
     ${aba === 'check' && html`<div class="stack">${ck.map((sec, si) => html`<div key=${si} class="pcli-sec"><div class="pcli-sec-t">${sec.tit} <small>${sec.itens.filter(i => i.ok).length}/${sec.itens.length}</small></div>
@@ -4469,7 +4469,7 @@ function PecasDinabox({ sessao, o, toast }) {
   const tog = (k) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ['pecasConf.' + k]: conf[k] ? null : { por: sessao.nome, em: nowIso() } }).catch(e => toast(e.message, 'erro'));
   if (!lotes.length) return html`<div class="card"><div class="vazio dim">Nenhuma lista de peças do Dinabox para esta OS ainda.</div></div>`;
   const tot = lotes.reduce((n, l) => n + (l.pcs || []).length, 0), ok = Object.values(conf).filter(Boolean).length;
-  return html`<div class="stack"><div class="row" style=${{ gap: '8px', alignItems: 'center' }}><b>🧩 Lista de peças (Dinabox)</b><span class="chip">${ok}/${tot} conferidas</span><input class="inp inp-sm" style=${{ flex: 1 }} placeholder="🔍 Buscar peça, código, material" value=${q} onInput=${e => setQ(e.target.value)} /></div>
+  return html`<div class="stack po po-pecas"><div class="row" style=${{ gap: '8px', alignItems: 'center' }}><b>🧩 Lista de peças (Dinabox)</b><span class="chip">${ok}/${tot} conferidas</span><input class="inp inp-sm" style=${{ flex: 1 }} placeholder="🔍 Buscar peça, código, material" value=${q} onInput=${e => setQ(e.target.value)} /></div>
     ${lotes.map(l => { const g = {}; (l.pcs || []).forEach((p, i) => { if (q && !norm(Object.values(p).join(' ')).includes(norm(q))) return; (g[p.g || 'Peças'] = g[p.g || 'Peças'] || []).push([p, i]); });
       return html`<div key=${l.lote} class="po2-amb"><div class="po2-amb-t"><b>${l.nome}</b><em>${(l.pcs || []).length} peças</em></div>
       ${Object.entries(g).map(([mod, ps]) => html`<div key=${mod} class="pc-mod"><div class="oe-acess-t">${mod}</div>
@@ -4590,7 +4590,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
   const [ordP, setOrdP] = useState(false);
   const histV = useRef([]), pularHist = useRef(false), ultV = useRef(null);
-  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || 'andamento'; });
+  const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || (['andamento', 'montagem', 'pecas', 'compras', 'fin', 'amostras', 'folha', 'entrega', 'cal'].includes(m) ? m : 'andamento'); });
   useEffect(() => { if (ultV.current && ultV.current !== modoV && !pularHist.current) histV.current.push(ultV.current); pularHist.current = false; ultV.current = modoV; }, [modoV]);
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
