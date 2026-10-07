@@ -404,6 +404,15 @@ TEXTO:
 """${String(d.texto || '').slice(0, 45000)}"""
 ${d.temImagens ? 'As imagens são a nota fiscal.' : ''}`;
 
+    case 'traduzir': {
+      const L = { en: 'inglês (EUA)', es: 'espanhol (América Latina)' }[d.lang] || 'inglês';
+      return `Traduza do português para ${L} os textos de interface de um app de gestão de marcenaria (móveis planejados).
+Regras: tradução curta e natural de botão/menu; mantenha emojis, números, códigos (ex: 26.182), símbolos e espaços do início/fim;
+NÃO traduza nomes próprios de pessoas, empresas, marcas, cores de MDF ou produtos; se o texto já estiver em ${L} ou for só nome/código, devolva igual.
+Responda SOMENTE JSON: {"t": [traduções na mesma ordem]}.
+TEXTOS:
+${JSON.stringify((d.textos || []).slice(0, 200))}`;
+    }
     case 'ler_imagens':
       return `Transcreva TODO o texto destas imagens de documento (contrato, detalhamento ou projeto de móveis),
 mantendo a ordem, tabelas como linhas "coluna: valor" e medidas exatamente como estão.
