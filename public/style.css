@@ -1877,16 +1877,11 @@ body{background:var(--bg)!important}
 .btn-primary:hover{background:#173f82!important}
 .btn-verde{background:#15803d!important;border-color:#15803d!important}
 /* cabeçalhos de cliente: sóbrio, com faixa da cor do cliente */
-.ini-cli-top{background:#0f1e33!important;border-left:5px solid var(--cc)!important}
-.ini-cli{border-color:#e2e8f0!important;background:#fff!important}
-.ini-cli-oss,.ini-cli-os{background:#fff!important}
-.ini-cli-os:hover{background:#f1f5f9!important}
-.ini-cli-os b,.ini-cli-os .cod{color:#1e4fa3!important}
 /* abas/segmentos e topo */
 .seg button.on,.seg .on,.tabs .on{background:#0f1e33!important;color:#fff!important}
 header,.topo{background:#fff!important;border-bottom:1px solid #e2e8f0!important}
 .masc-bal{border-color:#1e4fa3!important}.masc-bal::after{border-color:#1e4fa3!important}
 .lang-aviso{background:#0f1e33;color:#fff}
-.ini-cli-os .mono{color:#1e4fa3!important}
 .seg-mini button.on,.seg-mini .on{background:#0f1e33!important;color:#fff!important;border-color:#0f1e33!important}
 .assist-fab,.fab-ajuda{background:#0f1e33!important}
+.side .lang-sel{position:absolute;left:64px;bottom:16px;margin:0;background:#0b1729;color:#e2e8f0;border-color:rgba(255,255,255,.2)}
