@@ -2862,24 +2862,29 @@ function PedirOrcamento({ sessao, os, itens, parceiros, toast, fechar }) {
   const lista = (parceiros || []).filter(p => p.nome);
   const [sel, setSel] = useState([]), [prazo, setPrazo] = useState(''), [obs, setObs] = useState(''), [criados, setCriados] = useState(null), [rod, setRod] = useState(false);
   const comprar = itens.filter(i => i.origem !== 'estoque' && !i.comprado);
+  const [envi, setEnvi] = useState({});
+  const abrirWa = (c, w) => { const u = linkWa(c.whats, msg(c)); if (w && !w.closed) w.location.href = u; else window.open(u, '_blank'); setEnvi(e => ({ ...e, [c.id]: true })); };
   const criar = async () => { if (!sel.length) return toast('Escolha ao menos um parceiro.'); setRod(true);
+    const temW = sel.some(n => lista.find(x => x.nome === n)?.whats); let w = null; try { if (temW) w = window.open('', '_blank'); if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Abrindo WhatsApp…</p>'); } catch {}
     try { const M = F().fsMod; const out = [];
       for (const nome of sel) { const p = lista.find(x => x.nome === nome); const id = rand(10) + rand(10);
         await M.setDoc(M.doc(F().db, 'cotacoes', id), { empresaId: sessao.empresaId, empresaNome: sessao.empresaNome || '', osId: os.id, osCod: numOS(os), titulo: nomePadrao((os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Materiais', parceiro: nome, whats: p?.whats || '', itens: comprar.map(i => ({ descricao: i.descricao, qtd: String(i.qtd || ''), unidade: i.unidade || '', categoria: i.categoria || 'Outros' })), prazoResposta: prazo, obs, criadoPor: sessao.nome, em: nowIso() });
         out.push({ id, nome, whats: p?.whats || '' }); }
       registrar(sessao, os.id, '💬', 'Orçamento pedido a ' + sel.join(', '), ''); setCriados(out);
-    } catch (e) { toast('Não criou: ' + e.message, 'erro'); } setRod(false); };
+      const pri = out.find(c => c.whats); if (pri) abrirWa(pri, w); else if (w) w.close();
+    } catch (e) { if (w) w.close(); toast('Não criou: ' + e.message, 'erro'); } setRod(false); };
   const msg = (c) => 'Olá ' + c.nome + '! Segue a lista de materiais para orçamento (OS ' + numOS(os) + ').' + (prazo ? ' Precisamos até ' + prazo.split('-').reverse().join('/') + '.' : '') + ' Abra o link, confira e anexe o PDF do orçamento com as condições de pagamento: ' + linkCot(c.id);
   return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(560px,100%)' }}>
     <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">📤 Pedir orçamento · ${numOS(os)}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
-    ${criados ? html`<div class="stack"><small class="dim">Toque em cada um para abrir o WhatsApp com a mensagem pronta e enviar.</small>
-      ${criados.map(c => html`<div key=${c.id} class="row" style=${{ gap: '6px', alignItems: 'center' }}><b style=${{ flex: 1 }}>${c.nome}</b>${c.whats ? html`<a class="btn btn-verde" target="_blank" rel="noopener" href=${linkWa(c.whats, msg(c))}>📲 Enviar no WhatsApp</a>` : html`<button class="btn" onClick=${() => { navigator.clipboard?.writeText(msg(c)); toast('Mensagem copiada (parceiro sem WhatsApp cadastrado).', 'ok'); }}>📋 Copiar mensagem</button>`}</div>`)}
+    ${criados ? html`<div class="stack">${(() => { const prox = criados.find(c => c.whats && !envi[c.id]); return prox ? html`<button class="btn btn-verde" style=${{ fontSize: '17px', padding: '14px' }} onClick=${() => abrirWa(prox)}>📲 Enviar para o próximo: ${prox.nome}</button>` : html`<div class="ok-box" style=${{ background: '#f0fdf4', border: '2px solid #86efac', borderRadius: '12px', padding: '10px', fontWeight: 700, color: '#166534' }}>✅ WhatsApp aberto para todos. É só tocar em Enviar em cada conversa.</div>`; })()}
+      <small class="dim">O WhatsApp abre com a mensagem e o link prontos — toque em Enviar lá.</small>
+      ${criados.map(c => html`<div key=${c.id} class="row" style=${{ gap: '6px', alignItems: 'center' }}><b style=${{ flex: 1 }}>${c.nome}</b>${c.whats ? html`<a class="btn btn-verde" target="_blank" rel="noopener" href=${linkWa(c.whats, msg(c))} onClick=${() => setEnvi(e => ({ ...e, [c.id]: true }))}>${envi[c.id] ? '✓ Aberto' : '📲 Abrir'}</a>` : html`<button class="btn" onClick=${() => { navigator.clipboard?.writeText(msg(c)); toast('Mensagem copiada (parceiro sem WhatsApp cadastrado).', 'ok'); }}>📋 Copiar mensagem</button>`}</div>`)}
       <button class="btn" onClick=${fechar}>Pronto</button></div>`
     : html`<small class="dim">${comprar.length} itens a comprar vão no link. Escolha os parceiros (cadastre o WhatsApp em Compras → 🏢 Parceiros).</small>
       <div class="orc-sel">${lista.map(p => { const on = sel.includes(p.nome); return html`<button key=${p.nome} class=${'sug-pessoa' + (on ? ' on' : '')} onClick=${() => setSel(on ? sel.filter(x => x !== p.nome) : [...sel, p.nome])}>${on ? '✓ ' : ''}${p.nome}${p.whats ? ' 📲' : ''}</button>`; })}</div>
       <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}><div class="field" style=${{ flex: 1 }}><span class="lbl">Responder até</span><input class="inp" type="date" value=${prazo} onInput=${e => setPrazo(e.target.value)} /></div></div>
       <div class="field"><span class="lbl">Observação para o parceiro</span><input class="inp" value=${obs} onInput=${e => setObs(e.target.value)} placeholder="Ex: entrega na fábrica, cotar com frete" /></div>
-      <button class="btn btn-primary" disabled=${rod} onClick=${criar}>${rod ? 'Criando…' : 'Criar links (' + sel.length + ')'}</button>`}
+      <button class="btn btn-primary" disabled=${rod} onClick=${criar}>${rod ? 'Criando…' : '📲 Gerar e enviar (' + sel.length + ')'}</button>`}
   </div></div>`, document.body);
 }
 /* Aviso global: cada orçamento que chega gera alerta "já recebeu N orçamento(s)" */
