@@ -6463,11 +6463,11 @@ function MinhaConta({ sessao, fechar, toast }) {
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
   ['geral', '🏠 Início', '#1e4fa3', ['inicio', 'quadro']],
-  ['clientes', '1 · 🤝 Vendas e projeto', '#db2777', ['clientes', 'projetos', 'contratos', 'amostras']],
-  ['os', '2 · 📋 Ordens de serviço', '#1e4fa3', ['os', 'importar', 'catalogo']],
-  ['compras', '3 · 🛒 Compras', '#16a34a', ['compras']],
-  ['producao', '4 · 🏭 Produção e montagem', '#d97706', ['cronograma', 'pedidos']],
-  ['financeiro', '5 · 💰 Financeiro', '#0e7490', ['financeiro', 'contas']],
+  ['clientes', '🤝 1. Vendas e projeto', '#db2777', ['clientes', 'projetos', 'contratos', 'amostras']],
+  ['os', '📋 2. Ordens de serviço', '#1e4fa3', ['os', 'importar', 'catalogo']],
+  ['compras', '🛒 3. Compras', '#16a34a', ['compras']],
+  ['producao', '🏭 4. Produção e montagem', '#d97706', ['cronograma', 'pedidos']],
+  ['financeiro', '💰 5. Financeiro', '#0e7490', ['financeiro', 'contas']],
   ['sistema', '⚙ Sistema e ajuda', '#475569', ['equipe', 'config', 'excluir', 'manual', 'sugestoes', 'novidades']],
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
