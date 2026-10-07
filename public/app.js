@@ -3780,7 +3780,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
   const [nomesMv, setNomesMv] = useState([]);
   useEffect(() => { F().fsMod.getDoc(docRef('empresas', sessao.empresaId, 'agenda', iso(segundaDe(new Date())))).then(d => { const g = d.data()?.grades?.[mv.grade] || []; setNomesMv([...new Set(g.map(r => r.nome).filter(Boolean))]); }).catch(() => {}); }, [mv.grade]);
   const mover = async () => {
-    if (mv.motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
+    { const e = motivoErro(mv.motivo); if (e) return toast(e); }
     if (!mv.pessoa.trim()) return toast('Escolha quem vai executar.');
     if (mv.fim < mv.inicio) return toast('O prazo final não pode ser antes do início.');
     if (mv.pessoa === t.pessoa && mv.grade === t.grade && mv.inicio === t.inicio && mv.fim === t.fim) return toast('Nada mudou.');
@@ -3798,7 +3798,7 @@ function DetalheTarefa({ sessao, t, todas, fechar, toast }) {
     } catch (e) { toast('Não moveu: ' + e.message, 'erro'); }
   };
   const prorrogar = async () => {
-    if (motivo.trim().length < 5) return toast('O motivo é obrigatório (pelo menos 5 letras).');
+    { const e = motivoErro(motivo); if (e) return toast(e); }
     const novoFim = novaData || somaUteis(t.fim, dias);
     const n = uteisEntre(t.fim, novoFim);
     if (n <= 0) return toast('Escolha uma data depois de ' + dm(t.fim) + '.');
@@ -4209,23 +4209,39 @@ function registrar(sessao, osId, ic, t, d) {
 }
 function registrarVarias(sessao, oss, ic, t, d) { const vis = new Set(); (oss || []).forEach(o => { if (o && !vis.has(o.id)) { vis.add(o.id); registrar(sessao, o.id, ic, t, d); } }); }
 /* Pede só o motivo (sem senha) — usado no cronograma */
+/* Motivo precisa ser texto de verdade: bloqueia letras aleatórias, repetições e enrolação */
+function motivoErro(t) {
+  const x = String(t || '').trim(); const low = x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const pals = low.match(/[a-zç]+/g) || [];
+  if (x.length < 15) return 'Escreva o motivo com pelo menos 15 letras.';
+  if (pals.length < 3) return 'Explique com pelo menos 3 palavras (ex: "cliente pediu troca da cor").';
+  if (/(.)\1{3,}/.test(low)) return 'O motivo tem letras repetidas sem sentido.';
+  if (new Set(pals).size < Math.min(3, pals.length)) return 'Não repita a mesma palavra — explique o que aconteceu.';
+  const vog = /[aeiouy]/; const ruins = pals.filter(w => (w.length >= 3 && !vog.test(w)) || /[bcdfghjklmnpqrstvwxz]{5,}/.test(w) || w.length > 22);
+  if (ruins.length / pals.length > 0.25) return 'Isso não parece um motivo. Escreva uma frase que explique.';
+  if (/(asdf|qwer|zxcv|hjkl|jkl|sdfg|dfgh|fghj|xcvb|uiop|teste|testando|aaa|bla|blabla|kkk|nada|nada a declarar|sei la|qualquer|xxx|abc|123)/.test(low) && pals.length < 6) return 'Isso não parece um motivo real. Escreva o que aconteceu.';
+  const curtas = pals.filter(w => w.length <= 2).length; if (pals.length - curtas < 3) return 'Use palavras completas para explicar o motivo.';
+  return '';
+}
+window.__motivoErro = motivoErro;
 function pedirMotivo(titulo, texto) {
   return new Promise(res => {
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = ReactDOM.createRoot(el);
     const fim = (v) => { root.unmount(); el.remove(); res(v); };
     function M() {
-      const [m, setM] = useState('');
+      const [m, setM] = useState(''), [err, setErr] = useState('');
       return html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fim(null)}>
         <div class="card modal-caixa stack" style=${{ width: 'min(460px,100%)' }}>
           <div class="sec-title">↺ ${titulo}</div>
           <div class="dim">${texto || 'Isso já foi salvo. Informe o motivo para reabrir.'}</div>
           <textarea class="inp" rows="3" autoFocus placeholder="Motivo (obrigatório)" value=${m} onInput=${e => setM(e.target.value)}></textarea>
           <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => fim(null)}>Cancelar</button>
-            <button class="btn btn-grande btn-marrom" style=${{ flex: 1 }} onClick=${() => m.trim().length < 5 ? alertaMin() : fim(m.trim())}>Confirmar</button></div>
+            <button class="btn btn-grande btn-marrom" style=${{ flex: 1 }} onClick=${() => { const e = motivoErro(m); if (e) { setErr(e); alertaMin(); } else fim(m.trim()); }}>Confirmar</button></div>
+          ${err && html`<div style=${{ color: '#b91c1c', fontWeight: 700, fontSize: '13px' }}>⚠ ${err}</div>`}
         </div></div>`;
     }
-    const alertaMin = () => { const t = el.querySelector('textarea'); if (t) { t.style.borderColor = '#dc2626'; t.placeholder = 'Escreva o motivo (mín. 5 letras)'; t.focus(); } };
+    const alertaMin = () => { const t = el.querySelector('textarea'); if (t) { t.style.borderColor = '#dc2626'; t.placeholder = 'Escreva o motivo de verdade'; t.focus(); } };
     root.render(html`<${M} />`);
   });
 }
@@ -4303,7 +4319,7 @@ function LiberarPendencias({ sessao, falta, titulo, irAba, fechar, onOk }) {
   const [senha, setSenha] = useState(''), [motivo, setMotivo] = useState(''), [erro, setErro] = useState(''), [rod, setRod] = useState(false);
   const chefe = ['admin', 'gerente'].includes(sessao.papel);
   const liberarCodigo = async () => {
-    if (motivo.trim().length < 5) return setErro('Escreva o motivo.'); if (!senha) return setErro('Digite a senha de liberação.');
+    { const e = motivoErro(motivo); if (e) return setErro(e); } if (!senha) return setErro('Digite a senha de liberação.');
     const h = window.__senhaLib; if (!h) return setErro('O administrador ainda não cadastrou a senha de liberação (Configurações).');
     setRod(true); if ((await hashTxt(senha)) !== h) { setRod(false); return setErro('Senha incorreta.'); }
     await onOk(motivo.trim() + ' (senha de liberação)'); fechar(); };
@@ -4777,7 +4793,7 @@ function SenhaMotivo({ titulo, texto, botao = 'Confirmar', perigo, onOk, fechar,
   const [erro, setErro] = useState('');
   const [rodando, setRodando] = useState(false);
   const ok = async () => {
-    if (!semMotivo && motivo.trim().length < 5) return setErro('Escreva o motivo (obrigatório, pelo menos 5 letras).');
+    if (!semMotivo) { const e = motivoErro(motivo); if (e) return setErro(e); }
     if (!senha) return setErro('Digite a sua senha.');
     setRodando(true); setErro('');
     try { await conferirSenha(senha); await onOk(motivo.trim() || (semMotivo ? 'Apagadas em lote (importação incorreta)' : '')); fechar(); }
