@@ -4732,7 +4732,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         <button class="btn btn-grande" onClick=${imprimir}>🖨 Imprimir</button>
         ${tarOS.length ? html`<button class="btn btn-grande btn-verde" onClick=${() => { const t = tarOS[0]; const h = isoD(new Date()); const d = t.inicio <= h && t.fim >= h ? h : t.inicio; fechar(); window.__irCronograma && window.__irCronograma(d, { p: norm(t.pessoa), d }); }}>📅 Ver no cronograma</button>`
           : html`<button class="btn btn-grande btn-verde" onClick=${() => setEnviar(true)}>📅 Enviar ao cronograma</button>`}
-        <button class=${'btn btn-grande' + (modoV === 'cal' ? ' btn-primary' : '')} onClick=${() => setModoV(modoV === 'cal' ? 'andamento' : 'cal')}>📆 Ver no calendário</button>
+
         <button class="btn btn-grande btn-ordem-parc" onClick=${() => setOrdP(true)}>🧾 Ordens a terceiros</button>
       </div>
       ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
@@ -6462,12 +6462,13 @@ function MinhaConta({ sessao, fechar, toast }) {
 /* ---------- A IA mexendo no sistema (com confirmação) ---------- */
  const NAV_ACOES = ['abrir_aba', 'abrir_os', 'ver_cronograma', 'imprimir_os'];
 const SECOES = [
-  ['geral', '🏠 Geral', '#2563eb', ['inicio', 'novidades', 'sugestoes', 'quadro', 'amostras', 'importar', 'manual', 'config']],
-  ['clientes', '👤 Clientes', '#db2777', ['clientes', 'projetos', 'contratos']],
-  ['producao', '🏭 Produção', '#d97706', ['os', 'cronograma', 'pedidos', 'catalogo', 'excluir']],
-  ['compras', '🛒 Compras', '#16a34a', ['compras']],
-  ['equipe', '👥 Equipe', '#7c3aed', ['equipe']],
-  ['financeiro', '💰 Financeiro', '#0e7490', ['financeiro', 'contas']],
+  ['geral', '🏠 Início', '#1e4fa3', ['inicio', 'quadro']],
+  ['clientes', '1 · 🤝 Vendas e projeto', '#db2777', ['clientes', 'projetos', 'contratos', 'amostras']],
+  ['os', '2 · 📋 Ordens de serviço', '#1e4fa3', ['os', 'importar', 'catalogo']],
+  ['compras', '3 · 🛒 Compras', '#16a34a', ['compras']],
+  ['producao', '4 · 🏭 Produção e montagem', '#d97706', ['cronograma', 'pedidos']],
+  ['financeiro', '5 · 💰 Financeiro', '#0e7490', ['financeiro', 'contas']],
+  ['sistema', '⚙ Sistema e ajuda', '#475569', ['equipe', 'config', 'excluir', 'manual', 'sugestoes', 'novidades']],
 ];
 const secaoDe = (aba) => (SECOES.find(x => x[3].includes(aba)) || SECOES[0]);
 /* Comandos de tela resolvidos na hora, sem esperar a IA */
@@ -7151,6 +7152,21 @@ function Mascote() {
     </div>
   </div>`, document.body);
 }
+const FLUXO = [
+  ['1', '🤝', 'Vendas e projeto', 'Cadastre o cliente, faça a reunião (ata) e o contrato.', 'clientes'],
+  ['2', '📋', 'Ordem de serviço', 'Crie a OS de cada ambiente com medidas e materiais.', 'os'],
+  ['3', '🛒', 'Compras', 'Confira o estoque, peça orçamentos e receba o material.', 'compras'],
+  ['4', '🏭', 'Produção e montagem', 'Avance as etapas, entregue ferragens e monte na obra.', 'cronograma'],
+  ['5', '💰', 'Financeiro', 'Lance notas e veja o resultado de cada OS.', 'financeiro'],
+];
+function FluxoTrabalho({ irPara }) {
+  const [ab, setAb] = useState(() => { try { return localStorage.getItem('osm_fluxo') !== '0'; } catch { return true; } });
+  const tog = () => { setAb(!ab); try { localStorage.setItem('osm_fluxo', ab ? '0' : '1'); } catch {} };
+  return html`<div class="fluxo">
+    <div class="fluxo-top"><b>🧭 Como o trabalho anda no Gestão Pró</b><button class="btn btn-sm btn-ghost" onClick=${tog}>${ab ? 'Esconder' : 'Mostrar o passo a passo'}</button></div>
+    ${ab && html`<div class="fluxo-passos">${FLUXO.map(([n, ic, t, d, aba], k) => html`<button key=${n} class="fluxo-p" onClick=${() => (window.__irPara || irPara)(aba)}><span class="fluxo-n">${n}</span><span class="fluxo-ic">${ic}</span><b>${t}</b><small>${d}</small>${k < FLUXO.length - 1 ? html`<i class="fluxo-seta">→</i>` : ''}</button>`)}</div>`}
+  </div>`;
+}
 function TelaInicio({ sessao, abrirOS, irPara }) {
   const listaRef = useRef(null);
   const [vozAuto, setVozAuto] = useState(false);
@@ -7189,8 +7205,9 @@ function TelaInicio({ sessao, abrirOS, irPara }) {
   const telasAch = busca ? acharTelas(busca) : [];
   const resTelas = telasAch.length > 0 && html`<div class="busca-telas">${telasAch.map((x, i) => html`<button key=${i} class="bt-chip" onClick=${() => { setBusca(''); irPara(x.aba); }}>${x.t}</button>`)}</div>`;
   const cabecalho = html`
+      <${FluxoTrabalho} irPara=${irPara} />
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}>
-        <b style=${{ fontSize: '17px' }}>Produção <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
+        <b style=${{ fontSize: '17px' }}>Todas as obras em andamento <span class="dim" style=${{ fontWeight: 400, fontSize: '13px' }}>${os.length} OSs</span></b>
         <button class="btn btn-primary btn-sm" onClick=${() => irPara('os')}>+ OS</button>
       </div>
       ${togg}
@@ -7475,17 +7492,17 @@ function Principal({ sessao, toast }) {
   const voltarPag = () => { if (ficha) return setFicha(null); if (osAberta) return setOsAberta(null); const h = histNav.current; const v = h.pop() || 'inicio'; histNav.current = [...h]; irPara(v, true); };
   const abas = [
     { v: 'inicio', t: 'Início', i: '⌂' },
-    { v: 'quadro', t: 'Quadro geral', i: '📊' },
+    { v: 'quadro', t: 'Quadro geral (todas as obras)', i: '📊' },
     { v: 'clientes', t: 'Clientes', i: '👤' },
-    { v: 'pedidos', t: 'Peças extras', i: '🪵' },
+    { v: 'pedidos', t: 'Peças extras da obra', i: '🪵' },
     { v: 'os', t: 'Ordens de Serviço', i: '📋' },
     { v: 'contratos', t: 'Contratos', i: '📑' },
     { v: 'projetos', t: 'Reuniões & Projetos', i: '✨' },
     { v: 'amostras', t: 'Amostras', i: '📦' },
-    { v: 'importar', t: 'Importar (IA)', i: '🗂️' },
-    { v: 'catalogo', t: 'Catálogo', i: '🎨' },
+    { v: 'importar', t: 'Criar OS por arquivo (IA)', i: '🗂️' },
+    { v: 'catalogo', t: 'Catálogo de materiais', i: '🎨' },
     { v: 'equipe', t: 'Equipe', i: '👥' },
-    { v: 'cronograma', t: 'Cronograma', i: '📅' },
+    { v: 'cronograma', t: 'Cronograma da equipe', i: '📅' },
     { v: 'excluir', t: 'Excluir OSs', i: '🗑' },
     { v: 'compras', t: 'Compras', i: '🛒' },
     { v: 'financeiro', t: 'Resultado por OS', i: '💰' }, { v: 'contas', t: 'Contas & custos operacionais', i: '📒' },
