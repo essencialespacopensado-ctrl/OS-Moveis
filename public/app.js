@@ -45,6 +45,19 @@ async function garantirCoresClientes(sessao, nomes) {
 }
 const corOS = (o) => corCliente(o?.cliente?.nome || '');
 const NOVIDADES = [
+  ['238', ['🤖 Ajudante: o balão de fala agora abre inteiro e sempre por cima de tudo. Quando você pergunta "onde fica…", ele já abre a tela e depois mostra.', '🔄 Aviso de versão nova: o app avisa e se atualiza sozinho quando sai atualização.']],
+  ['235', ['🤝 Combinados de montagem (aba Montagem da OS): registre quando o gerente de produção combina uma execução diferente do projeto — com quem, o que muda e foto. Sai na folha impressa e no histórico.']],
+  ['233', ['🧭 Menu reorganizado pelo fluxo de trabalho: 1. Vendas e projeto → 2. Ordens de serviço → 3. Compras → 4. Produção e montagem → 5. Financeiro, e "Sistema e ajuda" no fim.', '🧭 Passo a passo no Início para quem está começando.']],
+  ['232', ['🚚 Ordem de entrega: botão "Registrar entrega". Se faltar algum móvel, pede o motivo e fica um alerta na OS e no quadro do cliente até entregar.']],
+  ['231', ['✍️ Conferência de material por categoria, com assinatura digital e linha para assinar na folha impressa.', '🔨 Entrega ao marceneiro só com as ferragens, conferidas e assinadas também pelo marceneiro.']],
+  ['229', ['🔌 Eletros: cole o link do produto e o app puxa a ficha técnica (medidas de embutir, tensão, potência, etc.).', '🖨 Imprimir folha padrão sai só a folha, sem os botões da tela.']],
+  ['226', ['🏢 Compras: parceiro por categoria, com opção de parceiro diferente em um item; usa as notas já lançadas para sugerir.']],
+  ['225', ['🚫 Motivos: o app bloqueia motivos sem sentido (letras aleatórias, repetições, "teste").']],
+  ['224', ['🛒 Folha de compras: parceiros (um ou mais), previsão de entrega, conferência de estoque com registro, recebimento assinado e "Usar este orçamento" que preenche a folha sozinho.']],
+  ['221', ['📄 Folhas (OS, entrega, compras, peças) em tamanho A4 na tela.', '⚠ Pendências do cliente: toque e vai direto para resolver.']],
+  ['219', ['🎨 Cores mais sérias e profissionais (azul-marinho), mantendo as cores dos clientes.']],
+  ['216', ['🌐 Idiomas: Português, Inglês e Espanhol — troca em Configurações, no menu ou falando/escrevendo no outro idioma.', '🧑 Ajudante com aparência humana e uniforme conforme a profissão escolhida.']],
+  ['215', ['📲 Pedir orçamento: "Gerar e enviar" já abre o WhatsApp de cada parceiro com a mensagem pronta.']],
   ['214', ['💬 Orçamentos pelo WhatsApp: em Compras da OS, "Pedir orçamento no WhatsApp" cria um link com a lista de materiais para cada parceiro escolhido e abre o WhatsApp com a mensagem pronta. O parceiro abre o link, vê a lista e anexa o PDF com valor e condições de pagamento — cai direto na OS, mostrando quem já retornou (✅) e quem falta (⏳), com botão para cobrar. A cada orçamento que chega aparece o aviso "já recebeu N orçamento(s)".', '📲 Cadastro do WhatsApp de cada parceiro em Compras → 🏢 Parceiros.']],
   ['212', ['📦 Dinabox automático: materiais entram sozinhos na lista de compras de cada OS e as peças na aba 🧩 Peças. Em Compras dá para desmarcar o que veio do Dinabox (sai da lista) e adicionar itens novos normalmente. Configurações → 📦 Dinabox mostra a última atualização e tem "Buscar agora".']],
   ['211', ['📦 Dinabox: a lista de materiais de cada lote aparece na folha de compras da OS (com botão para colocar na lista de compras), e a nova aba 🧩 Peças mostra todas as peças do lote por módulo, com busca e ✓ de conferência.']],
@@ -7146,9 +7159,9 @@ function Mascote() {
     let x = r.right + 8, y = r.top + r.height / 2 - 60; if (x > window.innerWidth - 90) x = Math.max(8, r.left - 90); y = Math.max(8, Math.min(window.innerHeight - 150, y));
     setFala(''); await irPara(x, y); destacar(el); setFala(texto); };
   const onde = async (txt) => { const t = acharTelas(txt); if (!t.length) return setFala('Não achei "' + txt + '". Tente outra palavra 🙂');
-    const aba = t[0].aba; const sec = secaoDe(aba)[0]; window.__abrirSecao && window.__abrirSecao(sec); await new Promise(r => setTimeout(r, 300));
+    const aba = t[0].aba; const sec = secaoDe(aba)[0]; window.__irPara && window.__irPara(aba); window.__abrirSecao && window.__abrirSecao(sec); await new Promise(r => setTimeout(r, 400));
     const el = document.querySelector('.side [data-aba="' + aba + '"]') || document.querySelector('.side [data-sec="' + sec + '"]');
-    await mostrar(el, '👉 ' + t[0].t + ' fica aqui! Toque para abrir.'); };
+    await mostrar(el, '✅ Abri ' + t[0].t + ' para você. Ela fica aqui no menu.'); };
   const tour = async () => { setMenu(false);
     const passos = [['.side-nav', 'Este é o menu: todas as telas, separadas por seção.'], ['.bg-barra', 'Aqui você busca ou fala: OS, cliente, tela…'], ['.ini-c .btn-primary, .page-head, .card', 'Este é o conteúdo da tela atual.'], ['.ficha-acoes, .rodape-escuro', 'Aqui ficam as ações principais.']];
     for (const [sel, txt] of passos) { const el = document.querySelector(sel); if (!el || !el.getBoundingClientRect().width) continue; await mostrar(el, txt); await new Promise(r => setTimeout(r, 2600)); }
@@ -7157,7 +7170,7 @@ function Mascote() {
     const h = () => setPos(p => ({ x: Math.min(p.x, window.innerWidth - 90), y: Math.min(p.y, window.innerHeight - 150) })); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   useEffect(() => { if (!fala) return; const t = setTimeout(() => setFala(''), 7000); return () => clearTimeout(t); }, [fala]);
   if (oculto) return ReactDOM.createPortal(html`<button class="masc-volta" title="Chamar o ajudante" onClick=${() => { setOculto(false); try { localStorage.setItem('osm_mascote', '1'); } catch {} }}>🧑‍🔧</button>`, document.body);
-  const balPos = () => { const W = window.innerWidth, H = window.innerHeight, w = Math.min(260, W - 16); const left = Math.max(8, Math.min(W - w - 8, pos.x + 35 - w / 2)); const alto = rosto ? 160 : 130;
+  const balPos = () => { const W = window.innerWidth || document.documentElement.clientWidth || 1200, H = window.innerHeight || document.documentElement.clientHeight || 800, w = Math.min(260, W - 16); const left = Math.max(8, Math.min(W - w - 8, pos.x + 35 - w / 2)); const alto = rosto ? 160 : 130;
     return pos.y < H / 2 ? { position: 'fixed', left: left + 'px', top: Math.min(H - 120, pos.y + alto) + 'px', bottom: 'auto', right: 'auto', width: w + 'px', transform: 'none', maxHeight: (H - Math.min(H - 120, pos.y + alto) - 12) + 'px' } : { position: 'fixed', left: left + 'px', bottom: (H - pos.y + 6) + 'px', top: 'auto', right: 'auto', width: w + 'px', transform: 'none', maxHeight: (pos.y - 12) + 'px' }; };
   const longe = Math.hypot(pos.x - (window.innerWidth - 120), pos.y - (window.innerHeight - 170)) > 40;
   return ReactDOM.createPortal(html`<div class=${'masc' + (andando ? ' anda' : '') + (vira ? ' vira' : '') + (pos.x < 260 ? ' bal-dir' : '') + (pos.y < 340 ? ' bal-baixo' : '') + (pensa ? ' pensa' : '') + ' prof-' + prof + (rosto ? ' com-foto' : '')} style=${{ left: pos.x + 'px', top: pos.y + 'px', transitionDuration: (pos.t || 0) + 's' }}>
