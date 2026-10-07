@@ -4567,6 +4567,29 @@ function PecasDinabox({ sessao, o, toast }) {
       ${Object.entries(g).map(([mod, ps]) => html`<div key=${mod} class="pc-mod"><div class="oe-acess-t">${mod}</div>
         ${ps.map(([p, i]) => { const k = l.lote + '_' + i; const f = conf[k]; return html`<label key=${k} class=${'pc-it' + (f ? ' ok' : '')}><input type="checkbox" checked=${!!f} onChange=${() => tog(k)} /><b class="mono">${p.c}</b><span class="pc-n">${p.q}× ${p.n}</span><small>${p.m}</small><span class="mono pc-d">${p.l} × ${p.a}</span>${p.u && html`<em>Usinagem: ${p.u}</em>`}</label>`; })}</div>`)}</div>`; })}</div>`;
 }
+/* Combinados de montagem: execução diferente do projeto, combinada pelo gerente de produção */
+function CombinadosMontagem({ sessao, o, toast }) {
+  const L = o.combinados || [];
+  const [novo, setNovo] = useState(null);
+  const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { combinados: l, atualizadoEm: nowIso(), atualizadoPor: sessao.nome });
+  const ok = async () => { const n = novo; if (!n.com.trim()) return toast('Com quem foi combinado?'); const e = motivoErro(n.oque); if (e) return toast('O que foi combinado: ' + e);
+    try { await salvar([...L, { id: rand(8), com: n.com.trim(), movel: n.movel.trim(), oque: n.oque.trim(), foto: n.foto || '', por: sessao.nome, em: nowIso() }]); registrar(sessao, o.id, '🤝', 'Combinado de montagem com ' + n.com.trim() + (n.movel.trim() ? ' (' + n.movel.trim() + ')' : ''), n.oque.trim()); setNovo(null); toast('Combinado registrado.', 'ok'); } catch (x) { toast(x.message, 'erro'); } };
+  const foto = async (f) => { if (f) try { const u = await fotoCompacta(f); setNovo(v => ({ ...v, foto: u })); } catch {} };
+  return html`<div class="card stack comb-card"><div class="row" style=${{ justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}><b>🤝 Combinados de montagem ${L.length ? html`<span class="chip">${L.length}</span>` : ''}</b>
+      <button class="btn btn-primary btn-sm" onClick=${() => setNovo({ com: '', movel: '', oque: '', foto: '' })}>＋ Combinado de montagem</button></div>
+    <small class="dim">Quando o gerente de produção combina uma execução diferente do projeto (com o cliente, arquiteto ou montador), registre aqui. Fica na OS, na folha impressa e no histórico.</small>
+    ${L.map(c => html`<div key=${c.id} class="comb-it">${c.foto ? html`<img src=${c.foto} />` : ''}<div style=${{ flex: 1 }}><b>${c.movel ? c.movel + ' — ' : ''}${c.oque}</b><small class="dim">Combinado com <b>${c.com}</b> · por ${c.por} · ${fmtData(c.em)}</small></div>
+      <button class="btn btn-ghost btn-sm" title="Remover" onClick=${async () => { const m = await pedirMotivo('Remover combinado', c.oque); if (!m) return; await salvar(L.filter(x => x.id !== c.id)); registrar(sessao, o.id, '🗑', 'Combinado removido: ' + c.oque, m); }}>✕</button></div>`)}
+    ${novo && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && setNovo(null)}><div class="card modal-caixa stack" style=${{ width: 'min(480px,100%)' }}>
+      <div class="sec-title">🤝 Novo combinado de montagem</div>
+      <div class="field"><span class="lbl">Combinado com quem?</span><input class="inp" placeholder="Ex: cliente Ana, arquiteta Eduarda, montador João" value=${novo.com} onInput=${e => setNovo({ ...novo, com: e.target.value })} /></div>
+      <div class="field"><span class="lbl">Móvel / local (opcional)</span><input class="inp" placeholder="Ex: Armário da cozinha" value=${novo.movel} onInput=${e => setNovo({ ...novo, movel: e.target.value })} /></div>
+      <div class="field"><span class="lbl">O que muda em relação ao projeto?</span><textarea class="inp" rows="3" placeholder="Ex: puxador cava trocado por puxador perfil preto, a pedido do cliente" value=${novo.oque} onInput=${e => setNovo({ ...novo, oque: e.target.value })}></textarea></div>
+      <label class=${'btn btn-sm' + (novo.foto ? ' btn-verde' : '')} style=${{ alignSelf: 'flex-start' }}>📷 ${novo.foto ? 'Foto anexada ✓' : 'Anexar foto (opcional)'}<input type="file" accept="image/*" style=${{ display: 'none' }} onChange=${e => { foto(e.target.files[0]); e.target.value = ''; }} /></label>
+      <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${() => setNovo(null)}>Cancelar</button><button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${ok}>Registrar combinado</button></div>
+    </div></div>`, document.body)}
+  </div>`;
+}
 function MontagemFicha({ sessao, o, toast, irAba }) {
   const [url, setUrl] = useState(''), [nome, setNome] = useState(''), [qr, setQr] = useState(null);
   const links = o.links3d || [];
@@ -4593,6 +4616,7 @@ function MontagemFicha({ sessao, o, toast, irAba }) {
     <div class="card stack mont-diario"><b>📓 Diário de obra</b><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>
     <div class="card stack"><b>🪵 Peças extras pedidas na montagem</b><small class="dim">O montador pede aqui as peças que faltaram ou precisam ser refeitas.</small><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>
     <${PlanejamentoExec} sessao=${sessao} o=${o} toast=${toast} />
+    <${CombinadosMontagem} sessao=${sessao} o=${o} toast=${toast} />
     <${EletrosPuxadores} sessao=${sessao} o=${o} toast=${toast} />
     <div class="card stack"><b>🎬 Vídeo do projeto finalizado</b><small class="dim">Coloque aqui o vídeo/render do projeto para a equipe ver como deve ficar.</small><${VideosOS} sessao=${sessao} os=${o} toast=${toast} /></div>
     <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
@@ -5544,6 +5568,7 @@ function ImpressaoOS({ os, empresa }) {
             ${mv.map(m => html`<tr key=${m.id}><td><b>${nomePadrao(m.nome)}</b>${[m.portas && 'Portas: ' + m.portas, m.gavetas && 'Gavetas: ' + m.gavetas].filter(Boolean).map(x => html`<small> · ${x}</small>`)}${m.observacoes ? html`<div class="po2-obs-m">${m.observacoes}</div>` : ''}</td>${cols.map(([t, f, c]) => html`<td key=${t} class=${c || ''}>${f(m)}</td>`)}</tr>`)}
           </tbody></table>`}
         </div>`; })}
+      ${(os.combinados || []).length > 0 && html`<div class="po-obs" style=${{ borderColor: '#d97706' }}><b>🤝 Combinados de montagem (execução diferente do projeto)</b>${os.combinados.map(c => html`<div key=${c.id}>• ${c.movel ? c.movel + ': ' : ''}${c.oque} <small>— combinado com ${c.com}, por ${c.por} em ${fmtData(c.em)}</small></div>`)}</div>`}
       ${os.observacoesGerais && html`<div class="po-obs"><b>📝 Observações gerais</b><div>${os.observacoesGerais}</div></div>`}
       <div class="po-ass">${['Responsável técnico', 'Produção', 'Cliente'].map(t => html`<div key=${t}><span></span>${t}</div>`)}</div>
       ${(os.alteracoes || []).length > 0 && html`<div class="po-sec"><span>⟳</span> Alterações</div><table><tbody>${os.alteracoes.map(a => html`<tr key=${a.n}><td style=${{ width: '18%' }}>${fmtData(a.quando)}</td><td><b>Nº ${a.n}</b> — ${a.motivo}</td></tr>`)}</tbody></table>`}
