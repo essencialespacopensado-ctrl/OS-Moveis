@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedido de orçamento</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Inter+Tight:wght@400;600;700&display=swap">
+<style>
+:root{--c1:#1f2937;--ac:#b45309;--bg:#f5f3ef}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:15px/1.45 'Inter Tight',Arial,sans-serif;color:#1c1917}
+.w{max-width:820px;margin:0 auto;padding:16px}
+.top{background:linear-gradient(135deg,#1f2937,#374151);color:#fff;border-radius:16px;padding:18px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top small{opacity:.8;letter-spacing:.1em;text-transform:uppercase;font-size:11px}.top h1{margin:2px 0;font:800 24px 'Outfit',sans-serif}
+.cod{background:#fff;color:var(--c1);font:800 22px monospace;border-radius:10px;padding:4px 12px;align-self:flex-start}
+.card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:14px 16px;margin-top:12px}
+.cat{font:800 12px 'Outfit',sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--ac);margin:12px 0 4px}
+.it{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed #eee}.it b{min-width:90px}
+label{display:block;font-weight:700;font-size:13px;margin:10px 0 4px}
+input,textarea{width:100%;padding:10px;border:1px solid #d6d3d1;border-radius:10px;font:inherit}
+button{background:#16a34a;color:#fff;border:0;border-radius:12px;padding:14px;font:700 16px inherit;width:100%;margin-top:14px;cursor:pointer}
+button:disabled{opacity:.6}.ok{background:#f0fdf4;border:2px solid #86efac;color:#166534;border-radius:14px;padding:16px;margin-top:12px;font-weight:700}
+.err{color:#b91c1c;font-weight:700;margin-top:8px}.dim{color:#78716c;font-size:13px}
+</style>
+</head>
+<body><div class="w" id="w"><div class="card">Carregando…</div></div>
+<script src="/config.js"></script>
+<script type="module">
+const V='10.13.1';
+const appMod=await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
+const fs=await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
+const db=fs.getFirestore(appMod.initializeApp(window.__FIREBASE_CONFIG__));
+const W=document.getElementById('w'); const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cid=new URLSearchParams(location.search).get('c')||'';
+let c; try{ const s=await fs.getDoc(fs.doc(db,'cotacoes',cid)); if(!s.exists()) throw 0; c=s.data(); }catch{ W.innerHTML='<div class="card">Link inválido ou expirado.</div>'; throw 0; }
+const g={}; (c.itens||[]).forEach(i=>(g[i.categoria||'Outros']=g[i.categoria||'Outros']||[]).push(i));
+W.innerHTML=`<div class="top"><div><small>${esc(c.empresaNome)} · Pedido de orçamento</small><h1>${esc(c.titulo||'Materiais')}</h1><div>Para: <b>${esc(c.parceiro)}</b>${c.prazoResposta?' · responder até '+esc(c.prazoResposta.split('-').reverse().join('/')):''}</div></div><div class="cod">${esc(c.osCod)}</div></div>
+<div class="card">${Object.entries(g).map(([k,l])=>`<div class="cat">${esc(k)}</div>`+l.map(i=>`<div class="it"><b>${esc(i.qtd)} ${esc(i.unidade||'')}</b><span>${esc(i.descricao)}</span></div>`).join('')).join('')}${c.obs?`<p class="dim">${esc(c.obs)}</p>`:''}</div>
+<div class="card" id="f"><b>📎 Enviar o orçamento</b>
+<label>PDF do orçamento</label><input type="file" id="pdf" accept="application/pdf,image/*">
+<label>Valor total (R$)</label><input id="valor" inputmode="decimal" placeholder="Ex: 3.450,00">
+<label>Condições de pagamento</label><input id="cond" placeholder="Ex: 30/60/90 ou 5% à vista">
+<label>Prazo de entrega</label><input id="prazo" placeholder="Ex: 10 dias úteis">
+<label>Observações</label><textarea id="obs" rows="2"></textarea>
+<button id="env">Enviar orçamento</button><div class="err" id="e"></div><p class="dim">Arquivo até 700 KB.</p></div>`;
+const b64=f=>new Promise((r,j)=>{const x=new FileReader();x.onload=()=>r(x.result);x.onerror=j;x.readAsDataURL(f);});
+document.getElementById('env').onclick=async()=>{ const E=document.getElementById('e'); E.textContent=''; const f=document.getElementById('pdf').files[0];
+ const cond=document.getElementById('cond').value.trim(); if(!f&&!document.getElementById('valor').value.trim()) return E.textContent='Anexe o PDF ou informe o valor.'; if(!cond) return E.textContent='Informe as condições de pagamento.';
+ if(f&&f.size>700*1024) return E.textContent='Arquivo grande demais (máx. 700 KB). Envie um PDF menor.';
+ const bt=document.getElementById('env'); bt.disabled=true; bt.textContent='Enviando…';
+ try{ const d={empresaId:c.empresaId,osId:c.osId,cotacaoId:cid,parceiro:c.parceiro,condicoes:cond,prazo:document.getElementById('prazo').value.trim(),valor:document.getElementById('valor').value.trim(),obs:document.getElementById('obs').value.trim(),em:new Date().toISOString()};
+  if(f){ d.pdf=await b64(f); d.nomeArq=f.name; }
+  await fs.addDoc(fs.collection(db,'cotacoes',cid,'respostas'),d);
+  document.getElementById('f').outerHTML='<div class="ok">✅ Orçamento enviado! Obrigado, já chegou para a equipe.</div>';
+ }catch(x){ bt.disabled=false; bt.textContent='Enviar orçamento'; E.textContent='Não foi possível enviar: '+(x.message||x); } };
+</script></body></html>

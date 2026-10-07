@@ -1782,3 +1782,10 @@ td.foco-cel{outline:3px solid #f59e0b;outline-offset:-3px;animation:focoPisca 1s
 .din-card summary{cursor:pointer;list-style:none}
 .din-it{display:flex;gap:6px;align-items:center;cursor:pointer}
 .din-it.off{opacity:.45;text-decoration:line-through}
+/* v214 orçamentos */
+.orc-card{border-left:5px solid #16a34a}
+.orc-lista{display:flex;flex-direction:column;gap:6px}
+.orc-p{border:1px solid #e7e5e4;border-radius:10px;padding:8px 10px;background:#fffbeb}
+.orc-p.ok{background:#f0fdf4;border-color:#86efac}
+.orc-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13.5px}
+.orc-sel{display:flex;flex-wrap:wrap;gap:6px}
