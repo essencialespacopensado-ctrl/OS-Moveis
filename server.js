@@ -549,9 +549,29 @@ async function arquivo(req, res) {
   } catch { res.writeHead(404); res.end('Não encontrado'); }
 }
 
+// ---------- Ponte Dinabox: o navegador logado no Dinabox entrega os dados; o app busca ----------
+let ULTIMO_DINABOX = null;
+const CORS_DINA = { 'access-control-allow-origin': 'https://www.dinabox.app', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
+async function rotaDinaboxDrop(req, res) {
+  if (req.method === 'OPTIONS') { res.writeHead(204, CORS_DINA); return res.end(); }
+  if (req.method !== 'POST') { res.writeHead(405, CORS_DINA); return res.end(); }
+  let corpo; try { corpo = JSON.parse(await lerCorpo(req, 20 * 1024 * 1024)); } catch { res.writeHead(400, CORS_DINA); return res.end('json'); }
+  const lotes = Array.isArray(corpo?.lotes) ? corpo.lotes.filter(l => l && typeof l.nome === 'string').slice(0, 2000) : [];
+  if (!lotes.length) { res.writeHead(400, CORS_DINA); return res.end('vazio'); }
+  ULTIMO_DINABOX = { em: new Date().toISOString(), lotes };
+  res.writeHead(200, { ...CORS_DINA, 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, n: lotes.length }));
+}
+async function rotaDinaboxPull(req, res) {
+  const u = await checkUser(req);
+  if (!u.ok) return enviarJSON(res, 401, { erro: u.msg });
+  return enviarJSON(res, 200, ULTIMO_DINABOX || { em: null, lotes: [] });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/api/dinabox-drop') return await rotaDinaboxDrop(req, res);
+    if (url.pathname === '/api/dinabox-pull') return await rotaDinaboxPull(req, res);
     if (url.pathname === '/api/ia' && req.method === 'POST') return await rotaIA(req, res);
     if (url.pathname === '/api/status') return enviarJSON(res, 200, { ok: true, ia: IA_LIGADA, firebase: !!FIREBASE_PROJECT_ID, modelo: API_KEY ? MODEL : GEMINI_MODEL });
     if (req.method === 'GET' || req.method === 'HEAD') return await arquivo(req, res);
