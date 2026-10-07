@@ -1916,3 +1916,5 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .fc-imp{display:flex;flex-wrap:wrap;gap:4px 14px;margin:4px 0 0 30px;font-size:8.5pt}
 @media screen{.so-imp-folha{display:none!important}}
 @media print{.so-imp-folha{display:flex!important}.fc-ctl{display:none!important}}
+.fc-cat{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0 6px;padding:6px 8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px}
+.fc-chip.nf{background:#15803d}
