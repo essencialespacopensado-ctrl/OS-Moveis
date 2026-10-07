@@ -56,5 +56,25 @@ service cloud.firestore {
         allow write: if logado() && minhaEmpresa() == empresaId && empresaAtiva(empresaId);
       }
     }
+
+    // Pedidos de orçamento enviados aos parceiros (link público por código secreto).
+    match /cotacoes/{cid} {
+      allow get: if true;
+      allow list: if logado() && resource.data.empresaId == minhaEmpresa();
+      allow create, update: if logado() && request.resource.data.empresaId == minhaEmpresa();
+      allow delete: if logado() && resource.data.empresaId == minhaEmpresa();
+      // O parceiro (sem login) só pode ANEXAR a resposta dele.
+      match /respostas/{rid} {
+        allow create: if request.resource.data.empresaId == get(/databases/$(database)/documents/cotacoes/$(cid)).data.empresaId
+          && request.resource.data.osId == get(/databases/$(database)/documents/cotacoes/$(cid)).data.osId
+          && request.resource.data.keys().hasOnly(['empresaId', 'osId', 'cotacaoId', 'parceiro', 'pdf', 'nomeArq', 'condicoes', 'prazo', 'valor', 'obs', 'em'])
+          && request.resource.data.cotacaoId == cid
+          && (!('pdf' in request.resource.data) || (request.resource.data.pdf is string && request.resource.data.pdf.size() < 1000000));
+        allow read: if logado() && resource.data.empresaId == minhaEmpresa();
+      }
+    }
+    match /{caminho=**}/respostas/{rid} {
+      allow read: if logado() && resource.data.empresaId == minhaEmpresa();
+    }
   }
 }
