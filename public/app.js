@@ -4603,7 +4603,10 @@ function CombinadosMontagem({ sessao, o, toast }) {
     </div></div>`, document.body)}
   </div>`;
 }
+const MONT_SUBS = [['obra', '📍', 'Obra e projeto', 'Endereço, 3D e vídeo'], ['itens', '🔌', 'Eletros e puxadores', 'O que vai na obra'], ['plano', '📋', 'Planejamento', 'Plano de execução e combinados'], ['diario', '📓', 'Diário e peças', 'Pendências, fotos e peças extras']];
 function MontagemFicha({ sessao, o, toast, irAba }) {
+  const [sub, setSub] = useState(() => { const m = window.__montSubIni; window.__montSubIni = null; return m || 'obra'; });
+  useEffect(() => { window.__montSub = setSub; return () => { window.__montSub = null; }; }, []);
   const [url, setUrl] = useState(''), [nome, setNome] = useState(''), [qr, setQr] = useState(null);
   const links = o.links3d || [];
   const salvar = (l) => F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { links3d: l, atualizadoEm: nowIso(), atualizadoPor: sessao.nome }).catch(e => toast(e.message, 'erro'));
@@ -4611,6 +4614,10 @@ function MontagemFicha({ sessao, o, toast, irAba }) {
     salvar([...links, { url: u, nome: nome.trim() || 'Projeto 3D', por: sessao.nome, em: nowIso() }]); setUrl(''); setNome(''); toast('Link salvo.', 'ok'); };
   const end = o.cliente?.enderecoMontagem || o.cliente?.endereco || '';
   return html`<div class="stack">
+    <div class="mont-nav">${MONT_SUBS.map(([k, ic, t, d]) => html`<button key=${k} class=${'mont-sub' + (sub === k ? ' on' : '')} onClick=${() => setSub(k)}><span class="mont-sub-ic">${ic}</span><b>${t}</b><small>${d}${k === 'itens' && (o.eletros || []).length ? ' · ' + o.eletros.length + ' eletros' : ''}${k === 'plano' && (o.combinados || []).length ? ' · ' + o.combinados.length + ' combinados' : ''}</small></button>`)}</div>
+    ${sub === 'obra' && html`<div class="stack">
+    <div class="card stack"><b>📍 Endereço de montagem</b>${end ? html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><span style=${{ flex: 1 }}>${end}</span><a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(end)}>🗺 Abrir no mapa</a></div>` : html`<div class="dim">Não preenchido.</div>`}
+      ${o.cliente?.telefone && html`<a class="btn btn-sm" style=${{ alignSelf: 'flex-start' }} href=${'https://wa.me/55' + String(o.cliente.telefone).replace(/\D/g, '').replace(/^55/, '')} target="_blank" rel="noopener">💬 WhatsApp do cliente</a>`}</div>
     <div class="card stack mont-card">
       <b>🧊 Projeto 3D para a montagem</b>
       <small class="dim">No Dinabox, abra o lote → "Obter link QRCODE" → copie o link e cole aqui. O montador abre direto na obra.</small>
@@ -4624,17 +4631,19 @@ function MontagemFicha({ sessao, o, toast, irAba }) {
         <input class="inp" style=${{ flex: 1, minWidth: '120px' }} placeholder="Nome (ex: Banheiro filha)" value=${nome} onInput=${e => setNome(e.target.value)} />
         <button class="btn btn-verde" onClick=${add}>＋ Salvar link</button></div>
     </div>
-    <div class="card stack"><b>📍 Endereço de montagem</b>${end ? html`<div class="row" style=${{ gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}><span style=${{ flex: 1 }}>${end}</span><a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(end)}>🗺 Abrir no mapa</a></div>` : html`<div class="dim">Não preenchido.</div>`}
-      ${o.cliente?.telefone && html`<a class="btn btn-sm" style=${{ alignSelf: 'flex-start' }} href=${'https://wa.me/55' + String(o.cliente.telefone).replace(/\D/g, '').replace(/^55/, '')} target="_blank" rel="noopener">💬 WhatsApp do cliente</a>`}</div>
-    <div class="card stack mont-diario"><b>📓 Diário de obra</b><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>
-    <div class="card stack"><b>🪵 Peças extras pedidas na montagem</b><small class="dim">O montador pede aqui as peças que faltaram ou precisam ser refeitas.</small><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>
+    <div class="card stack"><b>🎬 Vídeo do projeto finalizado</b><small class="dim">Coloque aqui o vídeo/render do projeto para a equipe ver como deve ficar.</small><${VideosOS} sessao=${sessao} os=${o} toast=${toast} /></div>
+    </div>`}
+    ${sub === 'itens' && html`<div class="stack">
+    <${EletrosPuxadores} sessao=${sessao} o=${o} toast=${toast} />
+    </div>`}
+    ${sub === 'plano' && html`<div class="stack">
     <${PlanejamentoExec} sessao=${sessao} o=${o} toast=${toast} />
     <${CombinadosMontagem} sessao=${sessao} o=${o} toast=${toast} />
-    <${EletrosPuxadores} sessao=${sessao} o=${o} toast=${toast} />
-    <div class="card stack"><b>🎬 Vídeo do projeto finalizado</b><small class="dim">Coloque aqui o vídeo/render do projeto para a equipe ver como deve ficar.</small><${VideosOS} sessao=${sessao} os=${o} toast=${toast} /></div>
-    <div class="row" style=${{ gap: '8px', flexWrap: 'wrap' }}>
-      <button class="btn" onClick=${() => irAba('entrega')}>🚚 Ordem de entrega (check-list)</button>
-      <button class="btn" onClick=${() => irAba('folha')}>📄 Folha da OS</button></div>
+    </div>`}
+    ${sub === 'diario' && html`<div class="stack">
+    <div class="card stack mont-diario"><b>📓 Diário de obra</b><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>
+    <div class="card stack"><b>🪵 Peças extras pedidas na montagem</b><small class="dim">O montador pede aqui as peças que faltaram ou precisam ser refeitas.</small><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>
+    </div>`}
     ${qr && ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${() => setQr(null)}><div class="card modal-caixa stack" style=${{ width: 'min(360px,100%)', textAlign: 'center' }}>
       <b>${qr.nome}</b><img style=${{ width: '100%', imageRendering: 'pixelated' }} src=${'https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(qr.url)} alt="QR Code" />
       <small class="dim">Aponte a câmera do celular para abrir o 3D.</small><button class="btn" onClick=${() => setQr(null)}>Fechar</button></div></div>`, document.body)}
@@ -6913,18 +6922,19 @@ function acharOSFala(lista, q) {
 }
 /* Busca universal de telas e funções (instantânea) */
 const DENTRO_OS = [
-  [/eletro|cooktop|forno|geladeira|coifa|depurador|micro.?ondas/, 'montagem', 'Eletros', 'Eletros e'],
-  [/combinad/, 'montagem', 'Combinados de montagem', 'Combinados de montagem'],
-  [/link.*3d|3d|dinabox|qr ?code/, 'montagem', 'Links 3D do Dinabox', 'Projeto 3D'],
-  [/puxador/, 'montagem', 'Puxadores', 'Eletros e'],
-  [/diario|di[aá]rio de obra|planejamento/, 'montagem', 'Diário de obra', 'Diário'],
+  [/eletro|cooktop|forno|geladeira|coifa|depurador|micro.?ondas/, 'montagem', 'Eletros', 'Eletros e', 'itens'],
+  [/combinad/, 'montagem', 'Combinados de montagem', 'Combinados de montagem', 'plano'],
+  [/planejamento|plano de execu/, 'montagem', 'Planejamento', 'Planejamento', 'plano'],
+  [/link.*3d|3d|dinabox|qr ?code|endere[cç]o de montagem|v[ií]deo/, 'montagem', 'Obra e projeto', 'Projeto 3D', 'obra'],
+  [/puxador/, 'montagem', 'Puxadores', 'Eletros e', 'itens'],
+  [/diario|di[aá]rio de obra|pe[cç]as? extras?/, 'montagem', 'Diário de obra', 'Diário', 'diario'],
   [/lista de pe[cç]as|pe[cç]as do dinabox/, 'pecas', 'Lista de peças', ''],
   [/or[cç]amento|parceiro|folha de compra|lista de compra|estoque|marceneiro|ferragens? (pro|para o) marceneiro/, 'compras', 'Compras da OS', ''],
   [/ordem de entrega|entregar m[oó]veis|registrar entrega/, 'entrega', 'Ordem de entrega', ''],
   [/folha de impress|imprimir (a )?os/, 'folha', 'Folha de impressão', ''],
   [/nota fiscal|lan[cç]ar nota/, 'fin', 'Notas & financeiro', ''],
 ];
-function acharDentroOS(q) { const t = norm(q); for (const [re, modo, nome, sel] of DENTRO_OS) if (re.test(t)) return { modo, nome, sel }; return null; }
+function acharDentroOS(q) { const t = norm(q); for (const [re, modo, nome, sel, sub] of DENTRO_OS) if (re.test(t)) return { modo, nome, sel, sub }; return null; }
 function acharTelas(q) {
   const t = norm(q).replace(/\b(abre|abrir|abra|vai|vamos|ir|pra|para|pro|a|o|as|os|de|da|do|tela|pagina|mostra|ver|entra|entrar)\b/g, ' ').trim(); if (t.length < 3) return [];
   const toks = t.split(/\s+/).filter(w => w.length >= 3); if (!toks.length) return [];
@@ -7174,7 +7184,7 @@ function Mascote() {
     let x = r.right + 8, y = r.top + r.height / 2 - 60; if (x > window.innerWidth - 90) x = Math.max(8, r.left - 90); y = Math.max(8, Math.min(window.innerHeight - 150, y));
     setFala(''); await irPara(x, y); destacar(el); setFala(texto); };
   const onde = async (txt) => { const d = acharDentroOS(txt);
-    if (d) { if (window.__fichaModo) { window.__fichaModo(d.modo); await new Promise(r => setTimeout(r, 500)); const el = d.sel ? [...document.querySelectorAll('.ficha b, .ficha .sec-title')].find(x => x.textContent.includes(d.sel)) : document.querySelector('.ficha .seg-mini .on'); return mostrar(el ? (el.closest('.card') || el) : null, '✅ Abri ' + d.nome + ' nesta OS. ' + (d.modo === 'montagem' ? 'É aqui, na aba 🔧 Montagem.' : '')); }
+    if (d) { window.__montSubIni = d.sub || null; if (window.__fichaModo) { window.__fichaModo(d.modo); await new Promise(r => setTimeout(r, 300)); if (d.sub && window.__montSub) window.__montSub(d.sub); await new Promise(r => setTimeout(r, 300)); const el = d.sel ? [...document.querySelectorAll('.ficha b, .ficha .sec-title')].find(x => x.textContent.includes(d.sel)) : document.querySelector('.ficha .seg-mini .on'); return mostrar(el ? (el.closest('.card') || el) : null, '✅ Abri ' + d.nome + ' nesta OS' + (d.modo === 'montagem' ? ' (🔧 Montagem › ' + ((MONT_SUBS.find(x => x[0] === d.sub) || [])[2] || '') + ').' : '.')); }
       if (window.__ultimaOS && window.__abrirOS) { window.__modoFicha = d.modo; window.__abrirOS(window.__ultimaOS); await new Promise(r => setTimeout(r, 900)); const el = d.sel ? [...document.querySelectorAll('.ficha b, .ficha .sec-title')].find(x => x.textContent.includes(d.sel)) : null; return mostrar(el ? (el.closest('.card') || el) : null, '✅ ' + d.nome + ' fica dentro de cada OS. Abri a última OS que você viu, já na aba certa.'); }
       window.__irPara && window.__irPara('os'); return setFala(d.nome + ' fica dentro de cada OS. Abra a OS e toque na aba ' + ({ montagem: '🔧 Montagem', compras: '🛒 Compras', entrega: '🚚 Ordem de entrega', folha: '📄 Folha de impressão', fin: '🧾 Notas & financeiro', pecas: '🧩 Peças' }[d.modo] || '') + '.'); }
     const t = acharTelas(txt); if (!t.length) return setFala('Não achei "' + txt + '". Tente outra palavra 🙂');

@@ -1944,3 +1944,9 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .nova-versao{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483003;background:#0f1e33;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.3);font-weight:600;display:flex;gap:10px;align-items:center}.nova-versao button{background:#22c55e;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
 .masc.com-foto.bal-baixo .masc-bal{bottom:auto!important;top:158px}.masc-bal{min-height:auto;height:auto;max-height:60vh}
 .masc-bal.masc-bal-fix{z-index:2147483001!important;overflow:auto;height:auto!important;min-height:0}.masc-bal.masc-bal-fix::after{display:none}
+/* v241 montagem por categorias */
+.mont-nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.mont-sub{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer;font:inherit;color:#0f172a}
+.mont-sub small{color:#64748b;font-size:11.5px;line-height:1.25}.mont-sub-ic{font-size:20px}
+.mont-sub.on{background:#0f1e33;color:#fff;border-color:#0f1e33}.mont-sub.on small{color:#cbd5e1}
+@media(max-width:700px){.mont-nav{grid-template-columns:1fr 1fr}}
