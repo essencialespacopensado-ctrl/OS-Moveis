@@ -4717,6 +4717,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   }, [osId]);
   const [enviar, setEnviar] = useState(false);
   useEffect(() => { window.__ultimaOS = osId; }, [osId]);
+  useEffect(() => { window.__fichaModo = (m) => setModoV(m); return () => { window.__fichaModo = null; }; }, []);
   const [ordP, setOrdP] = useState(false);
   const histV = useRef([]), pularHist = useRef(false), ultV = useRef(null);
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || (['andamento', 'montagem', 'pecas', 'compras', 'fin', 'amostras', 'folha', 'entrega', 'cal'].includes(m) ? m : 'andamento'); });
@@ -6629,6 +6630,7 @@ async function montarContexto(sessao, osAbertaId) {
 /* Atalho instantâneo (sem IA): telas e OS abertas na hora */
 function acaoRapida(q) {
   if (comandoTela(q)) return true;
+  { const tq = norm(q); const o0 = acharOSFala(window.__listaOS || [], q); const d = acharDentroOS(q); if (d && !o0 && !/\b(\d{2}[.,]?\d{2,3})\b/.test(tq) && window.__mascote?.onde) { window.__mascote.onde(q); return true; } }
   const t = norm(q), n = t.split(/\s+/).length;
   const abrir = /\b(abre|abrir|abra|mostra|mostrar|ver|entra|entrar|vai|vamos|imprime|imprimir)\b/.test(t);
   if (!abrir && (n > 4 || /\b(qual|quando|quanto|quem|como|por que|porque|muda|mudar|coloca|adiciona|marca|conclui)\b/.test(t))) return false;
@@ -6910,6 +6912,19 @@ function acharOSFala(lista, q) {
   return bs >= 2 ? best : null;
 }
 /* Busca universal de telas e funções (instantânea) */
+const DENTRO_OS = [
+  [/eletro|cooktop|forno|geladeira|coifa|depurador|micro.?ondas/, 'montagem', 'Eletros', 'Eletros e'],
+  [/combinad/, 'montagem', 'Combinados de montagem', 'Combinados de montagem'],
+  [/link.*3d|3d|dinabox|qr ?code/, 'montagem', 'Links 3D do Dinabox', 'Projeto 3D'],
+  [/puxador/, 'montagem', 'Puxadores', 'Eletros e'],
+  [/diario|di[aá]rio de obra|planejamento/, 'montagem', 'Diário de obra', 'Diário'],
+  [/lista de pe[cç]as|pe[cç]as do dinabox/, 'pecas', 'Lista de peças', ''],
+  [/or[cç]amento|parceiro|folha de compra|lista de compra|estoque|marceneiro|ferragens? (pro|para o) marceneiro/, 'compras', 'Compras da OS', ''],
+  [/ordem de entrega|entregar m[oó]veis|registrar entrega/, 'entrega', 'Ordem de entrega', ''],
+  [/folha de impress|imprimir (a )?os/, 'folha', 'Folha de impressão', ''],
+  [/nota fiscal|lan[cç]ar nota/, 'fin', 'Notas & financeiro', ''],
+];
+function acharDentroOS(q) { const t = norm(q); for (const [re, modo, nome, sel] of DENTRO_OS) if (re.test(t)) return { modo, nome, sel }; return null; }
 function acharTelas(q) {
   const t = norm(q).replace(/\b(abre|abrir|abra|vai|vamos|ir|pra|para|pro|a|o|as|os|de|da|do|tela|pagina|mostra|ver|entra|entrar)\b/g, ' ').trim(); if (t.length < 3) return [];
   const toks = t.split(/\s+/).filter(w => w.length >= 3); if (!toks.length) return [];
@@ -7158,7 +7173,11 @@ function Mascote() {
   const mostrar = async (el, texto) => { if (!el) { setFala(texto); return; } el.scrollIntoView({ block: 'center', behavior: 'smooth' }); await new Promise(r => setTimeout(r, 350)); const r = el.getBoundingClientRect();
     let x = r.right + 8, y = r.top + r.height / 2 - 60; if (x > window.innerWidth - 90) x = Math.max(8, r.left - 90); y = Math.max(8, Math.min(window.innerHeight - 150, y));
     setFala(''); await irPara(x, y); destacar(el); setFala(texto); };
-  const onde = async (txt) => { const t = acharTelas(txt); if (!t.length) return setFala('Não achei "' + txt + '". Tente outra palavra 🙂');
+  const onde = async (txt) => { const d = acharDentroOS(txt);
+    if (d) { if (window.__fichaModo) { window.__fichaModo(d.modo); await new Promise(r => setTimeout(r, 500)); const el = d.sel ? [...document.querySelectorAll('.ficha b, .ficha .sec-title')].find(x => x.textContent.includes(d.sel)) : document.querySelector('.ficha .seg-mini .on'); return mostrar(el ? (el.closest('.card') || el) : null, '✅ Abri ' + d.nome + ' nesta OS. ' + (d.modo === 'montagem' ? 'É aqui, na aba 🔧 Montagem.' : '')); }
+      if (window.__ultimaOS && window.__abrirOS) { window.__modoFicha = d.modo; window.__abrirOS(window.__ultimaOS); await new Promise(r => setTimeout(r, 900)); const el = d.sel ? [...document.querySelectorAll('.ficha b, .ficha .sec-title')].find(x => x.textContent.includes(d.sel)) : null; return mostrar(el ? (el.closest('.card') || el) : null, '✅ ' + d.nome + ' fica dentro de cada OS. Abri a última OS que você viu, já na aba certa.'); }
+      window.__irPara && window.__irPara('os'); return setFala(d.nome + ' fica dentro de cada OS. Abra a OS e toque na aba ' + ({ montagem: '🔧 Montagem', compras: '🛒 Compras', entrega: '🚚 Ordem de entrega', folha: '📄 Folha de impressão', fin: '🧾 Notas & financeiro', pecas: '🧩 Peças' }[d.modo] || '') + '.'); }
+    const t = acharTelas(txt); if (!t.length) return setFala('Não achei "' + txt + '". Tente outra palavra 🙂');
     const aba = t[0].aba; const sec = secaoDe(aba)[0]; window.__irPara && window.__irPara(aba); window.__abrirSecao && window.__abrirSecao(sec); await new Promise(r => setTimeout(r, 400));
     const el = document.querySelector('.side [data-aba="' + aba + '"]') || document.querySelector('.side [data-sec="' + sec + '"]');
     await mostrar(el, '✅ Abri ' + t[0].t + ' para você. Ela fica aqui no menu.'); };
