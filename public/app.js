@@ -4603,7 +4603,13 @@ function CombinadosMontagem({ sessao, o, toast }) {
     </div></div>`, document.body)}
   </div>`;
 }
-const MONT_SUBS = [['obra', '📍', 'Obra e projeto', 'Endereço, 3D e vídeo'], ['itens', '🔌', 'Eletros e puxadores', 'O que vai na obra'], ['plano', '📋', 'Planejamento', 'Plano de execução e combinados'], ['diario', '📓', 'Diário e peças', 'Pendências, fotos e peças extras']];
+const MONT_SUBS = [['obra', '📍', 'Obra e projeto', 'Endereço, 3D e vídeo'], ['itens', '🔌', 'Eletros e puxadores', 'O que vai na obra'], ['plano', '📋', 'Planejamento', 'Plano de execução e combinados'], ['diario', '📓', 'Diário e peças extras', 'Pendências, fotos e peças pedidas'], ['pecas', '🧩', 'Lista de peças', 'Peças do Dinabox e conferência']];
+function AtasDaOS({ sessao, o, fechar }) {
+  const [atas, setAtas] = useState(null);
+  useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(sn => setAtas(sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(baseCli(o.cliente?.nome))))).catch(() => setAtas([])); }, [o.id]);
+  return html`<div class="card stack"><b>🗒 Atas de reunião deste cliente</b>
+    ${atas === null ? html`<small class="dim">Carregando…</small>` : atas.length ? html`<div class="pcli-lista">${atas.map(p => html`<button key=${p.id} class="pcli-os" onClick=${() => { fechar && fechar(); window.__irPara && window.__irPara('projetos'); }}><b>🎙</b><span>${p.titulo || 'Reunião'}</span><small class="dim">${fmtData(p.criadoEm || p.atualizadoEm || '')}</small></button>`)}</div>` : html`<small class="dim">Nenhuma ata para ${o.cliente?.nome || 'este cliente'}. Crie em 🤝 Vendas e projeto › Reuniões & Projetos.</small>`}</div>`;
+}
 function MontagemFicha({ sessao, o, toast, irAba }) {
   const [sub, setSub] = useState(() => { const m = window.__montSubIni; window.__montSubIni = null; return m || 'obra'; });
   useEffect(() => { window.__montSub = setSub; return () => { window.__montSub = null; }; }, []);
@@ -4640,6 +4646,7 @@ function MontagemFicha({ sessao, o, toast, irAba }) {
     <${PlanejamentoExec} sessao=${sessao} o=${o} toast=${toast} />
     <${CombinadosMontagem} sessao=${sessao} o=${o} toast=${toast} />
     </div>`}
+    ${sub === 'pecas' && html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />`}
     ${sub === 'diario' && html`<div class="stack">
     <div class="card stack mont-diario"><b>📓 Diário de obra</b><${DiarioOS} sessao=${sessao} os=${o} toast=${toast} /></div>
     <div class="card stack"><b>🪵 Peças extras pedidas na montagem</b><small class="dim">O montador pede aqui as peças que faltaram ou precisam ser refeitas.</small><${PedidosOS} sessao=${sessao} os=${o} toast=${toast} catalogo=${window.__CATALOGO || []} /></div>
@@ -4729,7 +4736,9 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   useEffect(() => { window.__fichaModo = (m) => setModoV(m); return () => { window.__fichaModo = null; }; }, []);
   const [ordP, setOrdP] = useState(false);
   const histV = useRef([]), pularHist = useRef(false), ultV = useRef(null);
+  const [impSub, setImpSub] = useState('os'), [compSub, setCompSub] = useState('lista');
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || (['andamento', 'montagem', 'pecas', 'compras', 'fin', 'amostras', 'folha', 'entrega', 'cal'].includes(m) ? m : 'andamento'); });
+  useEffect(() => { const m = modoV; if (m === 'folha') { setImpSub('os'); setModoV('imp'); } else if (m === 'entrega') { setImpSub('entrega'); setModoV('imp'); } else if (m === 'pecas') { window.__montSubIni = 'pecas'; if (window.__montSub) window.__montSub('pecas'); setModoV('montagem'); } else if (m === 'fin') { setCompSub('fin'); setModoV('compras'); } }, [modoV]);
   useEffect(() => { if (ultV.current && ultV.current !== modoV && !pularHist.current) histV.current.push(ultV.current); pularHist.current = false; ultV.current = modoV; }, [modoV]);
   const [tarOS, setTarOS] = useState([]);
   useEffect(() => { const { onSnapshot, query, where } = F().fsMod; return onSnapshot(query(col('empresas', sessao.empresaId, 'tarefas'), where('osId', '==', osId)), s => setTarOS(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'concluida').sort((a, b) => a.inicio.localeCompare(b.inicio))), () => {}); }, [osId]);
@@ -4784,17 +4793,19 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       </div>
       ${ordP && html`<${OrdemParceiro} sessao=${sessao} o=${o} toast=${toast} fechar=${() => setOrdP(false)} />`}
       ${(o.liberacoes || []).length > 0 && falta.length > 0 && (() => { const L = o.liberacoes[o.liberacoes.length - 1]; return html`<div class="lib-aviso" title=${'Pendências na liberação: ' + (L.falta || []).join('; ')}>🔓 <b>Liberado com pendência</b> · ${L.oque} — <i>${L.motivo}</i> <small>(${L.por}, ${fmtData(L.em)})</small></div>`; })()}
-      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento'], ['montagem', '🔧 Montagem'], ['pecas', '🧩 Peças'], ['compras', '🛒 Compras'], ['fin', '🧾 Notas & financeiro'], ['amostras', '📦 Amostras'], ['folha', '📄 Folha de impressão'], ['entrega', '🚚 Ordem de entrega'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
+      <div class="seg-mini" style=${{ alignSelf: 'flex-start' }}>${[['andamento', '🏭 Andamento e esteiras'], ['montagem', '🔧 Montagem e peças'], ['compras', '🛒 Compras e notas'], ['amostras', '🗒 Reunião e amostras'], ['imp', '🖨 Impressões padrão'], ['cal', '📆 Calendário']].filter(([k]) => k !== 'fin' || pode(sessao, 'financeiro') || pode(sessao, 'compras')).map(([k, t]) => html`<button key=${k} class=${modoV === k ? 'on' : ''} onClick=${() => setModoV(k)}>${t}</button>`)}</div>
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'pecas' && html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />`}
       ${modoV === 'montagem' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
       ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
-      ${modoV === 'fin' && html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
-      ${modoV === 'amostras' && html`<div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div>`}
+
+      ${modoV === 'amostras' && html`<div class="stack"><${AtasDaOS} sessao=${sessao} o=${o} fechar=${fechar} /><div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div></div>`}
       ${modoV === 'diario' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
-      ${modoV === 'compras' && html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}
-      <div class=${'ficha-papel' + (modoV === 'folha' || modoV === 'entrega' ? '' : ' so-imp')}>${modoV === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} sessao=${sessao} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
+      ${modoV === 'compras' && html`<div class="stack"><div class="seg-mini" style=${{ alignSelf: 'flex-start' }}><button class=${compSub === 'lista' ? 'on' : ''} onClick=${() => setCompSub('lista')}>🛒 Lista de compras</button>${(pode(sessao, 'financeiro') || pode(sessao, 'compras')) && html`<button class=${compSub === 'fin' ? 'on' : ''} onClick=${() => setCompSub('fin')}>🧾 Notas & financeiro</button>`}</div>
+        ${compSub === 'fin' ? html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>` : html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}</div>`}
+      ${modoV === 'imp' && html`<div class="imp-escolha so-tela">${[['os', '📄 OS preenchida'], ['entrega', '🚚 Ordem de entrega'], ['pecas', '🧩 Lista de peças'], ['compras', '🛒 Lista de compras']].map(([k, t]) => html`<button key=${k} class=${'imp-op' + (impSub === k ? ' on' : '')} onClick=${() => setImpSub(k)}>${t}</button>`)}<button class="btn btn-primary" onClick=${imprimir}>🖨 Imprimir esta folha</button></div>`}
+      <div class=${'ficha-papel' + (modoV === 'imp' ? '' : ' so-imp')}>${modoV === 'imp' && impSub === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} sessao=${sessao} />` : modoV === 'imp' && impSub === 'pecas' ? html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />` : modoV === 'imp' && impSub === 'compras' ? html`<${ImpressaoCompras} os=${o} doc=${{ itens: compras }} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
       ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
@@ -6928,11 +6939,11 @@ const DENTRO_OS = [
   [/link.*3d|3d|dinabox|qr ?code|endere[cç]o de montagem|v[ií]deo/, 'montagem', 'Obra e projeto', 'Projeto 3D', 'obra'],
   [/puxador/, 'montagem', 'Puxadores', 'Eletros e', 'itens'],
   [/diario|di[aá]rio de obra|pe[cç]as? extras?/, 'montagem', 'Diário de obra', 'Diário', 'diario'],
-  [/lista de pe[cç]as|pe[cç]as do dinabox/, 'pecas', 'Lista de peças', ''],
+  [/lista de pe[cç]as|pe[cç]as do dinabox/, 'montagem', 'Lista de peças', '', 'pecas'],
   [/or[cç]amento|parceiro|folha de compra|lista de compra|estoque|marceneiro|ferragens? (pro|para o) marceneiro/, 'compras', 'Compras da OS', ''],
-  [/ordem de entrega|entregar m[oó]veis|registrar entrega/, 'entrega', 'Ordem de entrega', ''],
+  [/ordem de entrega|entregar m[oó]veis|registrar entrega/, 'entrega', 'Ordem de entrega (Impressões padrão)', ''],
   [/folha de impress|imprimir (a )?os/, 'folha', 'Folha de impressão', ''],
-  [/nota fiscal|lan[cç]ar nota/, 'fin', 'Notas & financeiro', ''],
+  [/nota fiscal|lan[cç]ar nota|financeiro da os/, 'fin', 'Notas & financeiro (em Compras)', ''],
 ];
 function acharDentroOS(q) { const t = norm(q); for (const [re, modo, nome, sel, sub] of DENTRO_OS) if (re.test(t)) return { modo, nome, sel, sub }; return null; }
 function acharTelas(q) {
