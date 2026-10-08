@@ -2872,6 +2872,7 @@ function OrcamentosOS({ sessao, os, toast, itens, parceiros, gravar }) {
     ${novo && html`<${PedirOrcamento} sessao=${sessao} os=${os} itens=${itens} parceiros=${parceiros} toast=${toast} fechar=${() => setNovo(false)} />`}
   </div>`;
 }
+function catsParceiro(cats) { const base = [...cats]; TIPOS_PARC.filter(t => t[0] !== 'outro').forEach(t => { const w = norm(t[2]).split(/[^a-z]+/)[0]; if (!base.some(c => norm(c).startsWith(w.slice(0, 5)))) base.push(t[2]); }); return [...new Set(base)]; }
 function parcsDaCat(cat, lista) { const L = lista || window.__parcLista || []; const n = norm(cat || ''); return L.filter(p => (p.categorias || []).some(c => norm(c) === n || (n && (norm(c).includes(n) || n.includes(norm(c)))))); }
 function prazoParaData(t) { const m = String(t || '').match(/(\d+)\s*(dia|d\b|semana)/i); if (!m) { const d = String(t || '').match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/); if (d) { const y = d[3] ? (d[3].length === 2 ? '20' + d[3] : d[3]) : String(new Date().getFullYear()); return y + '-' + d[2].padStart(2, '0') + '-' + d[1].padStart(2, '0'); } return ''; }
   let n = +m[1] * (/semana/i.test(m[2]) ? 7 : 1); const uteis = /út|ut/i.test(t); const dt = new Date(); while (n > 0) { dt.setDate(dt.getDate() + 1); if (!uteis || (dt.getDay() !== 0 && dt.getDay() !== 6)) n--; } return dt.toISOString().slice(0, 10); }
@@ -5811,7 +5812,7 @@ function TelaComprasGeral({ sessao, toast }) {
                 </div>`; })}
             </div></details>`; })}
       </div>`; })()}
-    ${aba === 'cadastro' && (() => { const catsTodas = [...new Set([...cats, ...TIPOS_PARC.filter(t => t[0] !== 'outro').map(t => t[2])])];
+    ${aba === 'cadastro' && (() => { const catsTodas = catsParceiro(cats);
       const separarPelasNotas = async () => { const L = parceiros.map(p => ({ ...p, categorias: [...(p.categorias || [])] })); let novos = 0, add = 0;
         const acha = (f) => { const n = norm(f || ''); if (!n) return null; return L.find(p => norm(p.nome) === n || norm(p.razao || '') === n || (norm(p.nome).length > 3 && (n.startsWith(norm(p.nome)) || norm(p.nome).startsWith(n.split(' ')[0] + ' ')))) || null; };
         notas.forEach(nf => { if (!nf.fornecedor) return; let p = acha(nf.fornecedor); if (!p) { p = { nome: nf.fornecedor, razao: '', cnpjRaiz: '', categorias: [], unidades: [], contato: '' }; L.push(p); novos++; }
@@ -5820,7 +5821,7 @@ function TelaComprasGeral({ sessao, toast }) {
       const tirar = (nome, c) => salvarParc(parceiros.map(p => p.nome === nome ? { ...p, categorias: (p.categorias || []).filter(x => x !== c) } : p));
       const por = (nome, c) => salvarParc(parceiros.map(p => p.nome === nome ? { ...p, categorias: [...new Set([...(p.categorias || []), c])] } : p));
       return html`<div class="stack">
-      <div class="card page-card stack"><div class="row" style=${{ justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}><b>🗂 Parceiros por categoria</b><button class="btn btn-sm btn-primary" onClick=${separarPelasNotas}>🧾 Separar pelas ${notas.length} notas lançadas</button></div>
+      <div class="card page-card stack"><div class="row" style=${{ justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}><b>🗂 Parceiros por categoria</b><span class="row" style=${{ gap: '5px' }}><input class="inp inp-sm" style=${{ width: '170px' }} placeholder="Nova categoria" value=${novaCat} onInput=${e => setNovaCat(e.target.value)} /><button class="btn btn-sm" onClick=${async () => { const n = novaCat.trim(); if (!n || cats.includes(n)) return; await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { categoriasCompra: [...cats, n] }); setNovaCat(''); toast('Categoria ' + n + ' criada.', 'ok'); }}>＋ Categoria</button><button class="btn btn-sm btn-primary" onClick=${separarPelasNotas}>🧾 Separar pelas ${notas.length} notas lançadas</button></span></div>
         <small class="dim">Cada parceiro pode estar em várias categorias. As compras e as pendências da OS mostram só os parceiros da categoria do item.</small>
         <div class="pcat-grade">${catsTodas.map(c => { const ps = parceiros.filter(p => (p.categorias || []).includes(c)); return html`<div key=${c} class="pcat"><b>${ICO_CAT[c] || '📦'} ${c} <small class="dim">${ps.length}</small></b>
           <div class="tm-chips">${ps.map(p => html`<span key=${p.nome} class="fc-chip">${p.nome}<button title="Tirar desta categoria" onClick=${() => tirar(p.nome, c)}>✕</button></span>`)}</div>
@@ -5855,7 +5856,8 @@ function TelaComprasGeral({ sessao, toast }) {
         <div class="field"><span class="lbl">CNPJ (raiz da rede)</span><input class="inp" value=${editP.p.cnpjRaiz || ''} onInput=${e => setEditP({ ...editP, p: { ...editP.p, cnpjRaiz: raizCnpj(e.target.value) } })} /></div>
       </div>
       <span class="lbl">Categorias deste parceiro (para direcionar compras e orçamentos)</span>
-      <div class="tm-chips">${[...new Set([...cats, ...TIPOS_PARC.filter(t => t[0] !== 'outro').map(t => t[2])])].map(c => { const on = (editP.p.categorias || []).includes(c); return html`<button key=${c} class=${'pill' + (on ? ' on' : '')} onClick=${() => setEditP({ ...editP, p: { ...editP.p, categorias: on ? editP.p.categorias.filter(x => x !== c) : [...(editP.p.categorias || []), c] } })}>${ICO_CAT[c] || '📦'} ${c}</button>`; })}</div>
+      <div class="tm-chips">${catsParceiro(cats).map(c => { const on = (editP.p.categorias || []).includes(c); return html`<button key=${c} class=${'pill' + (on ? ' on' : '')} onClick=${() => setEditP({ ...editP, p: { ...editP.p, categorias: on ? editP.p.categorias.filter(x => x !== c) : [...(editP.p.categorias || []), c] } })}>${ICO_CAT[c] || '📦'} ${c}</button>`; })}</div>
+      <div class="row" style=${{ gap: '5px', flexWrap: 'nowrap' }}><input class="inp inp-sm" placeholder="Nova categoria (ex: Colas, Iluminação LED)" value=${novaCat} onInput=${e => setNovaCat(e.target.value)} /><button class="btn btn-sm btn-primary" onClick=${async () => { const n = novaCat.trim(); if (!n) return; if (!cats.includes(n)) await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { categoriasCompra: [...cats, n] }); setEditP({ ...editP, p: { ...editP.p, categorias: [...new Set([...(editP.p.categorias || []), n])] } }); setNovaCat(''); }}>＋ Criar e marcar</button></div>
       <span class="lbl">Unidades / filiais</span>
       ${(editP.p.unidades || []).map((u, j) => html`<div key=${j} class="row" style=${{ gap: '4px', flexWrap: 'nowrap' }}>
         <input class="inp inp-sm" placeholder="Cidade" value=${u.cidade || ''} onInput=${e => setEditP({ ...editP, p: { ...editP.p, unidades: editP.p.unidades.map((x, k) => k === j ? { ...x, cidade: e.target.value } : x) } })} />
