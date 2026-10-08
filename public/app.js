@@ -2945,6 +2945,7 @@ function ComprasOS({ sessao, os, toast, soNota }) {
   const [novo, setNovo] = useState({ categoria: 'Ferragens', descricao: '', qtd: '', unidade: 'un' });
   const [imprimir, setImprimir] = useState(false);
   const [modo, setModo] = useState('folha');
+  const [catF, setCatF] = useState('');
   const [escolher, setEscolher] = useState(null); // {ids:[...]} para escolher parceiro
   const [itemAb, setItemAb] = useState(null);
   const inpDet = useRef(null);
@@ -3021,13 +3022,14 @@ function ComprasOS({ sessao, os, toast, soNota }) {
   const setCatParc = (c, ps) => { gravar(itens.map(i => ((i.categoria || 'Outros') === c && !i.parcProprio && !i.nf) ? { ...i, parceiros: ps, parceiro: ps[0] || '' } : i), { parcCat: { ...(doc?.parcCat || {}), [c]: ps } }); if (ps.length) { window.__parcPorCat = { ...(window.__parcPorCat || {}), [c]: ps }; F().fsMod.updateDoc(docRef('empresas', sessao.empresaId), { ['parceiroPorCat.' + c]: ps }).catch(() => {}); } };
   const paraMarc = (i) => /^ferragens$/i.test(i.categoria || '');
   const autoParcs = () => { let n = 0; const novos = itens.map(i => { if (parcsDe(i).length || i.nf) return i; const c = i.categoria || 'Outros'; const a = catParc(c, itens.filter(x => (x.categoria || 'Outros') === c)); if (a && a.length) { n++; return { ...i, parceiros: a, parceiro: a[0] }; } return i; }); if (!n) return toast('Nenhuma sugestão automática ainda — escolha manualmente uma vez por categoria que o app aprende.'); gravar(novos); toast(n + ' itens receberam parceiro automático.', 'ok'); };
-  const folhaPadrao = () => { const cats = [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length);
+  const folhaPadrao = () => { const cats0 = [...new Set([...CAT_COMPRA, ...itens.map(i => i.categoria || 'Outros')])].map(c => [c, itens.filter(i => (i.categoria || 'Outros') === c)]).filter(([, l]) => l.length); const cats = catF ? cats0.filter(([c]) => c === catF) : cats0;
     const cor = temCores(os) ? os.cores : ['#1F2937', '#C8A27A', '#B45309'];
     return html`<div class="po po2 oe fc-lista" style=${varsCores(cor)}>
       <div class="po-topo"><div><div class="po-emp">${sessao.empresaNome || 'Gestão Pró'} · Lista de materiais</div>
         <div class="po-tit">${nomePadrao((os.ambientes || []).map(a => a.nome).filter(Boolean).join(' · ') || os.ambienteResumo) || 'Materiais'}</div>
         <div class="po-sub"><b>${nomePadrao(os.cliente?.nome) || ''}</b>${(os.cliente?.enderecoMontagem || os.cliente?.endereco) ? ' · 📍 ' + (os.cliente.enderecoMontagem || os.cliente.endereco) : ''}</div></div>
         <div class="po-num"><div class="po-cod">${numOS(os)}</div><div class="po-meta">${itens.length} itens · ${itens.filter(i => i.recebido).length} recebidos</div></div></div>
+      <div class="cat-filtro so-tela"><span class="fc-l">Filtrar por categoria:</span><button class=${'pill' + (!catF ? ' on' : '')} onClick=${() => setCatF('')}>Todas (${itens.length})</button>${cats0.map(([c, l]) => html`<button key=${c} class=${'pill' + (catF === c ? ' on' : '')} onClick=${() => setCatF(catF === c ? '' : c)}>${ICO_CAT[c] || '📦'} ${c} (${l.length})</button>`)}</div>
       <div class="row so-tela" style=${{ gap: '6px', flexWrap: 'wrap', margin: '6px 0' }}><button class="btn btn-sm" onClick=${autoParcs}>✨ Parceiros automáticos</button><button class="btn btn-sm" onClick=${() => { const n = itens.filter(i => i.estoque).length; gravar(itens, { conferencias: [...(doc?.conferencias || []), { em: nowIso(), por: sessao.nome, txt: '✍️ Assinado digitalmente — conferência de material (' + n + ' de ' + itens.length + ' itens conferidos)' }].slice(-300) }); toast('Conferência registrada.', 'ok'); }}>✍️ Assinar conferência geral</button><small class="dim">${doc?.entregaMarc ? '🔨 entregue ao marceneiro · ' : ''}${itens.filter(i => i.estoque).length} conferidos no estoque</small></div>
       ${!itens.length ? html`<div class="vazio dim">Nenhum item ainda — use 📐 Levantar do detalhamento, 📥 Dinabox, 📑 Conferir com o contrato, ou adicione abaixo.</div>` : cats.map(([c, l]) => html`<div key=${c} class="po2-amb">
         <div class="po2-amb-t"><b>${ICO_CAT[c] || '📦'} ${c}</b><em>${l.length} itens</em></div>
@@ -4498,7 +4500,7 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
   useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(s => setAtas(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(c.nome)))).catch(() => {}); }, [c.id]);
   const ativas = oss.filter(o => !osConcluida(o));
   const pend = [];
-  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo, o.id, 'andamento']); if (o.entregaPendente) pend.push(['🚚', numOS(o) + ' falta entregar: ' + o.entregaPendente.faltam.join(', ') + ' (' + o.entregaPendente.motivo + ')', o.id, 'entrega']); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2], o.id, 'compras'])); });
+  oss.forEach(o => { if (o.parada) pend.push(['⏸', numOS(o) + ' parada: ' + o.parada.motivo, o.id, 'andamento']); if (o.entregaPendente) pend.push(['🚚', numOS(o) + ' falta entregar: ' + o.entregaPendente.faltam.join(', ') + ' (' + o.entregaPendente.motivo + ')', o.id, 'entrega']); parceirosDaOS(o).filter(p => p.st !== 'recebido').forEach(p => pend.push([p.ic, numOS(o) + ' · ' + p.t + ': ' + infoSt(p.st)[2], o.id, 'parc:' + p.k])); });
   const pct = oss.length ? Math.round(oss.reduce((n, o) => n + pctObra(o), 0) / oss.length) : 0;
   const pux = oss.flatMap(o => puxadoresDaOS(o).map(([onde, x]) => [numOS(o) + (onde ? ' · ' + onde : ''), x]));
   const ele = oss.flatMap(o => (o.eletros || []).map(e => ({ ...e, os: numOS(o) })));
@@ -4508,7 +4510,7 @@ function PaginaCliente({ sessao, c, oss, editar, fechar, toast }) {
     <div class="pcli-cab"><div><h2>${nomePadrao(c.nome)}</h2><small>${[c.telefone, c.arquiteto ? 'Arq. ' + c.arquiteto : ''].filter(Boolean).join(' · ')}</small>${(c.enderecoMontagem || c.endereco) && html`<div><small>📍 ${c.enderecoMontagem || c.endereco}</small></div>`}</div>
       <div class="row" style=${{ gap: '6px' }}>${c.telefone && html`<a class="btn btn-sm" target="_blank" rel="noopener" href=${'https://wa.me/55' + String(c.telefone).replace(/\D/g, '').replace(/^55/, '')}>💬</a>`}<button class="btn btn-sm" onClick=${editar}>✏️ Dados</button><button class="x-btn" onClick=${fechar}>✕</button></div></div>
     <div class="pcli-kpis"><div><small>Status da obra</small><${BarraPct} p=${pct} /></div><div><small>OSs</small><b>${ativas.length} em aberto · ${oss.length - ativas.length} concluídas</b></div><div><small>Pendências</small><b style=${{ color: pend.length ? 'var(--danger)' : '' }}>${pend.length}</b></div><div><small>Finalização</small><b>${ok}/${tot}</b></div></div>
-    ${pend.length > 0 && html`<div class="ficha-falta"><b>⚠ Pendências</b>${pend.map(([ic, t, id, modo], i) => html`<button key=${i} class="falta-it" title="Abrir para resolver" onClick=${() => { window.__modoFicha = modo; fechar && fechar(); setTimeout(() => window.__abrirOS && window.__abrirOS(id), 50); }}>${ic} ${t} <small>→ resolver</small></button>`)}</div>`}
+    ${pend.length > 0 && html`<div class="ficha-falta"><b>⚠ Pendências</b>${pend.map(([ic, t, id, modo], i) => html`<button key=${i} class="falta-it" title="Abrir para resolver" onClick=${() => { if (String(modo).startsWith('parc:')) { window.__parcPendIni = modo.slice(5); window.__modoFicha = 'andamento'; } else window.__modoFicha = modo; fechar && fechar(); setTimeout(() => window.__abrirOS && window.__abrirOS(id), 50); }}>${ic} ${t} <small>→ resolver</small></button>`)}</div>`}
     <div class="seg-mini" style=${{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>${[['oss', '📋 OSs'], ['check', '✅ Finalização'], ['ele', '🔌 Eletros'], ['contrato', '📑 Contrato'], ['atas', '🎙 Atas']].map(([k, t]) => html`<button key=${k} class=${aba === k ? 'on' : ''} onClick=${() => setAba(k)}>${t}</button>`)}</div>
     ${aba === 'oss' && html`<div class="pcli-lista">${oss.map(o => { const st = (STATUS_OS.find(x => x.v === o.status) || STATUS_OS[0]); return html`<button key=${o.id} class="pcli-os" onClick=${() => abrirOS(o.id)}><b class="mono">${numOS(o)}</b><span>${nomePadrao((o.ambientes || []).map(a => a.nome).filter(Boolean).join(', ') || o.ambienteResumo) || '—'}</span><span class=${st.c + ' mini'}>${st.t.replace(/^\d+\. /, '')}</span><${BarraPct} p=${pctObra(o)} /></button>`; })}</div>`}
     ${aba === 'check' && html`<div class="stack">${ck.map((sec, si) => html`<div key=${si} class="pcli-sec"><div class="pcli-sec-t">${sec.tit} <small>${sec.itens.filter(i => i.ok).length}/${sec.itens.length}</small></div>
@@ -4605,6 +4607,22 @@ function CombinadosMontagem({ sessao, o, toast }) {
   </div>`;
 }
 const MONT_SUBS = [['obra', '📍', 'Obra e projeto', 'Endereço, 3D e vídeo'], ['itens', '🔌', 'Eletros e puxadores', 'O que vai na obra'], ['plano', '📋', 'Planejamento', 'Plano de execução e combinados'], ['diario', '📓', 'Diário e peças extras', 'Pendências, fotos e peças pedidas'], ['pecas', '🧩', 'Lista de peças', 'Peças do Dinabox e conferência']];
+function ParceirosPendencia({ sessao, o, k, toast, fechar }) {
+  const T = TIPOS_PARC.find(t => t[0] === k) || ['', '📦', k];
+  const atual = (o.parceiros || {})[k] || {};
+  const ps = parcsDaCat(T[2]);
+  const msg = 'Olá! Preciso de orçamento de ' + T[2].toLowerCase() + ' para a OS ' + numOS(o) + ' (' + (nomePadrao(o.cliente?.nome) || '') + ' · ' + ((o.ambientes || []).map(a => a.nome).join(', ') || o.ambienteResumo || '') + ').';
+  const usar = async (nome) => { const hist = [...(atual.hist || [])]; try { await F().fsMod.updateDoc(docRef('empresas', sessao.empresaId, 'os', o.id), { ['parceiros.' + k]: { ...atual, st: atual.st || 'orcar', parceiro: nome, hist } }); registrar(sessao, o.id, '🤝', T[2] + ': parceiro escolhido ' + nome, ''); toast(nome + ' definido para ' + T[2] + '.', 'ok'); } catch (e) { toast(e.message, 'erro'); } };
+  return ReactDOM.createPortal(html`<div class="modal-fundo" onClick=${e => e.target === e.currentTarget && fechar()}><div class="card modal-caixa stack" style=${{ width: 'min(520px,100%)' }}>
+    <div class="row" style=${{ justifyContent: 'space-between' }}><div class="sec-title">${T[1]} ${T[2]} · ${numOS(o)}</div><button class="x-btn" onClick=${fechar}>✕</button></div>
+    <small class="dim">Situação: <b>${infoSt(atual.st || 'orcar')[2]}</b>${atual.parceiro ? ' · parceiro atual: ' + atual.parceiro : ''}. Parceiros que trabalham com ${T[2]}:</small>
+    ${ps.length ? ps.map(p => html`<div key=${p.nome} class="row" style=${{ gap: '6px', alignItems: 'center', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: '10px' }}><b style=${{ flex: 1 }}>${p.nome}${atual.parceiro === p.nome ? ' ✓' : ''}</b>
+      ${p.whats ? html`<a class="btn btn-sm btn-verde" target="_blank" rel="noopener" href=${linkWa(p.whats, msg)}>📲 WhatsApp</a>` : html`<small class="dim">sem WhatsApp</small>`}
+      <button class=${'btn btn-sm' + (atual.parceiro === p.nome ? ' btn-primary' : '')} onClick=${() => usar(p.nome)}>${atual.parceiro === p.nome ? 'Escolhido' : 'Usar este'}</button></div>`)
+      : html`<div class="vazio dim">Nenhum parceiro cadastrado em "${T[2]}". Cadastre em 🛒 Compras › 🏢 Parceiros › Parceiros por categoria.</div>`}
+    <button class="btn" onClick=${() => { fechar(); window.__irPara && window.__irPara('compras'); }}>🏢 Ir para o cadastro de parceiros</button>
+  </div></div>`, document.body);
+}
 function AtasDaOS({ sessao, o, fechar }) {
   const [atas, setAtas] = useState(null);
   useEffect(() => { F().fsMod.getDocs(col('empresas', sessao.empresaId, 'projetos')).then(sn => setAtas(sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => norm(baseCli(p.cliente?.nome)) === norm(baseCli(o.cliente?.nome))))).catch(() => setAtas([])); }, [o.id]);
@@ -4737,6 +4755,8 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   useEffect(() => { window.__fichaModo = (m) => setModoV(m); return () => { window.__fichaModo = null; }; }, []);
   const [ordP, setOrdP] = useState(false);
   const histV = useRef([]), pularHist = useRef(false), ultV = useRef(null);
+  const [parcPend, setParcPend] = useState(() => { const k = window.__parcPendIni; window.__parcPendIni = null; return k || null; });
+  const irAbaX = (ab) => { if (String(ab).startsWith('parc:')) setParcPend(ab.slice(5)); else setModoV(ab); };
   const [impSub, setImpSub] = useState('os'), [compSub, setCompSub] = useState('lista');
   const [modoV, setModoV] = useState(() => { const m = window.__modoFicha; window.__modoFicha = null; return ({ calendario: 'cal', folha: 'folha' })[m] || (['andamento', 'montagem', 'pecas', 'compras', 'fin', 'amostras', 'folha', 'entrega', 'cal'].includes(m) ? m : 'andamento'); });
   useEffect(() => { const m = modoV; if (m === 'folha') { setImpSub('os'); setModoV('imp'); } else if (m === 'entrega') { setImpSub('entrega'); setModoV('imp'); } else if (m === 'pecas') { window.__montSubIni = 'pecas'; if (window.__montSub) window.__montSub('pecas'); setModoV('montagem'); } else if (m === 'fin') { setCompSub('fin'); setModoV('compras'); } }, [modoV]);
@@ -4766,7 +4786,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
   const etAb = ETAPAS_FAB.filter(([k]) => et[k] && et[k].status !== 'pronto' && et[k].onde !== 'nao');
   const faltaI = [
     ...(o.entregaPendente ? [['🚚 Falta entregar: ' + o.entregaPendente.faltam.join(', ') + ' — ' + o.entregaPendente.motivo, 'entrega']] : []),
-    ...parcAb.map(p => [p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2], 'compras']),
+    ...parcAb.map(p => [p.ic + ' ' + p.t + ': ' + infoSt(p.st)[2], 'parc:' + p.k]),
     ...faltaCompra.map(i => ['🛒 Comprar: ' + (i.qtd ? i.qtd + ' ' : '') + i.descricao + (i.parceiro ? ' (' + i.parceiro + ')' : ''), 'compras']),
     ...pedAb.map(p => ['🪵 Peça extra: ' + resumoPed(p), 'andamento']),
     ...pend.map(p => ['⚠️ Pendência: ' + String(p.texto || '').slice(0, 90), 'montagem']),
@@ -4798,7 +4818,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${modoV === 'temas' && html`<${VisaoTemas} os=${o} />`}
       ${modoV === 'pecas' && html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />`}
       ${modoV === 'montagem' && html`<${MontagemFicha} sessao=${sessao} o=${o} toast=${toast} irAba=${setModoV} />`}
-      ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${setModoV} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
+      ${modoV === 'andamento' && html`<${AndamentoFicha} falta=${faltaI} irAba=${irAbaX} sessao=${sessao} o=${o} toast=${toast} pend=${pend} compras=${compras} peds=${peds} />`}
       ${modoV === 'cal' && html`<${CalendarioOS} sessao=${sessao} os=${o} />`}
 
       ${modoV === 'amostras' && html`<div class="stack"><${AtasDaOS} sessao=${sessao} o=${o} fechar=${fechar} /><div class="ficha-compras"><${Amostras} sessao=${sessao} toast=${toast} os=${o} /></div></div>`}
@@ -4807,7 +4827,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
         ${compSub === 'fin' ? html`<div class="ficha-compras"><${FinanceiroOS} sessao=${sessao} os=${o} toast=${toast} /></div>` : html`<div class="ficha-compras"><${ComprasOS} sessao=${sessao} os=${o} toast=${toast} /></div>`}</div>`}
       ${modoV === 'imp' && html`<div class="imp-escolha so-tela">${[['os', '📄 OS preenchida'], ['entrega', '🚚 Ordem de entrega'], ['pecas', '🧩 Lista de peças'], ['compras', '🛒 Lista de compras']].map(([k, t]) => html`<button key=${k} class=${'imp-op' + (impSub === k ? ' on' : '')} onClick=${() => setImpSub(k)}>${t}</button>`)}<button class="btn btn-primary" onClick=${imprimir}>🖨 Imprimir esta folha</button></div>`}
       <div class=${'ficha-papel' + (modoV === 'imp' ? '' : ' so-imp')}>${modoV === 'imp' && impSub === 'entrega' ? html`<${OrdemEntrega} os=${o} empresa=${sessao.empresaNome} sessao=${sessao} />` : modoV === 'imp' && impSub === 'pecas' ? html`<${PecasDinabox} sessao=${sessao} o=${o} toast=${toast} />` : modoV === 'imp' && impSub === 'compras' ? html`<${ImpressaoCompras} os=${o} doc=${{ itens: compras }} empresa=${sessao.empresaNome} />` : html`<${ComChaves} dep=${JSON.stringify(o).length}><${ImpressaoOS} os=${o} empresa=${sessao.empresaNome} /></${ComChaves}>`}</div>
-      ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => setModoV(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
+      ${fin && html`<div class=${'ficha-falta' + (falta.length ? '' : ' ok')}>${falta.length ? html`<b>⚠ Falta ${falta.length} ${falta.length === 1 ? 'coisa' : 'coisas'}</b>${faltaI.map(([f, ab], i) => html`<button key=${i} class="falta-it" onClick=${() => irAbaX(ab)}>• ${f} <small>→ abrir</small></button>`)}` : html`<b>✓ Nada pendente — tudo comprado, recebido e concluído</b>`}</div>`}
       ${fin && html`<div class="ficha-sec">🤝 Terceiros / parceiros</div>
       ${parc.length ? html`<div class="ficha-lista">${parc.map(p => { const i = infoSt(p.st); return html`<div key=${p.k} class="fl-i"><span>${p.ic} <b>${p.t}</b>${p.fornecedor || p.nome ? html` <small>${p.fornecedor || p.nome}</small>` : ''}</span><span class="fl-st" style=${{ background: i[3] }}>${i[2]}</span></div>`; })}</div>` : html`<div class="dim">Nenhum item com terceiros.</div>`}
 
@@ -4817,6 +4837,7 @@ function FichaOS({ sessao, osId, fechar, editar, toast }) {
       ${peds.length > 0 && html`<div class="ficha-sec">🪵 Peças extras</div><div class="ficha-lista">${peds.map(p => { const s = ((PED_ST[p.tipo] || PED_ST.interno).find(x => x[0] === p.st) || []); return html`<div key=${p.id} class="fl-i"><span>${resumoPed(p)}</span><span class="fl-st" style=${{ background: s[2] || '#9ca3af' }}>${s[1] || p.st}</span></div>`; })}</div>`}
 
 `}
+      ${parcPend && html`<${ParceirosPendencia} sessao=${sessao} o=${o} k=${parcPend} toast=${toast} fechar=${() => setParcPend(null)} />`}
       <${LinhaDoTempo} os=${o} sessao=${sessao} />
       <div class="row" style=${{ gap: '6px' }}><button class="btn btn-grande" style=${{ flex: 1 }} onClick=${fechar}>Fechar</button>
         <button class="btn btn-grande btn-primary" style=${{ flex: 1 }} onClick=${editarMot}>✏️ Editar OS</button></div>
@@ -5790,7 +5811,21 @@ function TelaComprasGeral({ sessao, toast }) {
                 </div>`; })}
             </div></details>`; })}
       </div>`; })()}
-    ${aba === 'cadastro' && html`<div class="card page-card stack">
+    ${aba === 'cadastro' && (() => { const catsTodas = [...new Set([...cats, ...TIPOS_PARC.filter(t => t[0] !== 'outro').map(t => t[2])])];
+      const separarPelasNotas = async () => { const L = parceiros.map(p => ({ ...p, categorias: [...(p.categorias || [])] })); let novos = 0, add = 0;
+        const acha = (f) => { const n = norm(f || ''); if (!n) return null; return L.find(p => norm(p.nome) === n || norm(p.razao || '') === n || (norm(p.nome).length > 3 && (n.startsWith(norm(p.nome)) || norm(p.nome).startsWith(n.split(' ')[0] + ' ')))) || null; };
+        notas.forEach(nf => { if (!nf.fornecedor) return; let p = acha(nf.fornecedor); if (!p) { p = { nome: nf.fornecedor, razao: '', cnpjRaiz: '', categorias: [], unidades: [], contato: '' }; L.push(p); novos++; }
+          (nf.linhas || []).forEach(l => { const c = l.categoria || categoriaPorRegra(regras, l.descricao) || ''; if (c && c !== 'Outros' && !p.categorias.includes(c)) { p.categorias.push(c); add++; } }); });
+        await salvarParc(L); toast(notas.length + ' notas lidas · ' + novos + ' parceiros novos · ' + add + ' categorias atribuídas.', 'ok'); };
+      const tirar = (nome, c) => salvarParc(parceiros.map(p => p.nome === nome ? { ...p, categorias: (p.categorias || []).filter(x => x !== c) } : p));
+      const por = (nome, c) => salvarParc(parceiros.map(p => p.nome === nome ? { ...p, categorias: [...new Set([...(p.categorias || []), c])] } : p));
+      return html`<div class="stack">
+      <div class="card page-card stack"><div class="row" style=${{ justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}><b>🗂 Parceiros por categoria</b><button class="btn btn-sm btn-primary" onClick=${separarPelasNotas}>🧾 Separar pelas ${notas.length} notas lançadas</button></div>
+        <small class="dim">Cada parceiro pode estar em várias categorias. As compras e as pendências da OS mostram só os parceiros da categoria do item.</small>
+        <div class="pcat-grade">${catsTodas.map(c => { const ps = parceiros.filter(p => (p.categorias || []).includes(c)); return html`<div key=${c} class="pcat"><b>${ICO_CAT[c] || '📦'} ${c} <small class="dim">${ps.length}</small></b>
+          <div class="tm-chips">${ps.map(p => html`<span key=${p.nome} class="fc-chip">${p.nome}<button title="Tirar desta categoria" onClick=${() => tirar(p.nome, c)}>✕</button></span>`)}</div>
+          <select class="fc-sel" value="" onChange=${e => { const v = e.target.value; e.target.value = ''; if (v) por(v, c); }}><option value="">+ adicionar parceiro</option>${parceiros.filter(p => !ps.includes(p)).sort((a, b) => a.nome.localeCompare(b.nome)).map(p => html`<option key=${p.nome} value=${p.nome}>${p.nome}</option>`)}</select></div>`; })}</div></div>
+      <div class="card page-card stack">
       <div class="row" style=${{ justifyContent: 'space-between', gap: '6px' }}><div class="dim">Cadastrados sozinhos a cada nota fiscal. Mesma empresa em unidades diferentes (outro CNPJ da mesma rede) fica junta. Toque para editar.</div>
         <button class="btn btn-sm btn-primary" onClick=${() => setEditP({ i: -1, p: { nome: '', razao: '', cnpjRaiz: '', categorias: [], unidades: [], contato: '' } })}>＋ Novo parceiro</button></div>
       ${!parceiros.length ? html`<div class="vazio dim">Nenhum parceiro ainda.</div>` : parceiros.map((p, i0) => [p, i0]).sort((a, b) => a[0].nome.localeCompare(b[0].nome)).map(([p, i0]) => html`<div key=${p.nome + i0} class="parc-card" style=${{ cursor: 'pointer' }} onClick=${() => setEditP({ i: i0, p: { categorias: [], unidades: [], ...p } })}>
@@ -5798,7 +5833,7 @@ function TelaComprasGeral({ sessao, toast }) {
         ${(p.categorias || []).length > 0 && html`<div class="tm-chips">${p.categorias.map(c => html`<span key=${c}>${ICO_CAT[c] || '📦'} ${c}</span>`)}</div>`}
         ${(p.unidades || []).map((u, j) => html`<div key=${j} class="dim" style=${{ fontSize: '12px' }}>📍 ${u.cidade ? u.cidade + '/' + u.uf : 'unidade'} · CNPJ ${u.cnpj}${u.endereco ? ' · ' + u.endereco : ''}</div>`)}
       </div>`)}
-    </div>`}
+    </div></div>`; })()}
     ${aba === 'categorias' && html`<div class="card page-card stack">
       <div class="dim">As categorias de material vêm das <b>notas modelo</b>: envie uma nota, confira a categoria de cada item e salve. O app aprende e, nas próximas notas, separa sozinho.</div>
       <button class="btn btn-grande btn-verde" disabled=${!!lendoNf} onClick=${() => { lerNf.modelo = true; inpNf.current?.click(); }}>${lendoNf || '📥 Enviar nota modelo'}</button>

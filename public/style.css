@@ -1955,3 +1955,6 @@ html,body{background:#f3f5f8!important;color:#0f172a}
 .imp-op.on{background:#0f1e33;color:#fff;border-color:#0f1e33}
 .mont-nav{grid-template-columns:repeat(5,1fr)}@media(max-width:900px){.mont-nav{grid-template-columns:1fr 1fr}}
 .versao-app{opacity:.7;font-size:10px!important}
+.pcat-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.pcat{border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:#f8fafc}
+.cat-filtro{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
